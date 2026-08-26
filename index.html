@@ -130,7 +130,7 @@ async function arrancar(){
 }
 
 function renderTabs(){
-  const tabs = [['bandeja','📥 Bandeja'],['facturas','📄 Facturas'],['listados','📊 Listados']];
+  const tabs = [['bandeja','📥 Bandeja'],['facturas','📄 Facturas'],['listados','📊 Listados'],['config','⚙️ Retenciones']];
   document.getElementById('tabs').innerHTML = tabs.map(([k,t]) =>
     `<button class="${k===tabActual?'on':''}" onclick="irA('${k}')">${t}</button>`).join('');
 }
@@ -196,6 +196,7 @@ function render(){
   if (tabActual === 'bandeja')  c.innerHTML = vistaBandeja();
   if (tabActual === 'facturas') c.innerHTML = vistaFacturas();
   if (tabActual === 'listados') c.innerHTML = vistaListados();
+  if (tabActual === 'config')   vistaConfig();
 }
 
 // ── 📥 BANDEJA: lo que necesita ojo humano ──────────────────────────────
@@ -304,6 +305,83 @@ function vistaListados(){
       <td class="mini">${i+1}</td><td>${esc(p)}</td><td class="num"><b>${platac(v)}</b></td>
       <td class="num mini">${(v/total*100).toFixed(1)}%</td></tr>`).join('')}</tbody></table>
   </div>`;
+}
+
+// ── ⚙️ RETENCIONES Y PERCEPCIONES: los parámetros los pone JP ──────────
+// El módulo propone con estos valores; en cada orden de pago se pueden pisar.
+// A propósito NO vienen precargados: una alícuota vieja calcula mal y el
+// problema es fiscal, así que preferimos que avise "sin configurar".
+let REGIMENES = [];
+
+async function vistaConfig(){
+  const c = document.getElementById('cont');
+  c.innerHTML = '<div class="vacio">Cargando parámetros…</div>';
+  const {data, error} = await sb.from('compras_regimenes').select('*').order('impuesto').order('codigo');
+  if (error){ c.innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return; }
+  REGIMENES = data || [];
+  const faltan = REGIMENES.filter(r => r.activo && r.alicuota == null).length;
+
+  c.innerHTML = `
+    ${faltan ? `<div class="alerta">⚠ Hay ${faltan} régimen(es) sin alícuota cargada. Hasta que los completes,
+      el módulo no calcula esas retenciones solo — te las va a dejar en cero para que las pongas a mano.</div>` : ''}
+    <div class="card">
+      <h3 style="font-size:16px;margin-bottom:4px">Regímenes de retención y percepción</h3>
+      <p class="mini" style="margin-bottom:12px">
+        Estos son los regímenes que usan hoy, sacados del histórico del Dragonfish. Cargá la alícuota y el mínimo
+        que te pase el estudio. <b>El mínimo no imponible se computa sobre el acumulado del mes por proveedor</b>
+        cuando la casilla está tildada — así, si le pagás tres facturas en el mes, el mínimo se descuenta una sola vez.
+      </p>
+      <div style="overflow-x:auto"><table>
+        <thead><tr>
+          <th>Código</th><th>Régimen</th><th class="num">Alícuota %</th>
+          <th class="num">Mínimo no imponible</th><th class="num">Retención mínima</th>
+          <th>Base</th><th style="text-align:center">Acum. mes</th><th></th>
+        </tr></thead>
+        <tbody>${REGIMENES.map(r => `<tr>
+          <td><b>${esc(r.codigo)}</b><br><span class="mini">${esc(r.jurisdiccion||'')}</span></td>
+          <td style="max-width:280px">${esc(r.nombre)}
+              ${r.notas ? `<br><span class="mini">${esc(r.notas)}</span>` : ''}</td>
+          <td class="num"><input type="number" step="0.0001" style="width:88px;text-align:right"
+                 id="al-${r.id}" value="${r.alicuota ?? ''}" placeholder="—"></td>
+          <td class="num"><input type="number" step="0.01" style="width:120px;text-align:right"
+                 id="mn-${r.id}" value="${r.minimo_no_imponible ?? ''}" placeholder="—"></td>
+          <td class="num"><input type="number" step="0.01" style="width:100px;text-align:right"
+                 id="mr-${r.id}" value="${r.minimo_retencion ?? ''}" placeholder="—"></td>
+          <td><select id="ba-${r.id}">
+                <option value="neto"  ${r.base==='neto' ?'selected':''}>Neto</option>
+                <option value="total" ${r.base==='total'?'selected':''}>Total</option>
+              </select></td>
+          <td style="text-align:center"><input type="checkbox" id="ac-${r.id}" ${r.acumula_mensual?'checked':''}></td>
+          <td class="num"><button class="act" onclick="guardarRegimen(${r.id})">Guardar</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h3 style="font-size:16px;margin-bottom:4px">Cómo se aplica</h3>
+      <ul style="font-size:13.5px;line-height:1.8;margin-left:18px;color:#334155">
+        <li>Al emitir una orden de pago, el módulo mira qué regímenes le corresponden al proveedor y calcula cada retención.</li>
+        <li>Te muestra el detalle —base, alícuota, importe— <b>antes</b> de emitir, y podés pisar cualquier número a mano.</li>
+        <li>Si lo pisás, queda guardado lo que propuso el sistema y lo que pusiste vos, con el motivo. Nada se pierde.</li>
+        <li>Los proveedores con certificado de no retención se marcan exentos, con fecha de vencimiento del certificado.</li>
+        <li><b>IIBB provincia</b>: la alícuota sale del padrón de ARBA y cambia por proveedor y por mes,
+            así que se carga por proveedor y pisa la del régimen.</li>
+      </ul>
+    </div>`;
+}
+
+async function guardarRegimen(id){
+  const val = x => { const v = document.getElementById(x + '-' + id).value; return v === '' ? null : Number(v); };
+  const {error} = await sb.from('compras_regimenes').update({
+    alicuota:            val('al'),
+    minimo_no_imponible: val('mn'),
+    minimo_retencion:    val('mr'),
+    base:            document.getElementById('ba-' + id).value,
+    acumula_mensual: document.getElementById('ac-' + id).checked,
+    actualizado_at:  new Date().toISOString(),
+    actualizado_por: session.email,
+  }).eq('id', id);
+  if (error){ alert('No se pudo guardar: ' + error.message); return; }
+  vistaConfig();
 }
 
 // ── Sesión persistente ──────────────────────────────────────────────────
