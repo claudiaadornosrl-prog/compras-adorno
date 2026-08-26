@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#ea580c">
+<title>🛒 Compras · Claudia Adorno</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🛒%3C/text%3E%3C/svg%3E">
+<style>
+@font-face{font-family:'URW Gothic';src:url('fonts/URWGothic-Book.ttf') format('truetype');font-weight:300 700;font-display:swap;}
+:root{--primary:#ea580c;--primary-dark:#c2410c;--bg:#f8fafc;--card:#fff;--bd:#e2e8f0;--tx:#0f172a;--mut:#64748b;
+      --ok:#16a34a;--warn:#d97706;--bad:#dc2626;--info:#2563eb;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'URW Gothic',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--tx);font-size:15px;}
+header{background:var(--primary);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;
+       position:sticky;top:0;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,.15);}
+header h1{font-size:17px;font-weight:700;flex:1;}
+.hbtn{background:rgba(255,255,255,.18);border:none;color:#fff;font-size:15px;border-radius:8px;padding:6px 11px;cursor:pointer;}
+nav.tabs{display:flex;gap:4px;background:#fff;border-bottom:1px solid var(--bd);padding:0 8px;overflow-x:auto;
+         position:sticky;top:48px;z-index:40;}
+nav.tabs button{background:none;border:none;padding:11px 13px;font-size:14px;color:var(--mut);cursor:pointer;
+                border-bottom:3px solid transparent;white-space:nowrap;font-family:inherit;}
+nav.tabs button.on{color:var(--primary);border-bottom-color:var(--primary);font-weight:700;}
+main{padding:14px;max-width:1250px;margin:0 auto;}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px;}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;}
+.kpi{background:#fff;border:1px solid var(--bd);border-left:4px solid var(--primary);border-radius:10px;padding:11px 13px;}
+.kpi .lbl{font-size:11.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px;}
+.kpi .val{font-size:20px;font-weight:700;margin-top:3px;}
+.kpi .sub{font-size:12px;color:var(--mut);}
+table{width:100%;border-collapse:collapse;font-size:13.5px;}
+th{text-align:left;padding:8px 7px;border-bottom:2px solid var(--bd);color:var(--mut);font-size:12px;
+   text-transform:uppercase;letter-spacing:.3px;cursor:pointer;white-space:nowrap;}
+td{padding:8px 7px;border-bottom:1px solid #f1f5f9;vertical-align:top;}
+tr:hover td{background:#fff7ed;}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.chip{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11.5px;font-weight:700;white-space:nowrap;}
+.c-gastos{background:#dbeafe;color:#1e40af;} .c-mercaderia{background:#dcfce7;color:#166534;}
+.c-inversiones{background:#fef3c7;color:#92400e;} .c-no_actividad{background:#f1f5f9;color:#475569;}
+.e-aprobada{background:#dcfce7;color:#166534;} .e-a_revisar{background:#fef3c7;color:#92400e;}
+.e-auto{background:#dbeafe;color:#1e40af;} .e-sin_regla{background:#fee2e2;color:#991b1b;}
+.e-rechazada{background:#fee2e2;color:#991b1b;} .e-extraida{background:#f1f5f9;color:#475569;}
+input,select{font-family:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:#fff;}
+input:focus,select:focus{outline:2px solid var(--primary);outline-offset:-1px;}
+.filtros{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+.filtros input[type=search]{flex:1;min-width:180px;}
+button.act{background:var(--primary);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:14px;
+           cursor:pointer;font-family:inherit;}
+button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primary);}
+.alerta{background:#fef2f2;border-left:4px solid var(--bad);border-radius:8px;padding:10px 13px;margin-bottom:10px;
+        font-size:13px;color:#991b1b;}
+.vacio{text-align:center;color:var(--mut);padding:34px 10px;font-size:14px;}
+#login{max-width:340px;margin:70px auto;text-align:center;}
+#login input{width:100%;margin-bottom:10px;}
+#login h2{margin-bottom:6px;font-size:21px;} #login p{color:var(--mut);font-size:13.5px;margin-bottom:18px;}
+.err{color:var(--bad);font-size:13px;margin-top:8px;}
+.mini{font-size:11.5px;color:var(--mut);}
+@media(max-width:640px){ td,th{padding:7px 5px;font-size:12.5px;} .oculta-mov{display:none;} }
+</style>
+</head>
+<body>
+
+<div id="login" style="display:none">
+  <h2>🛒 Compras</h2>
+  <p>Claudia Adorno SRL</p>
+  <input type="email" id="lg-mail" placeholder="Tu email" autocomplete="username">
+  <input type="password" id="lg-pass" placeholder="Contraseña" autocomplete="current-password">
+  <button class="act" style="width:100%" onclick="entrar()">Entrar</button>
+  <div class="err" id="lg-err"></div>
+  <div class="mini" id="caps" style="display:none;margin-top:8px">⇪ Mayúsculas activadas</div>
+</div>
+
+<div id="app" style="display:none">
+  <header>
+    <span style="font-size:20px">🛒</span>
+    <h1>Compras</h1>
+    <button class="hbtn" onclick="cargarTodo()">↻</button>
+    <button class="hbtn" onclick="salir()">Salir</button>
+  </header>
+  <nav class="tabs" id="tabs"></nav>
+  <main id="cont"></main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+const SUPABASE_URL  = 'https://kwwiykssrpabncpqtmwi.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3d2l5a3NzcnBhYm5jcHF0bXdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNjI1NTQsImV4cCI6MjA5NDkzODU1NH0.O1VhKdjPahnJJ9qXcQuSKQbnKGhsEZqYmjDEfRuRpkc';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+const TIPOS = {gastos:'Gastos', mercaderia:'Mercadería', inversiones:'Inversiones', no_actividad:'No actividad'};
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+let session = {email:null}, DOCS = [], tabActual = 'bandeja';
+let filtro = {texto:'', tipo:'', mes:'', anio:String(new Date().getFullYear())};
+let orden = {col:'fecha_emision', desc:true};
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const plata = n => '$' + (Number(n)||0).toLocaleString('es-AR',{minimumFractionDigits:2, maximumFractionDigits:2});
+const platac = n => '$' + (Number(n)||0).toLocaleString('es-AR',{maximumFractionDigits:0});
+const fechaCorta = f => f ? f.slice(8,10)+'/'+f.slice(5,7)+'/'+f.slice(2,4) : '—';
+
+// ── Login ───────────────────────────────────────────────────────────────
+async function entrar(){
+  const email = document.getElementById('lg-mail').value.trim().toLowerCase();
+  const pass  = document.getElementById('lg-pass').value;
+  const err   = document.getElementById('lg-err');
+  err.textContent = 'Entrando…';
+  const {data, error} = await sb.auth.signInWithPassword({email, password:pass});
+  if (error){ err.textContent = 'Email o contraseña incorrectos.'; return; }
+  session.email = data.user.email;
+  arrancar();
+}
+async function salir(){ await sb.auth.signOut(); location.reload(); }
+
+document.addEventListener('keydown', e => {
+  const c = document.getElementById('caps');
+  if (c && e.getModifierState) c.style.display = e.getModifierState('CapsLock') ? 'block' : 'none';
+});
+document.addEventListener('keypress', e => { if (e.key === 'Enter' && document.getElementById('login').style.display !== 'none') entrar(); });
+
+// ── Arranque ────────────────────────────────────────────────────────────
+async function arrancar(){
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  renderTabs();
+  await cargarTodo();
+}
+
+function renderTabs(){
+  const tabs = [['bandeja','📥 Bandeja'],['facturas','📄 Facturas'],['listados','📊 Listados']];
+  document.getElementById('tabs').innerHTML = tabs.map(([k,t]) =>
+    `<button class="${k===tabActual?'on':''}" onclick="irA('${k}')">${t}</button>`).join('');
+}
+function irA(t){ tabActual = t; renderTabs(); render(); }
+
+async function cargarTodo(){
+  document.getElementById('cont').innerHTML = '<div class="vacio">Cargando comprobantes…</div>';
+  let todos = [], desde = 0;
+  while (true){
+    const {data, error} = await sb.from('compras_documentos')
+      .select('id,tipo,letra,punto_venta,numero,cuit_emisor,proveedor_nombre,fecha_emision,total,estado,tipo_gasto,archivo_path,archivo_alerta,confianza,origen')
+      .gte('fecha_emision', filtro.anio + '-01-01').lte('fecha_emision', filtro.anio + '-12-31')
+      .order('fecha_emision', {ascending:false}).range(desde, desde+999);
+    if (error){ document.getElementById('cont').innerHTML = `<div class="alerta">No se pudieron leer los comprobantes: ${esc(error.message)}</div>`; return; }
+    todos = todos.concat(data);
+    if (data.length < 1000) break;
+    desde += 1000;
+  }
+  DOCS = todos;
+  render();
+}
+
+// ── Filtro y orden comunes ──────────────────────────────────────────────
+function filtrados(base){
+  const t = filtro.texto.toLowerCase();
+  let r = base.filter(d => {
+    if (filtro.tipo && d.tipo_gasto !== filtro.tipo) return false;
+    if (filtro.mes && (d.fecha_emision||'').slice(5,7) !== filtro.mes) return false;
+    if (t){
+      const bolsa = `${d.proveedor_nombre||''} ${d.numero} ${d.cuit_emisor||''} ${d.archivo_path||''}`.toLowerCase();
+      if (!bolsa.includes(t)) return false;
+    }
+    return true;
+  });
+  r.sort((a,b) => {
+    let x = a[orden.col], y = b[orden.col];
+    if (orden.col === 'total'){ x = Number(x)||0; y = Number(y)||0; }
+    else { x = String(x??'').toLowerCase(); y = String(y??'').toLowerCase(); }
+    return (x<y?-1:x>y?1:0) * (orden.desc?-1:1);
+  });
+  return r;
+}
+function ordenar(col){ orden = {col, desc: orden.col===col ? !orden.desc : true}; render(); }
+function setF(k,v){ filtro[k]=v; if(k==='anio') cargarTodo(); else render(); }
+
+function barraFiltros(){
+  const anios = [];
+  for (let a = new Date().getFullYear(); a >= 2019; a--) anios.push(a);
+  return `<div class="filtros">
+    <input type="search" placeholder="Buscar proveedor, número, CUIT…" value="${esc(filtro.texto)}"
+           oninput="setF('texto',this.value)">
+    <select onchange="setF('anio',this.value)">${anios.map(a=>`<option ${a==filtro.anio?'selected':''}>${a}</option>`).join('')}</select>
+    <select onchange="setF('mes',this.value)"><option value="">Todos los meses</option>
+      ${MESES.map((m,i)=>`<option value="${String(i+1).padStart(2,'0')}" ${filtro.mes==String(i+1).padStart(2,'0')?'selected':''}>${m}</option>`).join('')}</select>
+    <select onchange="setF('tipo',this.value)"><option value="">Todos los tipos</option>
+      ${Object.entries(TIPOS).map(([k,v])=>`<option value="${k}" ${filtro.tipo===k?'selected':''}>${v}</option>`).join('')}</select>
+  </div>`;
+}
+
+// ── Render principal ────────────────────────────────────────────────────
+function render(){
+  const c = document.getElementById('cont');
+  if (tabActual === 'bandeja')  c.innerHTML = vistaBandeja();
+  if (tabActual === 'facturas') c.innerHTML = vistaFacturas();
+  if (tabActual === 'listados') c.innerHTML = vistaListados();
+}
+
+// ── 📥 BANDEJA: lo que necesita ojo humano ──────────────────────────────
+function vistaBandeja(){
+  const pend = DOCS.filter(d => ['a_revisar','sin_regla','extraida'].includes(d.estado) || d.archivo_alerta);
+  const conAlerta = pend.filter(d => d.archivo_alerta);
+  const sinPdf = DOCS.filter(d => !d.archivo_path).length;
+
+  let h = `<div class="kpis">
+    <div class="kpi"><div class="lbl">Esperando control</div><div class="val">${pend.length}</div>
+      <div class="sub">de ${DOCS.length} del ${filtro.anio}</div></div>
+    <div class="kpi" style="border-left-color:var(--bad)"><div class="lbl">Archivos con problema</div>
+      <div class="val">${conAlerta.length}</div><div class="sub">mal armados o mal nombrados</div></div>
+    <div class="kpi" style="border-left-color:var(--info)"><div class="lbl">Sin PDF vinculado</div>
+      <div class="val">${sinPdf}</div><div class="sub">cargados sin respaldo</div></div>
+  </div>`;
+
+  if (conAlerta.length){
+    h += `<div class="card"><h3 style="font-size:15px;margin-bottom:9px">📎 Archivos para revisar el archivado</h3>
+      <p class="mini" style="margin-bottom:9px">Regla: <b>una factura por archivo</b>, y el número del nombre tiene que ser el del comprobante.</p>
+      ${conAlerta.map(d => `<div class="alerta"><b>${esc((d.archivo_path||'').split('/').pop())}</b><br>${esc(d.archivo_alerta)}</div>`).join('')}
+    </div>`;
+  }
+
+  if (!pend.length) return h + `<div class="card"><div class="vacio">✅ No hay nada esperando control.</div></div>`;
+  return h + `<div class="card">${barraFiltros()}${tabla(filtrados(pend), true)}</div>`;
+}
+
+// ── 📄 FACTURAS: el histórico completo ──────────────────────────────────
+function vistaFacturas(){
+  const f = filtrados(DOCS);
+  const suma = f.reduce((a,d) => a + (Number(d.total)||0), 0);
+  return `<div class="kpis">
+      <div class="kpi"><div class="lbl">Comprobantes</div><div class="val">${f.length}</div>
+        <div class="sub">${filtro.mes ? MESES[+filtro.mes-1] : 'año'} ${filtro.anio}</div></div>
+      <div class="kpi"><div class="lbl">Total</div><div class="val">${platac(suma)}</div>
+        <div class="sub">${filtro.tipo ? TIPOS[filtro.tipo] : 'todos los tipos'}</div></div>
+    </div>
+    <div class="card">${barraFiltros()}${tabla(f)}</div>`;
+}
+
+function tabla(lista, bandeja){
+  if (!lista.length) return `<div class="vacio">No hay comprobantes con esos filtros.</div>`;
+  const cab = [['fecha_emision','Fecha'],['proveedor_nombre','Proveedor'],['numero','Comprobante'],
+               ['tipo_gasto','Tipo'],['total','Total'],['estado','Estado']];
+  return `<div style="overflow-x:auto"><table>
+    <thead><tr>${cab.map(([k,t]) =>
+      `<th onclick="ordenar('${k}')" class="${k==='total'?'num':''}">${t}${orden.col===k?(orden.desc?' ▾':' ▴'):''}</th>`).join('')}
+      <th></th></tr></thead>
+    <tbody>${lista.slice(0,400).map(d => `<tr>
+      <td>${fechaCorta(d.fecha_emision)}</td>
+      <td>${esc(d.proveedor_nombre || d.cuit_emisor || '—')}
+          ${d.archivo_alerta ? '<br><span class="mini" style="color:#dc2626">📎 archivo a revisar</span>' : ''}</td>
+      <td class="oculta-mov">${esc(d.tipo)} ${esc(d.letra)} ${String(d.punto_venta).padStart(4,'0')}-${String(d.numero).padStart(8,'0')}</td>
+      <td>${d.tipo_gasto ? `<span class="chip c-${d.tipo_gasto}">${TIPOS[d.tipo_gasto]}</span>` : '<span class="mini">—</span>'}</td>
+      <td class="num">${plata(d.total)}</td>
+      <td><span class="chip e-${esc(d.estado)}">${esc(d.estado)}</span></td>
+      <td class="num">${d.archivo_path ? '📄' : ''}</td>
+    </tr>`).join('')}</tbody></table></div>
+    ${lista.length > 400 ? `<p class="mini" style="margin-top:9px">Mostrando los primeros 400 de ${lista.length}. Afiná la búsqueda para ver el resto.</p>` : ''}`;
+}
+
+// ── 📊 LISTADOS: la ex planilla de gestión ──────────────────────────────
+function vistaListados(){
+  const f = filtrados(DOCS);
+  const porTipo = {}, porMes = {}, porProv = {};
+  f.forEach(d => {
+    const t = d.tipo_gasto || 'sin_clasificar', m = (d.fecha_emision||'').slice(5,7);
+    const p = d.proveedor_nombre || d.cuit_emisor || '—', v = Number(d.total)||0;
+    porTipo[t] = (porTipo[t]||0) + v;
+    porMes[m]  = porMes[m]  || {};
+    porMes[m][t] = (porMes[m][t]||0) + v;
+    porProv[p] = (porProv[p]||0) + v;
+  });
+  const total = Object.values(porTipo).reduce((a,b)=>a+b, 0) || 1;
+  const tipos = Object.keys(TIPOS).filter(t => porTipo[t]);
+  const top = Object.entries(porProv).sort((a,b)=>b[1]-a[1]).slice(0,25);
+
+  return `<div class="card">${barraFiltros()}</div>
+  <div class="card">
+    <h3 style="font-size:15px;margin-bottom:11px">Por tipo de gasto · ${filtro.anio}</h3>
+    <table><tbody>${tipos.map(t => `<tr>
+        <td><span class="chip c-${t}">${TIPOS[t]}</span></td>
+        <td class="num"><b>${platac(porTipo[t])}</b></td>
+        <td class="num mini">${(porTipo[t]/total*100).toFixed(1)}%</td>
+        <td style="width:45%"><div style="background:#f1f5f9;border-radius:6px;height:12px">
+          <div style="background:var(--primary);height:12px;border-radius:6px;width:${(porTipo[t]/total*100).toFixed(1)}%"></div></div></td>
+      </tr>`).join('')}
+      <tr><td><b>Total</b></td><td class="num"><b>${platac(total)}</b></td><td colspan="2"></td></tr>
+    </tbody></table>
+  </div>
+  <div class="card">
+    <h3 style="font-size:15px;margin-bottom:11px">Mes a mes</h3>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Mes</th>${tipos.map(t=>`<th class="num">${TIPOS[t]}</th>`).join('')}<th class="num">Total</th></tr></thead>
+      <tbody>${Object.keys(porMes).sort().map(m => {
+        const fila = porMes[m], tot = Object.values(fila).reduce((a,b)=>a+b,0);
+        return `<tr><td>${MESES[+m-1]||m}</td>
+          ${tipos.map(t=>`<td class="num">${fila[t]?platac(fila[t]):'—'}</td>`).join('')}
+          <td class="num"><b>${platac(tot)}</b></td></tr>`;
+      }).join('')}</tbody></table></div>
+  </div>
+  <div class="card">
+    <h3 style="font-size:15px;margin-bottom:11px">Top proveedores</h3>
+    <table><tbody>${top.map(([p,v],i) => `<tr>
+      <td class="mini">${i+1}</td><td>${esc(p)}</td><td class="num"><b>${platac(v)}</b></td>
+      <td class="num mini">${(v/total*100).toFixed(1)}%</td></tr>`).join('')}</tbody></table>
+  </div>`;
+}
+
+// ── Sesión persistente ──────────────────────────────────────────────────
+(async () => {
+  const {data} = await sb.auth.getSession();
+  if (data.session){ session.email = data.session.user.email; arrancar(); }
+  else document.getElementById('login').style.display = 'block';
+})();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+</script>
+<script src="manual.js?v=1"></script>
+</body>
+</html>
