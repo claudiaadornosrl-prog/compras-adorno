@@ -32,12 +32,36 @@ function _manualSecciones() {
       ],
     },
     {
-      icon: '📥', titulo: 'Bandeja',
-      desc: 'La cola del día: lo que el sistema no pudo resolver solo y necesita tu ojo.',
+      icon: '📥', titulo: 'Bandeja · el control',
+      desc: 'La cola del día. Cada factura llega con un concepto contable propuesto y el motivo por el que el sistema lo propone.',
       pasos: [
-        'Arriba ves cuántos comprobantes esperan control.',
-        '📎 "Archivos con problema": el nombre no coincide con el comprobante de adentro, o el PDF trae más de una factura. Hay que corregir el archivado en OneDrive.',
-        'El resto son facturas donde el sistema no pudo leer algún dato con seguridad.',
+        'Los cuatro números de arriba: cuántas esperan control, cuántas se contabilizaron solas (solo hay que confirmarlas), cuántas necesitan que vos decidas, y cuántos archivos están mal armados.',
+        '🟢 Confianza alta: el proveedor viene usando siempre el mismo concepto. Mirá que tenga sentido y confirmá.',
+        '🟡 Confianza media: el proveedor viene alternando conceptos. Acá sí hay que pensarlo.',
+        '🔴 Sin propuesta: proveedor nuevo. La primera se contabiliza a mano; de ahí en más el sistema ya sabe.',
+        '🚨 El motivo está escrito para que puedas DESCONFIAR. Si dice "las dos últimas usaron este concepto" pero vos sabés que esas dos fueron atípicas, corregilo.',
+      ],
+    },
+    {
+      icon: '✓', titulo: 'Controlar una factura',
+      desc: 'Se abre con el botón "Controlar" y muestra todo lo que hace falta para decidir, sin ir a buscar nada.',
+      pasos: [
+        'Arriba: neto, IVA y total leídos del PDF, más el nombre del archivo.',
+        'Los botones de "conceptos que ya usó este proveedor" son el atajo: casi siempre es uno de esos dos o tres.',
+        'Si no, escribí el código en el campo — se autocompleta contra el catálogo entero.',
+        '"Dividir en otro concepto" sirve para las facturas que se reparten (por ejemplo, flete aparte, o gasto partido entre sucursales). El cartelito de abajo te avisa si los importes no suman el neto.',
+        'Las dos casillas del final son independientes: "Libro IVA" es la contabilidad formal y "gasto real" es la mirada de gestión. Hay gastos que van a una y no a la otra.',
+        'Rechazar saca la factura de la cola (duplicada, mal archivada, no corresponde) y te pide el motivo — sin motivo nadie entiende después por qué quedó afuera.',
+      ],
+    },
+    {
+      icon: '🧠', titulo: 'Cómo aprende el sistema',
+      desc: 'No hay reglas que mantener a mano: aprende de lo que ustedes contabilizan.',
+      pasos: [
+        'Cada vez que confirmás o corregís, esa decisión pasa a ser el historial del proveedor.',
+        'La próxima factura de ese proveedor se propone con lo último que decidieron.',
+        'Medido contra las 1.147 facturas de 2026 ya cargadas en el Dragonfish: cuando las dos últimas coincidieron, acierta el 96 %.',
+        'Por eso corregir vale doble: arreglás esta factura y las que vengan.',
       ],
     },
     {

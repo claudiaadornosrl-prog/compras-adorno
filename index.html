@@ -58,6 +58,25 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 .err{color:var(--bad);font-size:13px;margin-top:8px;}
 .mini{font-size:11.5px;color:var(--mut);}
 @media(max-width:640px){ td,th{padding:7px 5px;font-size:12.5px;} .oculta-mov{display:none;} }
+/* ── Modal de control de la Bandeja ── */
+#ctrl-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9998;display:flex;
+  align-items:flex-start;justify-content:center;padding:18px 12px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+#ctrl-overlay .c-box{background:#fff;border-radius:14px;max-width:720px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+#ctrl-overlay .c-head{position:sticky;top:0;background:var(--primary);color:#fff;padding:13px 17px;
+  border-radius:14px 14px 0 0;display:flex;align-items:flex-start;gap:10px;z-index:1;}
+#ctrl-overlay .m-x{background:rgba(255,255,255,.18);border:none;color:#fff;font-size:15px;border-radius:8px;padding:5px 10px;cursor:pointer;}
+#ctrl-overlay .c-body{padding:15px 17px;}
+#ctrl-overlay .c-nums{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:9px;padding-bottom:10px;border-bottom:1px solid var(--bd);}
+#ctrl-overlay .c-nums .lbl{display:block;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px;}
+#ctrl-overlay .c-nums .v{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;}
+#ctrl-overlay .c-sug{border:1px solid;border-left-width:4px;border-radius:9px;padding:10px 13px;margin:11px 0;font-size:13px;}
+#ctrl-overlay .c-linea{display:flex;gap:7px;margin-bottom:7px;flex-wrap:wrap;}
+#ctrl-overlay .c-fila{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:15px;
+  padding-top:12px;border-top:1px solid var(--bd);font-size:13.5px;}
+#ctrl-overlay .c-fila label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mut);}
+#ctrl-overlay .c-chk{flex-direction:row!important;align-items:center;gap:6px!important;font-size:13px!important;color:var(--tx)!important;}
+#ctrl-overlay .c-pie{display:flex;gap:8px;align-items:center;padding:12px 17px;border-top:1px solid var(--bd);
+  background:#f8fafc;border-radius:0 0 14px 14px;position:sticky;bottom:0;}
 </style>
 </head>
 <body>
@@ -118,6 +137,7 @@ async function salir(){ await sb.auth.signOut(); location.reload(); }
 document.addEventListener('keydown', e => {
   const c = document.getElementById('caps');
   if (c && e.getModifierState) c.style.display = e.getModifierState('CapsLock') ? 'block' : 'none';
+  if (e.key === 'Escape' && document.getElementById('ctrl-overlay')) cerrarControl();
 });
 document.addEventListener('keypress', e => { if (e.key === 'Enter' && document.getElementById('login').style.display !== 'none') entrar(); });
 
@@ -150,6 +170,8 @@ async function cargarTodo(){
     desde += 1000;
   }
   DOCS = todos;
+  try { await cargarBandeja(); }
+  catch(e){ console.warn('bandeja:', e.message); BANDEJA = []; }
   render();
 }
 
@@ -199,19 +221,50 @@ function render(){
   if (tabActual === 'config')   vistaConfig();
 }
 
-// ── 📥 BANDEJA: lo que necesita ojo humano ──────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+//  📥 BANDEJA · el control humano de la contabilización
+//
+//  El motor no adivina: cuando el historial del proveedor es claro (mismo
+//  concepto en las dos últimas facturas → 96 % de acierto medido sobre las
+//  1.147 de 2026) la contabiliza solo; cuando no, la deja acá con el motivo
+//  escrito para que quien controla pueda desconfiar con criterio.
+//
+//  Aprobar o corregir acá alimenta la próxima predicción: no hay tabla de
+//  reglas que mantener a mano, el sistema aprende de lo que se contabiliza.
+// ═══════════════════════════════════════════════════════════════════════
+let BANDEJA = [], CONCEPTOS = [], enControl = null, lineasControl = [];
+
+const CONF = {
+  alta:  {ico:'🟢', tx:'Alta',  col:'#166534', bg:'#dcfce7'},
+  media: {ico:'🟡', tx:'Media', col:'#92400e', bg:'#fef3c7'},
+  baja:  {ico:'🔴', tx:'Baja',  col:'#991b1b', bg:'#fee2e2'},
+};
+
+async function cargarBandeja(){
+  const [b, c] = await Promise.all([
+    sb.rpc('compras_bandeja', {p_anio: Number(filtro.anio)}),
+    CONCEPTOS.length ? Promise.resolve({data:null})
+      : sb.from('compras_conceptos').select('codigo,descripcion,alicuota').eq('activo',true).limit(2000),
+  ]);
+  if (b.error) throw b.error;
+  BANDEJA = b.data || [];
+  if (c.data) CONCEPTOS = c.data;
+}
+
 function vistaBandeja(){
-  const pend = DOCS.filter(d => ['a_revisar','sin_regla','extraida'].includes(d.estado) || d.archivo_alerta);
-  const conAlerta = pend.filter(d => d.archivo_alerta);
-  const sinPdf = DOCS.filter(d => !d.archivo_path).length;
+  const conAlerta = BANDEJA.filter(d => d.archivo_alerta);
+  const autos     = BANDEJA.filter(d => d.estado === 'auto');
+  const aMano     = BANDEJA.filter(d => d.estado !== 'auto');
 
   let h = `<div class="kpis">
-    <div class="kpi"><div class="lbl">Esperando control</div><div class="val">${pend.length}</div>
-      <div class="sub">de ${DOCS.length} del ${filtro.anio}</div></div>
+    <div class="kpi"><div class="lbl">Esperando control</div><div class="val">${BANDEJA.length}</div>
+      <div class="sub">comprobantes del ${filtro.anio}</div></div>
+    <div class="kpi" style="border-left-color:var(--ok)"><div class="lbl">Ya contabilizadas solas</div>
+      <div class="val">${autos.length}</div><div class="sub">solo hay que confirmarlas</div></div>
+    <div class="kpi" style="border-left-color:var(--warn)"><div class="lbl">Necesitan decisión</div>
+      <div class="val">${aMano.length}</div><div class="sub">el sistema no está seguro</div></div>
     <div class="kpi" style="border-left-color:var(--bad)"><div class="lbl">Archivos con problema</div>
       <div class="val">${conAlerta.length}</div><div class="sub">mal armados o mal nombrados</div></div>
-    <div class="kpi" style="border-left-color:var(--info)"><div class="lbl">Sin PDF vinculado</div>
-      <div class="val">${sinPdf}</div><div class="sub">cargados sin respaldo</div></div>
   </div>`;
 
   if (conAlerta.length){
@@ -221,8 +274,187 @@ function vistaBandeja(){
     </div>`;
   }
 
-  if (!pend.length) return h + `<div class="card"><div class="vacio">✅ No hay nada esperando control.</div></div>`;
-  return h + `<div class="card">${barraFiltros()}${tabla(filtrados(pend), true)}</div>`;
+  if (!BANDEJA.length) return h + `<div class="card"><div class="vacio">✅ No hay nada esperando control.</div></div>`;
+
+  const t = filtro.texto.toLowerCase();
+  const lista = BANDEJA.filter(d => !t ||
+    `${d.proveedor_nombre||''} ${d.numero} ${d.cuit_emisor||''}`.toLowerCase().includes(t));
+
+  return h + `<div class="card">
+    <div class="filtros"><input type="search" placeholder="Buscar proveedor, número, CUIT…"
+      value="${esc(filtro.texto)}" oninput="setF('texto',this.value)"></div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Fecha</th><th>Proveedor</th><th class="oculta-mov">Comprobante</th>
+        <th class="num">Total</th><th>Concepto propuesto</th><th></th></tr></thead>
+      <tbody>${lista.map(d => {
+        const cf = CONF[d.sug_confianza] || CONF.baja;
+        return `<tr>
+          <td>${fechaCorta(d.fecha_emision)}</td>
+          <td>${esc(d.proveedor_nombre || d.cuit_emisor || '—')}
+              ${d.archivo_alerta ? '<br><span class="mini" style="color:#dc2626">📎 archivo a revisar</span>' : ''}</td>
+          <td class="oculta-mov">${esc(d.tipo)} ${esc(d.letra)} ${String(d.punto_venta).padStart(4,'0')}-${String(d.numero).padStart(8,'0')}</td>
+          <td class="num">${plata(d.total)}</td>
+          <td>${d.sug_concepto
+                ? `<b>${esc(d.sug_concepto)}</b> ${esc(d.sug_descripcion || '')}
+                   <br><span class="mini" style="color:${cf.col}">${cf.ico} ${esc(d.sug_motivo||'')}</span>`
+                : '<span class="mini" style="color:#991b1b">🔴 Proveedor nuevo: hay que decidirlo a mano</span>'}</td>
+          <td class="num"><button class="act" onclick="abrirControl(${d.id})">Controlar</button></td>
+        </tr>`;
+      }).join('')}</tbody></table></div>
+    ${lista.length !== BANDEJA.length ? `<p class="mini" style="margin-top:9px">${lista.length} de ${BANDEJA.length} con esa búsqueda.</p>` : ''}
+  </div>`;
+}
+
+// ── Modal de control ────────────────────────────────────────────────────
+async function abrirControl(id){
+  enControl = BANDEJA.find(d => d.id === id);
+  if (!enControl) return;
+  const neto = Number(enControl.neto_gravado||0) + Number(enControl.neto_no_gravado||0) + Number(enControl.exento||0);
+  lineasControl = [{concepto: enControl.sug_concepto || '', monto: Math.round((neto || Number(enControl.total)) * 100)/100}];
+  pintarControl();
+  const {data} = await sb.rpc('compras_conceptos_proveedor', {p_cuit: enControl.cuit_emisor});
+  enControl._usados = data || [];
+  pintarControl();
+}
+function cerrarControl(){
+  const o = document.getElementById('ctrl-overlay');
+  if (o) o.remove();
+  document.body.style.overflow = '';
+  enControl = null;
+}
+
+function pintarControl(){
+  const d = enControl; if (!d) return;
+  const cf = CONF[d.sug_confianza] || CONF.baja;
+  const neto = Number(d.neto_gravado||0) + Number(d.neto_no_gravado||0) + Number(d.exento||0);
+  const iva  = Number(d.total||0) - neto;
+  const asignado = lineasControl.reduce((a,l) => a + (Number(l.monto)||0), 0);
+  const dif = Math.round((neto - asignado) * 100) / 100;
+
+  const html = `<div class="c-box">
+    <div class="c-head">
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:16px">${esc(d.proveedor_nombre || d.cuit_emisor)}</div>
+        <div style="font-size:12.5px;opacity:.9">${esc(d.tipo)} ${esc(d.letra)}
+          ${String(d.punto_venta).padStart(4,'0')}-${String(d.numero).padStart(8,'0')} ·
+          ${fechaCorta(d.fecha_emision)} · CUIT ${esc(d.cuit_emisor)}</div>
+      </div>
+      <button class="m-x" onclick="cerrarControl()">✕</button>
+    </div>
+
+    <div class="c-body">
+      ${d.archivo_alerta ? `<div class="alerta">📎 ${esc(d.archivo_alerta)}</div>` : ''}
+
+      <div class="c-nums">
+        <div><span class="lbl">Neto</span><span class="v">${plata(neto)}</span></div>
+        <div><span class="lbl">IVA y percepciones</span><span class="v">${plata(iva)}</span></div>
+        <div><span class="lbl">Total</span><span class="v" style="color:var(--primary)">${plata(d.total)}</span></div>
+      </div>
+      ${d.archivo_path ? `<p class="mini">📄 ${esc(d.archivo_path.split('/').pop())}</p>` : ''}
+
+      <div class="c-sug" style="background:${cf.bg};border-color:${cf.col}">
+        <b style="color:${cf.col}">${cf.ico} Propuesta del sistema · confianza ${cf.tx.toLowerCase()}</b><br>
+        ${d.sug_concepto
+          ? `<span style="font-size:14px"><b>${esc(d.sug_concepto)}</b> ${esc(d.sug_descripcion||'')}</span>`
+          : '<span style="font-size:14px">Sin propuesta</span>'}
+        <div class="mini" style="margin-top:3px">${esc(d.sug_motivo||'')}</div>
+      </div>
+
+      ${(d._usados && d._usados.length) ? `<div style="margin-bottom:9px">
+        <div class="mini" style="margin-bottom:5px">Conceptos que ya usó este proveedor:</div>
+        ${d._usados.map(u => `<button class="act gh" style="margin:0 5px 5px 0;font-size:12.5px;padding:5px 9px"
+          onclick="usarConcepto('${esc(u.codigo)}')">${esc(u.codigo)} · ${esc(u.descripcion||'')}
+          <span class="mini">(${u.veces})</span></button>`).join('')}
+      </div>` : ''}
+
+      <h4 style="font-size:14px;margin:12px 0 7px">Cómo se contabiliza</h4>
+      ${lineasControl.map((l,i) => `<div class="c-linea">
+        <input list="dl-conceptos" value="${esc(l.concepto)}" placeholder="Código de concepto"
+               oninput="lineasControl[${i}].concepto=this.value.split(' ')[0].trim()" style="flex:1;min-width:150px">
+        <input type="number" step="0.01" value="${l.monto}" style="width:140px;text-align:right"
+               oninput="lineasControl[${i}].monto=this.value; pintarNums()">
+        ${lineasControl.length > 1
+          ? `<button class="act gh" onclick="quitarLinea(${i})" title="Quitar">✕</button>` : ''}
+      </div>`).join('')}
+      <button class="act gh" style="font-size:12.5px;padding:5px 10px" onclick="agregarLinea()">+ Dividir en otro concepto</button>
+      <div id="ctrl-dif" class="mini" style="margin-top:7px">${
+        Math.abs(dif) < 0.02
+          ? `<span style="color:var(--ok)">✓ Los conceptos suman el neto de la factura.</span>`
+          : `<span style="color:var(--warn)">⚠ Faltan ${plata(dif)} por asignar (neto ${plata(neto)}).</span>`}</div>
+
+      <div class="c-fila">
+        <label>Tipo de gasto
+          <select id="ctrl-tipo">
+            <option value="">— sin clasificar —</option>
+            ${Object.entries(TIPOS).map(([k,v]) =>
+              `<option value="${k}" ${d.tipo_gasto===k?'selected':''}>${v}</option>`).join('')}
+          </select></label>
+        <label class="c-chk"><input type="checkbox" id="ctrl-formal" ${d.computa_formal!==false?'checked':''}>
+          Va al Libro IVA <span class="mini">(contabilidad formal)</span></label>
+        <label class="c-chk"><input type="checkbox" id="ctrl-gestion" ${d.computa_gestion!==false?'checked':''}>
+          Es gasto real del negocio <span class="mini">(gestión)</span></label>
+      </div>
+    </div>
+
+    <div class="c-pie">
+      <button class="act gh" onclick="rechazarDoc()" style="color:var(--bad);border-color:var(--bad)">Rechazar</button>
+      <div style="flex:1"></div>
+      <button class="act gh" onclick="cerrarControl()">Cancelar</button>
+      <button class="act" onclick="contabilizar()">✓ Contabilizar</button>
+    </div>
+    <datalist id="dl-conceptos">${CONCEPTOS.map(c =>
+      `<option value="${esc(c.codigo)}">${esc(c.descripcion||'')}</option>`).join('')}</datalist>
+  </div>`;
+
+  let ov = document.getElementById('ctrl-overlay');
+  if (!ov){
+    ov = document.createElement('div');
+    ov.id = 'ctrl-overlay';
+    ov.addEventListener('click', e => { if (e.target === ov) cerrarControl(); });
+    document.body.appendChild(ov);
+    document.body.style.overflow = 'hidden';
+  }
+  ov.innerHTML = html;
+}
+
+function pintarNums(){
+  const d = enControl; if (!d) return;
+  const neto = Number(d.neto_gravado||0) + Number(d.neto_no_gravado||0) + Number(d.exento||0);
+  const asignado = lineasControl.reduce((a,l) => a + (Number(l.monto)||0), 0);
+  const dif = Math.round((neto - asignado) * 100) / 100;
+  const el = document.getElementById('ctrl-dif');
+  if (el) el.innerHTML = Math.abs(dif) < 0.02
+    ? `<span style="color:var(--ok)">✓ Los conceptos suman el neto de la factura.</span>`
+    : `<span style="color:var(--warn)">⚠ Faltan ${plata(dif)} por asignar (neto ${plata(neto)}).</span>`;
+}
+function usarConcepto(cod){ lineasControl[0].concepto = cod; pintarControl(); }
+function agregarLinea(){ lineasControl.push({concepto:'', monto:0}); pintarControl(); }
+function quitarLinea(i){ lineasControl.splice(i,1); pintarControl(); }
+
+async function contabilizar(){
+  const lineas = lineasControl
+    .filter(l => (l.concepto||'').trim())
+    .map(l => ({concepto: l.concepto.trim(), monto_neto: Number(l.monto)||0}));
+  if (!lineas.length){ alert('Elegí al menos un concepto contable.'); return; }
+  const {error} = await sb.rpc('compras_contabilizar', {
+    p_doc_id: enControl.id,
+    p_lineas: lineas,
+    p_tipo_gasto: document.getElementById('ctrl-tipo').value || null,
+    p_computa_formal:  document.getElementById('ctrl-formal').checked,
+    p_computa_gestion: document.getElementById('ctrl-gestion').checked,
+  });
+  if (error){ alert('No se pudo contabilizar: ' + error.message); return; }
+  cerrarControl();
+  await cargarTodo();
+}
+
+async function rechazarDoc(){
+  const motivo = prompt('¿Por qué queda afuera? (duplicada, archivo mal armado, no corresponde…)');
+  if (motivo === null) return;
+  const {error} = await sb.rpc('compras_rechazar', {p_doc_id: enControl.id, p_motivo: motivo});
+  if (error){ alert('No se pudo rechazar: ' + error.message); return; }
+  cerrarControl();
+  await cargarTodo();
 }
 
 // ── 📄 FACTURAS: el histórico completo ──────────────────────────────────
@@ -393,6 +625,6 @@ async function guardarRegimen(id){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=1"></script>
+<script src="manual.js?v=2"></script>
 </body>
 </html>
