@@ -59,23 +59,23 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 .mini{font-size:11.5px;color:var(--mut);}
 @media(max-width:640px){ td,th{padding:7px 5px;font-size:12.5px;} .oculta-mov{display:none;} }
 /* ── Modal de control de la Bandeja ── */
-#ctrl-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9998;display:flex;
+#ctrl-overlay,#map-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9998;display:flex;
   align-items:flex-start;justify-content:center;padding:18px 12px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
-#ctrl-overlay .c-box{background:#fff;border-radius:14px;max-width:720px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);}
-#ctrl-overlay .c-head{position:sticky;top:0;background:var(--primary);color:#fff;padding:13px 17px;
+#ctrl-overlay .c-box,#map-overlay .c-box{background:#fff;border-radius:14px;max-width:720px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+#ctrl-overlay .c-head,#map-overlay .c-head{position:sticky;top:0;background:var(--primary);color:#fff;padding:13px 17px;
   border-radius:14px 14px 0 0;display:flex;align-items:flex-start;gap:10px;z-index:1;}
-#ctrl-overlay .m-x{background:rgba(255,255,255,.18);border:none;color:#fff;font-size:15px;border-radius:8px;padding:5px 10px;cursor:pointer;}
-#ctrl-overlay .c-body{padding:15px 17px;}
-#ctrl-overlay .c-nums{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:9px;padding-bottom:10px;border-bottom:1px solid var(--bd);}
-#ctrl-overlay .c-nums .lbl{display:block;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px;}
-#ctrl-overlay .c-nums .v{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;}
-#ctrl-overlay .c-sug{border:1px solid;border-left-width:4px;border-radius:9px;padding:10px 13px;margin:11px 0;font-size:13px;}
-#ctrl-overlay .c-linea{display:flex;gap:7px;margin-bottom:7px;flex-wrap:wrap;}
-#ctrl-overlay .c-fila{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:15px;
+#ctrl-overlay .m-x,#map-overlay .m-x{background:rgba(255,255,255,.18);border:none;color:#fff;font-size:15px;border-radius:8px;padding:5px 10px;cursor:pointer;}
+#ctrl-overlay .c-body,#map-overlay .c-body{padding:15px 17px;}
+#ctrl-overlay .c-nums,#map-overlay .c-nums{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:9px;padding-bottom:10px;border-bottom:1px solid var(--bd);}
+#ctrl-overlay .c-nums .lbl,#map-overlay .c-nums .lbl{display:block;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px;}
+#ctrl-overlay .c-nums .v,#map-overlay .c-nums .v{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;}
+#ctrl-overlay .c-sug,#map-overlay .c-sug{border:1px solid;border-left-width:4px;border-radius:9px;padding:10px 13px;margin:11px 0;font-size:13px;}
+#ctrl-overlay .c-linea,#map-overlay .c-linea{display:flex;gap:7px;margin-bottom:7px;flex-wrap:wrap;}
+#ctrl-overlay .c-fila,#map-overlay .c-fila{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:15px;
   padding-top:12px;border-top:1px solid var(--bd);font-size:13.5px;}
-#ctrl-overlay .c-fila label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mut);}
-#ctrl-overlay .c-chk{flex-direction:row!important;align-items:center;gap:6px!important;font-size:13px!important;color:var(--tx)!important;}
-#ctrl-overlay .c-pie{display:flex;gap:8px;align-items:center;padding:12px 17px;border-top:1px solid var(--bd);
+#ctrl-overlay .c-fila label,#map-overlay .c-fila label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mut);}
+#ctrl-overlay .c-chk,#map-overlay .c-chk{flex-direction:row!important;align-items:center;gap:6px!important;font-size:13px!important;color:var(--tx)!important;}
+#ctrl-overlay .c-pie,#map-overlay .c-pie{display:flex;gap:8px;align-items:center;padding:12px 17px;border-top:1px solid var(--bd);
   background:#f8fafc;border-radius:0 0 14px 14px;position:sticky;bottom:0;}
 </style>
 </head>
@@ -150,7 +150,8 @@ async function arrancar(){
 }
 
 function renderTabs(){
-  const tabs = [['bandeja','📥 Bandeja'],['facturas','📄 Facturas'],['listados','📊 Listados'],['config','⚙️ Retenciones']];
+  const tabs = [['bandeja','📥 Bandeja'],['facturas','📄 Facturas'],['equivalencias','🔗 Equivalencias'],
+                ['listados','📊 Listados'],['config','⚙️ Retenciones']];
   document.getElementById('tabs').innerHTML = tabs.map(([k,t]) =>
     `<button class="${k===tabActual?'on':''}" onclick="irA('${k}')">${t}</button>`).join('');
 }
@@ -219,6 +220,7 @@ function render(){
   if (tabActual === 'facturas') c.innerHTML = vistaFacturas();
   if (tabActual === 'listados') c.innerHTML = vistaListados();
   if (tabActual === 'config')   vistaConfig();
+  if (tabActual === 'equivalencias') vistaEquivalencias();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -614,6 +616,212 @@ async function guardarRegimen(id){
   }).eq('id', id);
   if (error){ alert('No se pudo guardar: ' + error.message); return; }
   vistaConfig();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  🔗 EQUIVALENCIAS · cómo le dice el proveedor / cómo le decimos nosotros
+//
+//  Cada renglón de una factura de mercadería trae el código y la descripción
+//  DEL PROVEEDOR. Acá se traduce a nuestro SKU, una sola vez por código:
+//  "P2822804011CU38" va a ser siempre la misma bata, así que resuelto una
+//  vez queda resuelto para siempre.
+//
+//  Con FGR —el 90 % de la mercadería— no hace falta nada: comparten catálogo
+//  con nosotros, así que el código de su factura YA ES nuestro SKU.
+//
+//  🚨 Un código de ellos puede convertirse en VARIOS nuestros: FGR vende
+//  sets que después se fraccionan. Por eso se puede partir en varias filas,
+//  cada una con su parte del costo, y las partes tienen que sumar 100 %.
+// ═══════════════════════════════════════════════════════════════════════
+let PENDIENTES = [], enMapeo = null, partesMapeo = [], candidatos = [];
+
+async function vistaEquivalencias(){
+  const c = document.getElementById('cont');
+  c.innerHTML = '<div class="vacio">Buscando artículos sin traducir…</div>';
+
+  const [pend, hechas] = await Promise.all([
+    sb.from('compras_renglones')
+      .select('codigo_proveedor,descripcion,cantidad,importe,documento_id,compras_documentos(cuit_emisor,proveedor_nombre)')
+      .is('sku', null).limit(500),
+    sb.from('compras_equivalencias')
+      .select('cuit_proveedor,codigo_proveedor,descripcion_proveedor,sku,proporcion_costo,veces_usada')
+      .order('creada_at', {ascending:false}).limit(300),
+  ]);
+  if (pend.error){ c.innerHTML = `<div class="alerta">${esc(pend.error.message)}</div>`; return; }
+
+  // un renglón por código distinto: el trabajo es por código, no por factura
+  const porCodigo = {};
+  (pend.data || []).forEach(r => {
+    const d = r.compras_documentos || {};
+    const k = (d.cuit_emisor || '') + '|' + (r.codigo_proveedor || r.descripcion || '');
+    if (!porCodigo[k]) porCodigo[k] = {...r, cuit: d.cuit_emisor, prov: d.proveedor_nombre, veces: 0};
+    porCodigo[k].veces++;
+  });
+  PENDIENTES = Object.values(porCodigo).sort((a,b) => b.veces - a.veces);
+  const HECHAS = hechas.data || [];
+
+  c.innerHTML = `<div class="kpis">
+      <div class="kpi" style="border-left-color:var(--warn)"><div class="lbl">Códigos sin traducir</div>
+        <div class="val">${PENDIENTES.length}</div><div class="sub">se resuelven una sola vez</div></div>
+      <div class="kpi" style="border-left-color:var(--ok)"><div class="lbl">Equivalencias cargadas</div>
+        <div class="val">${HECHAS.length}</div><div class="sub">ya funcionan solas</div></div>
+    </div>
+
+    <div class="card">
+      <h3 style="font-size:15px;margin-bottom:4px">Artículos que el proveedor nombra distinto</h3>
+      <p class="mini" style="margin-bottom:11px">
+        Familia García Regueira comparte catálogo con nosotros, así que sus facturas no aparecen acá:
+        el código de ellos ya es nuestro SKU. Los que sí aparecen son los del resto de los proveedores.
+        Cada código se resuelve <b>una sola vez</b> y de ahí en más el sistema lo traduce solo.
+      </p>
+      ${!PENDIENTES.length
+        ? '<div class="vacio">✅ No hay artículos esperando traducción.</div>'
+        : `<div style="overflow-x:auto"><table>
+            <thead><tr><th>Proveedor</th><th>Su código</th><th>Cómo lo llama él</th>
+              <th class="num">Veces</th><th></th></tr></thead>
+            <tbody>${PENDIENTES.slice(0,200).map((p,i) => `<tr>
+              <td>${esc(p.prov || p.cuit || '—')}</td>
+              <td><code>${esc(p.codigo_proveedor || '—')}</code></td>
+              <td>${esc(p.descripcion || '')}</td>
+              <td class="num">${p.veces}</td>
+              <td class="num"><button class="act" onclick="abrirMapeo(${i})">Traducir</button></td>
+            </tr>`).join('')}</tbody></table></div>`}
+    </div>
+
+    ${HECHAS.length ? `<div class="card">
+      <h3 style="font-size:15px;margin-bottom:11px">Equivalencias ya cargadas</h3>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Su código</th><th>Cómo lo llama él</th><th>Nuestro SKU</th>
+          <th class="num">Parte del costo</th></tr></thead>
+        <tbody>${HECHAS.map(h => `<tr>
+          <td><code>${esc(h.codigo_proveedor || '—')}</code></td>
+          <td>${esc(h.descripcion_proveedor || '')}</td>
+          <td><b>${esc(h.sku)}</b></td>
+          <td class="num">${Math.round((h.proporcion_costo || 1) * 100)} %</td>
+        </tr>`).join('')}</tbody></table></div>
+    </div>` : ''}`;
+}
+
+async function abrirMapeo(i){
+  enMapeo = PENDIENTES[i];
+  partesMapeo = [];
+  candidatos = [];
+  pintarMapeo(true);
+  const {data, error} = await sb.rpc('compras_resolver_articulo', {
+    p_cuit: enMapeo.cuit, p_codigo: enMapeo.codigo_proveedor,
+    p_descripcion: enMapeo.descripcion, p_limite: 8,
+  });
+  candidatos = error ? [] : (data || []);
+  if (candidatos.length) partesMapeo = [{sku: candidatos[0].sku, cantidad: 1, proporcion: 1}];
+  pintarMapeo();
+}
+
+function cerrarMapeo(){
+  const o = document.getElementById('map-overlay');
+  if (o) o.remove();
+  document.body.style.overflow = '';
+  enMapeo = null;
+}
+
+function pintarMapeo(cargando){
+  const m = enMapeo; if (!m) return;
+  const suma = partesMapeo.reduce((a,p) => a + (Number(p.proporcion)||0), 0);
+  const okSuma = Math.abs(suma - 1) < 0.01;
+
+  const html = `<div class="c-box">
+    <div class="c-head">
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:16px">${esc(m.descripcion || '')}</div>
+        <div style="font-size:12.5px;opacity:.9">${esc(m.prov || m.cuit)} ·
+          código <code>${esc(m.codigo_proveedor || '—')}</code> ·
+          aparece en ${m.veces} factura${m.veces === 1 ? '' : 's'}</div>
+      </div>
+      <button class="m-x" onclick="cerrarMapeo()">✕</button>
+    </div>
+    <div class="c-body">
+      ${cargando ? '<div class="vacio">Buscando parecidos en el catálogo…</div>' : `
+      ${!candidatos.length
+        ? `<div class="alerta">No encontré ningún artículo parecido. Puede que todavía no esté
+             dado de alta en el Dragonfish — en ese caso hay que crearlo primero.</div>`
+        : `<div class="mini" style="margin-bottom:7px">Artículos parecidos del catálogo
+             ${candidatos[0].origen === 'candidato_proveedor' ? 'de este proveedor' : ''}:</div>
+           ${candidatos.map(c => {
+             const bueno = Number(c.parecido) >= 0.75;
+             return `<button class="act gh" style="display:block;width:100%;text-align:left;margin-bottom:6px;
+                       border-color:${bueno ? 'var(--ok)' : 'var(--bd)'}"
+                     onclick="elegirSku('${esc(c.sku)}')">
+               <b>${esc(c.sku)}</b> · ${esc(c.descripcion || '')}
+               <span class="mini" style="float:right;color:${bueno ? 'var(--ok)' : 'var(--mut)'}">
+                 ${bueno ? '✓ ' : ''}parecido ${c.parecido}</span></button>`;
+           }).join('')}
+           <p class="mini" style="margin:4px 0 12px">
+             🚨 El parecido es de texto, no entiende de colores ni de talles. Los que dan menos de 0,75
+             conviene mirarlos dos veces: en las pruebas, ahí es donde confunde variantes.</p>`}
+
+      <h4 style="font-size:14px;margin:14px 0 7px">Se traduce a</h4>
+      ${partesMapeo.map((p,i) => `<div class="c-linea">
+        <input list="dl-skus" value="${esc(p.sku)}" placeholder="SKU nuestro" style="flex:1;min-width:140px"
+               oninput="partesMapeo[${i}].sku=this.value.split(' ')[0].trim()">
+        <input type="number" step="0.01" min="0" max="1" value="${p.proporcion}" style="width:110px;text-align:right"
+               title="Qué parte del costo va a este artículo"
+               oninput="partesMapeo[${i}].proporcion=Number(this.value); pintarSumaMapeo()">
+        ${partesMapeo.length > 1
+          ? `<button class="act gh" onclick="partesMapeo.splice(${i},1); pintarMapeo()">✕</button>` : ''}
+      </div>`).join('')}
+      <button class="act gh" style="font-size:12.5px;padding:5px 10px"
+              onclick="partesMapeo.push({sku:'',cantidad:1,proporcion:0}); pintarMapeo()">
+        + Se fracciona en otro artículo</button>
+      <div id="map-suma" class="mini" style="margin-top:7px">${
+        okSuma ? '<span style="color:var(--ok)">✓ Las partes del costo suman 100 %.</span>'
+               : `<span style="color:var(--warn)">⚠ Las partes suman ${Math.round(suma*100)} %, tienen que dar 100 %.</span>`}</div>
+      <p class="mini" style="margin-top:9px">
+        Si ellos venden un set que ustedes fraccionan, agregá una fila por cada artículo nuestro
+        y repartí el costo. Por ejemplo 0,6 y 0,4 si uno vale más que el otro.</p>
+      `}
+    </div>
+    <div class="c-pie">
+      <div style="flex:1"></div>
+      <button class="act gh" onclick="cerrarMapeo()">Cancelar</button>
+      <button class="act" onclick="guardarMapeo()">✓ Guardar equivalencia</button>
+    </div>
+    <datalist id="dl-skus"></datalist>
+  </div>`;
+
+  let ov = document.getElementById('map-overlay');
+  if (!ov){
+    ov = document.createElement('div');
+    ov.id = 'map-overlay'; ov.className = 'ctrl-like';
+    ov.addEventListener('click', e => { if (e.target === ov) cerrarMapeo(); });
+    document.body.appendChild(ov);
+    document.body.style.overflow = 'hidden';
+  }
+  ov.innerHTML = html;
+}
+
+function pintarSumaMapeo(){
+  const suma = partesMapeo.reduce((a,p) => a + (Number(p.proporcion)||0), 0);
+  const el = document.getElementById('map-suma');
+  if (el) el.innerHTML = Math.abs(suma - 1) < 0.01
+    ? '<span style="color:var(--ok)">✓ Las partes del costo suman 100 %.</span>'
+    : `<span style="color:var(--warn)">⚠ Las partes suman ${Math.round(suma*100)} %, tienen que dar 100 %.</span>`;
+}
+function elegirSku(sku){
+  if (partesMapeo.length === 1) partesMapeo[0].sku = sku;
+  else partesMapeo.push({sku, cantidad:1, proporcion:0});
+  pintarMapeo();
+}
+
+async function guardarMapeo(){
+  const partes = partesMapeo.filter(p => (p.sku||'').trim())
+    .map(p => ({sku: p.sku.trim(), cantidad: Number(p.cantidad)||1, proporcion: Number(p.proporcion)||0}));
+  if (!partes.length){ alert('Elegí al menos un artículo nuestro.'); return; }
+  const {error} = await sb.rpc('compras_guardar_equivalencia', {
+    p_cuit: enMapeo.cuit, p_codigo: enMapeo.codigo_proveedor,
+    p_descripcion: enMapeo.descripcion, p_partes: partes,
+  });
+  if (error){ alert('No se pudo guardar: ' + error.message); return; }
+  cerrarMapeo();
+  vistaEquivalencias();
 }
 
 // ── Sesión persistente ──────────────────────────────────────────────────
