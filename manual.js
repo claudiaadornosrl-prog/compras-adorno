@@ -55,6 +55,18 @@ function _manualSecciones() {
       ],
     },
     {
+      icon: '🚚', titulo: 'Mercadería · control de precios y descuentos',
+      desc: 'Cada factura de Familia García Regueira controlada renglón por renglón, sin leer el PDF.',
+      pasos: [
+        'El número de la factura de FGR es el mismo del remito que ya está en el sistema. El control cruza: qué vino y cuánto (remito) × el precio con descuento pactado (lista COSTO a la fecha) = lo que la factura debería decir.',
+        '✅ Coincide: precios y descuentos son los de lista, al peso.',
+        '🔺 Facturada de MÁS: el proveedor cobró por encima de la lista. Puede ser sobreprecio o una lista desactualizada en el Dragonfish — el botón "Detalle" muestra artículo por artículo cuál difiere.',
+        '🔻 De menos: a favor nuestro. Conviene mirarla igual.',
+        '❔ Sin remito: todavía no se importó el archivo del proveedor, o la factura no lleva remito.',
+        'El descuento es POR ARTÍCULO (servilletas 25 %, cosmética 30 %): por eso se compara contra la lista COSTO y no contra un porcentaje único.',
+      ],
+    },
+    {
       icon: '🧠', titulo: 'Cómo aprende el sistema',
       desc: 'No hay reglas que mantener a mano: aprende de lo que ustedes contabilizan.',
       pasos: [

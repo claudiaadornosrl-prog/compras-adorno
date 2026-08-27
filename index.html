@@ -150,8 +150,8 @@ async function arrancar(){
 }
 
 function renderTabs(){
-  const tabs = [['bandeja','📥 Bandeja'],['facturas','📄 Facturas'],['equivalencias','🔗 Equivalencias'],
-                ['listados','📊 Listados'],['config','⚙️ Retenciones']];
+  const tabs = [['bandeja','📥 Bandeja'],['facturas','📄 Facturas'],['mercaderia','🚚 Mercadería'],
+                ['equivalencias','🔗 Equivalencias'],['listados','📊 Listados'],['config','⚙️ Retenciones']];
   document.getElementById('tabs').innerHTML = tabs.map(([k,t]) =>
     `<button class="${k===tabActual?'on':''}" onclick="irA('${k}')">${t}</button>`).join('');
 }
@@ -221,6 +221,7 @@ function render(){
   if (tabActual === 'listados') c.innerHTML = vistaListados();
   if (tabActual === 'config')   vistaConfig();
   if (tabActual === 'equivalencias') vistaEquivalencias();
+  if (tabActual === 'mercaderia') vistaMercaderia();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -824,6 +825,139 @@ async function guardarMapeo(){
   vistaEquivalencias();
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+//  🚚 MERCADERÍA · control de precios y descuentos, factura por factura
+//
+//  El número de la factura de FGR ES el número del remito que ya está
+//  cargado en el sistema (entra cuando administración importa el TXT).
+//  Entonces el control no lee nada del PDF: agarra los artículos y
+//  cantidades del remito, les pone el precio de la lista COSTO vigente a la
+//  fecha de la factura (que ya trae el descuento pactado POR ARTÍCULO), y
+//  compara la suma contra el neto facturado. Aritmética contra datos
+//  cargados — acá no hay lectura que pueda salir mal.
+// ═══════════════════════════════════════════════════════════════════════
+let MERC = [];
+const MERC_EST = {
+  coincide:   {ico:'✅', tx:'Coincide con lista',  col:'#166534', bg:'#dcfce7'},
+  mas_caro:   {ico:'🔺', tx:'Facturado de MÁS',    col:'#991b1b', bg:'#fee2e2'},
+  mas_barato: {ico:'🔻', tx:'Facturado de menos',  col:'#1e40af', bg:'#dbeafe'},
+  sin_remito: {ico:'❔', tx:'Sin remito',           col:'#475569', bg:'#f1f5f9'},
+  sin_lista:  {ico:'⚠️', tx:'Falta lista',          col:'#92400e', bg:'#fef3c7'},
+};
+
+async function vistaMercaderia(){
+  const c = document.getElementById('cont');
+  c.innerHTML = '<div class="vacio">Cruzando facturas contra remitos y listas…</div>';
+  const {data, error} = await sb.rpc('compras_mercaderia_resumen', {p_anio: Number(filtro.anio)});
+  if (error){ c.innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return; }
+  MERC = data || [];
+
+  const n = k => MERC.filter(m => m.estado === k);
+  const deMas = n('mas_caro').reduce((a,m) => a + Number(m.dif||0), 0);
+
+  c.innerHTML = `<div class="kpis">
+      <div class="kpi" style="border-left-color:var(--ok)"><div class="lbl">Coinciden al peso</div>
+        <div class="val">${n('coincide').length}</div><div class="sub">de ${MERC.length} facturas ${filtro.anio}</div></div>
+      <div class="kpi" style="border-left-color:var(--bad)"><div class="lbl">Facturadas de más</div>
+        <div class="val">${n('mas_caro').length}</div><div class="sub">${platac(deMas)} por encima de lista</div></div>
+      <div class="kpi" style="border-left-color:var(--info)"><div class="lbl">Facturadas de menos</div>
+        <div class="val">${n('mas_barato').length}</div><div class="sub">a favor nuestro</div></div>
+      <div class="kpi"><div class="lbl">Sin remito</div>
+        <div class="val">${n('sin_remito').length}</div><div class="sub">no se pueden controlar</div></div>
+    </div>
+    <div class="card">
+      <p class="mini" style="margin-bottom:11px">Facturas de <b>Familia García Regueira</b> del ${filtro.anio},
+        controladas contra el remito (qué vino y cuánto) y la lista COSTO vigente a la fecha
+        (el precio con el descuento pactado de cada artículo). El desvío puede ser sobreprecio
+        del proveedor <b>o</b> una lista desactualizada en el Dragonfish — el detalle por artículo lo dice.</p>
+      <div class="filtros">
+        <select onchange="setF('anio',this.value)">${(()=>{const a=[];for(let y=new Date().getFullYear();y>=2025;y--)a.push(y);
+          return a.map(y=>`<option ${y==filtro.anio?'selected':''}>${y}</option>`).join('')})()}</select>
+        <select id="merc-filtro" onchange="renderMercTabla()">
+          <option value="">Todos los estados</option>
+          <option value="mas_caro">🔺 Facturadas de más</option>
+          <option value="mas_barato">🔻 Facturadas de menos</option>
+          <option value="coincide">✅ Coinciden</option>
+          <option value="sin_remito">❔ Sin remito</option>
+        </select>
+      </div>
+      <div id="merc-tabla"></div>
+    </div>`;
+  renderMercTabla();
+}
+
+function renderMercTabla(){
+  const f = document.getElementById('merc-filtro')?.value || '';
+  const lista = MERC.filter(m => !f || m.estado === f);
+  const el = document.getElementById('merc-tabla');
+  if (!el) return;
+  if (!lista.length){ el.innerHTML = '<div class="vacio">Nada con ese filtro.</div>'; return; }
+  el.innerHTML = `<div style="overflow-x:auto"><table>
+    <thead><tr><th>Factura</th><th>Fecha</th><th>Local</th>
+      <th class="num">Facturado</th><th class="num">Según lista</th><th class="num">Diferencia</th>
+      <th>Estado</th><th></th></tr></thead>
+    <tbody>${lista.slice(0,300).map(m => {
+      const e = MERC_EST[m.estado] || MERC_EST.sin_remito;
+      return `<tr>
+        <td><b>${esc(String(m.numero))}</b></td>
+        <td>${fechaCorta(m.fecha)}</td>
+        <td>${esc(m.destino || '—')}</td>
+        <td class="num">${plata(m.neto)}</td>
+        <td class="num">${m.esperado != null ? plata(m.esperado) : '—'}</td>
+        <td class="num" style="color:${Math.abs(m.dif) <= 1 ? 'var(--mut)' : e.col};font-weight:600">
+          ${m.esperado != null ? plata(m.dif) : '—'}</td>
+        <td><span class="chip" style="background:${e.bg};color:${e.col}">${e.ico} ${e.tx}</span></td>
+        <td class="num">${m.estado !== 'sin_remito'
+          ? `<button class="act gh" style="font-size:12.5px;padding:5px 10px"
+               onclick="abrirDetalleMerc(${m.doc_id}, '${esc(String(m.numero))}')">Detalle</button>` : ''}</td>
+      </tr>`;
+    }).join('')}</tbody></table></div>
+    ${lista.length > 300 ? `<p class="mini" style="margin-top:8px">Mostrando 300 de ${lista.length}.</p>` : ''}`;
+}
+
+async function abrirDetalleMerc(docId, numero){
+  let ov = document.getElementById('merc-overlay');
+  if (!ov){
+    ov = document.createElement('div');
+    ov.id = 'merc-overlay';
+    ov.className = '';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9998;display:flex;align-items:flex-start;justify-content:center;padding:18px 12px;overflow-y:auto;';
+    ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML = `<div class="c-box"><div class="c-body"><div class="vacio">Cargando el renglón por renglón…</div></div></div>`;
+  const {data, error} = await sb.rpc('compras_control_mercaderia', {p_doc_id: docId});
+  const filas = error ? [] : (data || []);
+  const resumen = filas.find(x => x.sku === '—');
+  const arts = filas.filter(x => x.sku && x.sku !== '—');
+  ov.innerHTML = `<div class="c-box">
+    <div class="c-head">
+      <div style="flex:1"><div style="font-weight:700;font-size:16px">Factura ${esc(numero)} · renglón por renglón</div>
+        <div style="font-size:12.5px;opacity:.9">${esc(resumen?.descripcion || '')}</div></div>
+      <button class="m-x" onclick="document.getElementById('merc-overlay').remove()">✕</button>
+    </div>
+    <div class="c-body">
+      ${error ? `<div class="alerta">${esc(error.message)}</div>` : ''}
+      ${resumen ? `<div class="c-sug" style="background:${resumen.estado==='coincide'?'#dcfce7':'#fef3c7'};
+          border-color:${resumen.estado==='coincide'?'#166534':'#92400e'}">
+          <b>${esc(resumen.detalle || '')}</b></div>` : ''}
+      ${arts.length ? `<div style="overflow-x:auto"><table>
+        <thead><tr><th>SKU</th><th>Artículo</th><th class="num">Cant.</th>
+          <th class="num">Lista compra</th><th class="num">Lista costo</th>
+          <th class="num">% desc.</th><th class="num">Esperado</th></tr></thead>
+        <tbody>${arts.map(a => `<tr>
+          <td><code>${esc(a.sku)}</code></td>
+          <td>${esc(a.descripcion || '')}${a.detalle ? `<br><span class="mini" style="color:#92400e">⚠ ${esc(a.detalle)}</span>` : ''}</td>
+          <td class="num">${Number(a.cantidad||0)}</td>
+          <td class="num">${a.precio_compra != null ? plata(a.precio_compra) : '—'}</td>
+          <td class="num">${a.precio_costo != null ? plata(a.precio_costo) : '—'}</td>
+          <td class="num">${a.descuento_pct != null ? a.descuento_pct + ' %' : '—'}</td>
+          <td class="num">${a.importe_esperado != null ? plata(a.importe_esperado) : '—'}</td>
+        </tr>`).join('')}</tbody></table></div>` : ''}
+    </div>
+  </div>`;
+}
+
 // ── Sesión persistente ──────────────────────────────────────────────────
 (async () => {
   const {data} = await sb.auth.getSession();
@@ -833,6 +967,6 @@ async function guardarMapeo(){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=2"></script>
+<script src="manual.js?v=3"></script>
 </body>
 </html>
