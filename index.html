@@ -380,6 +380,20 @@ function pintarControl(){
           ? `<button class="act gh" onclick="quitarLinea(${i})" title="Quitar">✕</button>` : ''}
       </div>`).join('')}
       <button class="act gh" style="font-size:12.5px;padding:5px 10px" onclick="agregarLinea()">+ Dividir en otro concepto</button>
+      <button class="act gh" style="font-size:12.5px;padding:5px 10px" onclick="toggleNuevoConcepto()">✳ Concepto nuevo</button>
+      <div id="nc-form" style="display:none;background:#fff7ed;border:1px solid var(--primary);border-radius:9px;padding:11px;margin-top:9px;">
+        <div class="mini" style="margin-bottom:7px"><b>Crear concepto contable</b> — para gastos de un tipo que todavía no existe en el catálogo.</div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;">
+          <input id="nc-codigo" placeholder="Código (ej: SEGUR2)" maxlength="20"
+                 style="width:150px;text-transform:uppercase">
+          <input id="nc-desc" placeholder="Descripción para los listados" style="flex:1;min-width:180px">
+          <select id="nc-alic" title="Alícuota de IVA">
+            <option value="21" selected>IVA 21%</option><option value="10.5">IVA 10,5%</option>
+            <option value="27">IVA 27%</option><option value="0">No gravado / exento</option>
+          </select>
+          <button class="act" style="font-size:12.5px;padding:6px 11px" onclick="crearConcepto()">Crear</button>
+        </div>
+      </div>
       <div id="ctrl-dif" class="mini" style="margin-top:7px">${
         Math.abs(dif) < 0.02
           ? `<span style="color:var(--ok)">✓ Los conceptos suman el neto de la factura.</span>`
@@ -431,6 +445,24 @@ function pintarNums(){
     : `<span style="color:var(--warn)">⚠ Faltan ${plata(dif)} por asignar (neto ${plata(neto)}).</span>`;
 }
 function usarConcepto(cod){ lineasControl[0].concepto = cod; pintarControl(); }
+function toggleNuevoConcepto(){
+  const f = document.getElementById('nc-form');
+  if (f) f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+async function crearConcepto(){
+  const cod  = (document.getElementById('nc-codigo').value || '').trim().toUpperCase();
+  const desc = (document.getElementById('nc-desc').value || '').trim();
+  const alic = document.getElementById('nc-alic').value;
+  if (!cod || !desc){ alert('Completá código y descripción.'); return; }
+  const {data, error} = await sb.rpc('compras_crear_concepto',
+    {p_codigo: cod, p_descripcion: desc, p_alicuota: alic});
+  if (error){ alert('No se pudo crear: ' + error.message); return; }
+  CONCEPTOS.push({codigo: cod, descripcion: desc, alicuota: alic});
+  // lo pone directo en la primera línea vacía (o en la primera)
+  const libre = lineasControl.find(l => !(l.concepto||'').trim()) || lineasControl[0];
+  libre.concepto = cod;
+  pintarControl();
+}
 function agregarLinea(){ lineasControl.push({concepto:'', monto:0}); pintarControl(); }
 function quitarLinea(i){ lineasControl.splice(i,1); pintarControl(); }
 
@@ -967,6 +999,6 @@ async function abrirDetalleMerc(docId, numero){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=3"></script>
+<script src="manual.js?v=4"></script>
 </body>
 </html>
