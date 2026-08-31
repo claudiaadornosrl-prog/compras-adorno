@@ -1132,6 +1132,19 @@ async function abrirResumenDoc(docId){
   const neto = Number(doc.neto_gravado||0)+Number(doc.neto_no_gravado||0)+Number(doc.exento||0);
   const iva = Number(doc.iva_21||0)+Number(doc.iva_105||0)+Number(doc.iva_27||0)+Number(doc.iva_otros||0);
   const cMap = Object.fromEntries(CONCEPTOS.map(c=>[c.codigo, c.descripcion]));
+  // Desglose fiscal completo: solo los renglones con importe. Las RETENCIONES
+  // no aparecen acá a propósito: se practican al PAGAR y van con la orden de
+  // pago (punto 4), no con la factura.
+  const fiscal = [
+    ['Neto gravado', doc.neto_gravado], ['Neto no gravado', doc.neto_no_gravado],
+    ['Exento', doc.exento],
+    ['IVA 21%', doc.iva_21], ['IVA 10,5%', doc.iva_105], ['IVA 27%', doc.iva_27],
+    ['IVA otros', doc.iva_otros],
+    ['Percepción IVA', doc.percep_iva],
+    ['Perc. IIBB Buenos Aires', doc.percep_iibb_ba],
+    ['Perc. IIBB CABA', doc.percep_iibb_caba],
+    ['Otros tributos', doc.otros_tributos],
+  ].filter(([,v]) => Math.abs(Number(v)||0) > 0.005);
 
   ov.innerHTML = `<div class="c-box">
     <div class="c-head">
@@ -1168,6 +1181,15 @@ async function abrirResumenDoc(docId){
         ${doc.computa_formal ? '<span class="chip" style="background:#f1f5f9;color:#475569">Libro IVA</span>' : '<span class="chip" style="background:#fee2e2;color:#991b1b">Fuera del Libro IVA</span>'}
         ${doc.computa_gestion ? '<span class="chip" style="background:#f1f5f9;color:#475569">Gasto real</span>' : '<span class="chip" style="background:#fee2e2;color:#991b1b">No es gasto real</span>'}
       </div>
+      <h4 style="font-size:14px;margin:4px 0 7px">Desglose fiscal</h4>
+      <table style="margin-bottom:13px"><tbody>${fiscal.map(([lbl,v]) => `<tr>
+        <td style="padding:4px 7px">${lbl}</td>
+        <td class="num" style="padding:4px 7px">${plata(v)}</td><td style="width:55%"></td>
+      </tr>`).join('')}
+        <tr style="border-top:2px solid var(--bd)"><td style="padding:5px 7px"><b>Total</b></td>
+        <td class="num" style="padding:5px 7px"><b>${plata(doc.total)}</b></td><td></td></tr>
+      </tbody></table>
+      <p class="mini" style="margin:-6px 0 12px">Las retenciones no van en la factura: se practican al pagar y las vas a ver en la orden de pago.</p>
       <h4 style="font-size:14px;margin:4px 0 7px">Cómo se contabilizó</h4>
       ${lineas.length ? `<table>
         <thead><tr><th>Concepto</th><th>Alíc.</th><th class="num">Neto</th></tr></thead>
