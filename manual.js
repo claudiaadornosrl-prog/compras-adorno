@@ -85,7 +85,8 @@ function _manualSecciones() {
         'Tocá los títulos de las columnas para ordenar.',
         'Tocá una factura y se abre el resumen de cómo se contabilizó: conceptos, importes, alícuotas, quién la aprobó.',
         'El ✏️ del resumen permite corregir la contabilización — queda marcada como corregida y asentado quién la cambió. Si la contabilización vino del Dragonfish, pide confirmación extra.',
-        'El 📄 al final de la fila indica que la factura tiene su PDF vinculado.',
+        'La columna Estado sigue el circuito de carpetas: Contabilizada s/ controlar → Controlada sin OP → Con OP sin pagar → Pagada y archivada. En el resumen se cambia con el desplegable.',
+        'El 📄 al final de la fila abre el PDF directo.',
       ],
     },
     {

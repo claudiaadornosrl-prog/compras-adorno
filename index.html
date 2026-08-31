@@ -111,6 +111,17 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const TIPOS = {gastos:'Gastos', mercaderia:'Mercadería', inversiones:'Inversiones', no_actividad:'No actividad'};
+// El estado de pago espeja el circuito de carpetas de DOCUMENTOS/CONTABILIZAR
+const EPAGO = {
+  sin_contabilizar:           {tx:'Sin contabilizar',            bg:'#fee2e2', col:'#991b1b'},
+  contabilizado_sin_controlar:{tx:'Contabilizada s/ controlar',  bg:'#fef3c7', col:'#92400e'},
+  controlado_sin_op:          {tx:'Controlada · sin OP',         bg:'#dbeafe', col:'#1e40af'},
+  con_op_sin_pagar:           {tx:'Con OP · sin pagar',          bg:'#ede9fe', col:'#5b21b6'},
+  pagada:                     {tx:'Pagada y archivada',          bg:'#dcfce7', col:'#166534'},
+  sin_definir:                {tx:'—',                           bg:'#f1f5f9', col:'#94a3b8'},
+};
+const chipPago = e => { const p = EPAGO[e] || EPAGO.sin_definir;
+  return `<span class="chip" style="background:${p.bg};color:${p.col}">${p.tx}</span>`; };
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 let session = {email:null}, DOCS = [], tabActual = 'bandeja';
 let filtro = {texto:'', tipo:'', mes:'', anio:String(new Date().getFullYear())};
@@ -167,7 +178,7 @@ async function cargarTodo(){
   let todos = [], desde = 0;
   while (true){
     const {data, error} = await sb.from('compras_documentos')
-      .select('id,tipo,letra,punto_venta,numero,cuit_emisor,proveedor_nombre,fecha_emision,total,estado,tipo_gasto,archivo_path,archivo_alerta,confianza,origen')
+      .select('id,tipo,letra,punto_venta,numero,cuit_emisor,proveedor_nombre,fecha_emision,total,estado,estado_pago,tipo_gasto,archivo_path,archivo_alerta,confianza,origen')
       .gte('fecha_emision', filtro.anio + '-01-01').lte('fecha_emision', filtro.anio + '-12-31')
       .order('fecha_emision', {ascending:false}).range(desde, desde+999);
     if (error){ document.getElementById('cont').innerHTML = `<div class="alerta">No se pudieron leer los comprobantes: ${esc(error.message)}</div>`; return; }
@@ -517,7 +528,7 @@ function vistaFacturas(){
 function tabla(lista, bandeja){
   if (!lista.length) return `<div class="vacio">No hay comprobantes con esos filtros.</div>`;
   const cab = [['fecha_emision','Fecha'],['proveedor_nombre','Proveedor'],['numero','Comprobante'],
-               ['tipo_gasto','Tipo'],['total','Total'],['estado','Estado']];
+               ['tipo_gasto','Tipo'],['total','Total'],['estado_pago','Estado']];
   return `<div style="overflow-x:auto"><table>
     <thead><tr>${cab.map(([k,t]) =>
       `<th onclick="ordenar('${k}')" class="${k==='total'?'num':''}">${t}${orden.col===k?(orden.desc?' ▾':' ▴'):''}</th>`).join('')}
@@ -529,7 +540,7 @@ function tabla(lista, bandeja){
       <td class="oculta-mov">${esc(d.tipo)} ${esc(d.letra)} ${String(d.punto_venta).padStart(4,'0')}-${String(d.numero).padStart(8,'0')}</td>
       <td>${d.tipo_gasto ? `<span class="chip c-${d.tipo_gasto}">${TIPOS[d.tipo_gasto]}</span>` : '<span class="mini">—</span>'}</td>
       <td class="num">${plata(d.total)}</td>
-      <td><span class="chip e-${esc(d.estado)}">${esc(d.estado)}</span></td>
+      <td>${chipPago(d.estado_pago)}</td>
       <td class="num">${d.archivo_path ? `<a href="${pdfUrl(d.archivo_path)}" target="_blank" title="Ver PDF" onclick="event.stopPropagation()" style="text-decoration:none">📄</a>` : ''}</td>
     </tr>`).join('')}</tbody></table></div>
     ${lista.length > 400 ? `<p class="mini" style="margin-top:9px">Mostrando los primeros 400 de ${lista.length}. Afiná la búsqueda para ver el resto.</p>` : ''}`;
@@ -1147,7 +1158,12 @@ async function abrirResumenDoc(docId){
           ? `<a href="${pdfUrl(doc.archivo_path)}" target="_blank" class="chip"
                style="background:#ecfeff;color:#0e7490;text-decoration:none" onclick="event.stopPropagation()">📄 Ver PDF</a>`
           : '<span class="chip" style="background:#f1f5f9;color:#94a3b8">sin PDF</span>'}
-        <span class="chip e-${esc(doc.estado)}">${esc(doc.estado)}</span>
+        <select onchange="cambiarEstadoPago(${docId}, this.value)" onclick="event.stopPropagation()"
+          style="font-size:12px;padding:4px 8px;border-radius:20px;font-weight:700;border:1px solid var(--bd);
+                 background:${(EPAGO[doc.estado_pago]||EPAGO.sin_definir).bg};color:${(EPAGO[doc.estado_pago]||EPAGO.sin_definir).col}">
+          ${Object.entries(EPAGO).filter(([k])=>k!=='sin_definir'||doc.estado_pago==='sin_definir').map(([k,v]) =>
+            `<option value="${k}" ${doc.estado_pago===k?'selected':''}>${v.tx}</option>`).join('')}
+        </select>
         ${doc.corregida ? '<span class="chip" style="background:#fef3c7;color:#92400e">✏️ corregida</span>' : ''}
         ${doc.computa_formal ? '<span class="chip" style="background:#f1f5f9;color:#475569">Libro IVA</span>' : '<span class="chip" style="background:#fee2e2;color:#991b1b">Fuera del Libro IVA</span>'}
         ${doc.computa_gestion ? '<span class="chip" style="background:#f1f5f9;color:#475569">Gasto real</span>' : '<span class="chip" style="background:#fee2e2;color:#991b1b">No es gasto real</span>'}
@@ -1167,6 +1183,14 @@ async function abrirResumenDoc(docId){
       ${doc.archivo_path ? `<p class="mini" style="word-break:break-all">📎 ${esc(doc.archivo_path)}</p>` : ''}
     </div>
   </div>`;
+}
+
+async function cambiarEstadoPago(docId, estado){
+  const {error} = await sb.from('compras_documentos')
+    .update({estado_pago: estado}).eq('id', docId);
+  if (error){ alert('No se pudo cambiar: ' + error.message); return; }
+  const d = DOCS.find(x=>x.id===docId); if (d) d.estado_pago = estado;
+  abrirResumenDoc(docId);
 }
 
 async function editarContabilizacion(docId){
