@@ -245,7 +245,7 @@ const CONF = {
 
 async function cargarBandeja(){
   const [b, c] = await Promise.all([
-    sb.rpc('compras_bandeja', {p_anio: Number(filtro.anio)}),
+    sb.rpc('compras_bandeja', {p_anio: null}),   // (30-ago) la bandeja no filtra por año: pendiente es pendiente
     CONCEPTOS.length ? Promise.resolve({data:null})
       : sb.from('compras_conceptos').select('codigo,descripcion,alicuota').eq('activo',true).limit(2000),
   ]);
@@ -261,7 +261,7 @@ function vistaBandeja(){
 
   let h = `<div class="kpis">
     <div class="kpi"><div class="lbl">Esperando control</div><div class="val">${BANDEJA.length}</div>
-      <div class="sub">comprobantes del ${filtro.anio}</div></div>
+      <div class="sub">comprobantes pendientes (todos los años)</div></div>
     <div class="kpi" style="border-left-color:var(--ok)"><div class="lbl">Ya contabilizadas solas</div>
       <div class="val">${autos.length}</div><div class="sub">solo hay que confirmarlas</div></div>
     <div class="kpi" style="border-left-color:var(--warn)"><div class="lbl">Necesitan decisión</div>
