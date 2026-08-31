@@ -120,6 +120,11 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const plata = n => '$' + (Number(n)||0).toLocaleString('es-AR',{minimumFractionDigits:2, maximumFractionDigits:2});
 const platac = n => '$' + (Number(n)||0).toLocaleString('es-AR',{maximumFractionDigits:0});
 const fechaCorta = f => f ? f.slice(8,10)+'/'+f.slice(5,7)+'/'+f.slice(2,4) : '—';
+// archivo_path es relativo a la raíz del OneDrive → URL de SharePoint
+const pdfUrl = p => p
+  ? 'https://claudiaadorno-my.sharepoint.com/personal/office_claudiaadorno_onmicrosoft_com/Documents/'
+    + p.split('/').map(encodeURIComponent).join('/')
+  : null;
 
 // ── Login ───────────────────────────────────────────────────────────────
 async function entrar(){
@@ -525,7 +530,7 @@ function tabla(lista, bandeja){
       <td>${d.tipo_gasto ? `<span class="chip c-${d.tipo_gasto}">${TIPOS[d.tipo_gasto]}</span>` : '<span class="mini">—</span>'}</td>
       <td class="num">${plata(d.total)}</td>
       <td><span class="chip e-${esc(d.estado)}">${esc(d.estado)}</span></td>
-      <td class="num">${d.archivo_path ? '📄' : ''}</td>
+      <td class="num">${d.archivo_path ? `<a href="${pdfUrl(d.archivo_path)}" target="_blank" title="Ver PDF" onclick="event.stopPropagation()" style="text-decoration:none">📄</a>` : ''}</td>
     </tr>`).join('')}</tbody></table></div>
     ${lista.length > 400 ? `<p class="mini" style="margin-top:9px">Mostrando los primeros 400 de ${lista.length}. Afiná la búsqueda para ver el resto.</p>` : ''}`;
 }
@@ -1134,8 +1139,14 @@ async function abrirResumenDoc(docId){
         <div><span class="lbl">IVA</span><span class="v">${plata(iva)}</span></div>
         <div><span class="lbl">Total</span><span class="v" style="color:var(--primary)">${plata(doc.total)}</span></div>
       </div>
-      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:11px">
-        ${doc.tipo_gasto ? `<span class="chip c-${doc.tipo_gasto}">${TIPOS[doc.tipo_gasto]||doc.tipo_gasto}</span>` : ''}
+      <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:11px">
+        ${doc.tipo_gasto ? `<span class="chip c-${doc.tipo_gasto}">${TIPOS[doc.tipo_gasto]||doc.tipo_gasto}</span>`
+          : '<span class="chip" style="background:#fee2e2;color:#991b1b">sin tipo</span>'}
+        <span class="chip" style="background:#f1f5f9;color:#475569" title="CUIT del proveedor">CUIT ${esc(doc.cuit_emisor)}</span>
+        ${doc.archivo_path
+          ? `<a href="${pdfUrl(doc.archivo_path)}" target="_blank" class="chip"
+               style="background:#ecfeff;color:#0e7490;text-decoration:none" onclick="event.stopPropagation()">📄 Ver PDF</a>`
+          : '<span class="chip" style="background:#f1f5f9;color:#94a3b8">sin PDF</span>'}
         <span class="chip e-${esc(doc.estado)}">${esc(doc.estado)}</span>
         ${doc.corregida ? '<span class="chip" style="background:#fef3c7;color:#92400e">✏️ corregida</span>' : ''}
         ${doc.computa_formal ? '<span class="chip" style="background:#f1f5f9;color:#475569">Libro IVA</span>' : '<span class="chip" style="background:#fee2e2;color:#991b1b">Fuera del Libro IVA</span>'}
@@ -1153,7 +1164,7 @@ async function abrirResumenDoc(docId){
       ${doc.aprobada_por ? `<p class="mini" style="margin-top:9px">Contabilizada por ${esc(doc.aprobada_por)}
         el ${doc.aprobada_at ? new Date(doc.aprobada_at).toLocaleDateString('es-AR') : '—'}</p>`
         : '<p class="mini" style="margin-top:9px">Contabilización migrada del Dragonfish.</p>'}
-      ${doc.archivo_path ? `<p class="mini">📄 ${esc(doc.archivo_path.split('/').pop())}</p>` : ''}
+      ${doc.archivo_path ? `<p class="mini" style="word-break:break-all">📎 ${esc(doc.archivo_path)}</p>` : ''}
     </div>
   </div>`;
 }
