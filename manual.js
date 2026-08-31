@@ -83,7 +83,18 @@ function _manualSecciones() {
       pasos: [
         'Buscá por proveedor, número o CUIT. Filtrá por año, mes y tipo de gasto.',
         'Tocá los títulos de las columnas para ordenar.',
+        'Tocá una factura y se abre el resumen de cómo se contabilizó: conceptos, importes, alícuotas, quién la aprobó.',
+        'El ✏️ del resumen permite corregir la contabilización — queda marcada como corregida y asentado quién la cambió. Si la contabilización vino del Dragonfish, pide confirmación extra.',
         'El 📄 al final de la fila indica que la factura tiene su PDF vinculado.',
+      ],
+    },
+    {
+      icon: '📇', titulo: 'Conceptos',
+      desc: 'El catálogo contable: cada concepto es un SKU + su descripción, como los artículos del Dragonfish.',
+      pasos: [
+        'Buscá por SKU o descripción; se puede editar la descripción, la alícuota de IVA y dar de baja (desmarcar Activo).',
+        '➕ Nuevo concepto: solo para un tipo de gasto genuinamente nuevo — no para variantes de nombre. Cada concepto de más parte los listados.',
+        '🚨 Mientras el Dragonfish siga en uso, todo concepto creado acá hay que darlo de alta también allá como artículo, sino la exportación lo rechaza.',
       ],
     },
     {

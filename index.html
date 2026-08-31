@@ -151,7 +151,7 @@ async function arrancar(){
 
 function renderTabs(){
   const tabs = [['bandeja','📥 Bandeja'],['facturas','📄 Facturas'],['mercaderia','🚚 Mercadería'],
-                ['equivalencias','🔗 Equivalencias'],['listados','📊 Listados'],['config','⚙️ Retenciones']];
+                ['conceptos','📇 Conceptos'],['equivalencias','🔗 Equivalencias'],['listados','📊 Listados'],['config','⚙️ Retenciones']];
   document.getElementById('tabs').innerHTML = tabs.map(([k,t]) =>
     `<button class="${k===tabActual?'on':''}" onclick="irA('${k}')">${t}</button>`).join('');
 }
@@ -222,6 +222,7 @@ function render(){
   if (tabActual === 'config')   vistaConfig();
   if (tabActual === 'equivalencias') vistaEquivalencias();
   if (tabActual === 'mercaderia') vistaMercaderia();
+  if (tabActual === 'conceptos') vistaConceptos();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -355,13 +356,16 @@ function pintarControl(){
       </div>
       ${d.archivo_path ? `<p class="mini">📄 ${esc(d.archivo_path.split('/').pop())}</p>` : ''}
 
-      <div class="c-sug" style="background:${cf.bg};border-color:${cf.col}">
+      ${d.esEdicion ? `<div class="c-sug" style="background:#ede9fe;border-color:#5b21b6">
+        <b style="color:#5b21b6">✏️ Modificando una contabilización existente</b>
+        <div class="mini" style="margin-top:3px">Al guardar queda marcada como corregida y asentado quién la cambió.</div>
+      </div>` : `<div class="c-sug" style="background:${cf.bg};border-color:${cf.col}">
         <b style="color:${cf.col}">${cf.ico} Propuesta del sistema · confianza ${cf.tx.toLowerCase()}</b><br>
         ${d.sug_concepto
           ? `<span style="font-size:14px"><b>${esc(d.sug_concepto)}</b> ${esc(d.sug_descripcion||'')}</span>`
           : '<span style="font-size:14px">Sin propuesta</span>'}
         <div class="mini" style="margin-top:3px">${esc(d.sug_motivo||'')}</div>
-      </div>
+      </div>`}
 
       ${(d._usados && d._usados.length) ? `<div style="margin-bottom:9px">
         <div class="mini" style="margin-bottom:5px">Conceptos que ya usó este proveedor:</div>
@@ -382,9 +386,9 @@ function pintarControl(){
       <button class="act gh" style="font-size:12.5px;padding:5px 10px" onclick="agregarLinea()">+ Dividir en otro concepto</button>
       <button class="act gh" style="font-size:12.5px;padding:5px 10px" onclick="toggleNuevoConcepto()">✳ Concepto nuevo</button>
       <div id="nc-form" style="display:none;background:#fff7ed;border:1px solid var(--primary);border-radius:9px;padding:11px;margin-top:9px;">
-        <div class="mini" style="margin-bottom:7px"><b>Crear concepto contable</b> — para gastos de un tipo que todavía no existe en el catálogo.</div>
+        <div class="mini" style="margin-bottom:7px"><b>Crear concepto contable</b> — un SKU + su descripción, como los artículos del Dragonfish. Solo para gastos de un tipo que todavía no existe en el catálogo.</div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;">
-          <input id="nc-codigo" placeholder="Código (ej: SEGUR2)" maxlength="20"
+          <input id="nc-codigo" placeholder="SKU (ej: SEGVIG)" maxlength="20"
                  style="width:150px;text-transform:uppercase">
           <input id="nc-desc" placeholder="Descripción para los listados" style="flex:1;min-width:180px">
           <select id="nc-alic" title="Alícuota de IVA">
@@ -513,7 +517,7 @@ function tabla(lista, bandeja){
     <thead><tr>${cab.map(([k,t]) =>
       `<th onclick="ordenar('${k}')" class="${k==='total'?'num':''}">${t}${orden.col===k?(orden.desc?' ▾':' ▴'):''}</th>`).join('')}
       <th></th></tr></thead>
-    <tbody>${lista.slice(0,400).map(d => `<tr>
+    <tbody>${lista.slice(0,400).map(d => `<tr style="cursor:pointer" onclick="abrirResumenDoc(${d.id})">
       <td>${fechaCorta(d.fecha_emision)}</td>
       <td>${esc(d.proveedor_nombre || d.cuit_emisor || '—')}
           ${d.archivo_alerta ? '<br><span class="mini" style="color:#dc2626">📎 archivo a revisar</span>' : ''}</td>
@@ -990,6 +994,188 @@ async function abrirDetalleMerc(docId, numero){
   </div>`;
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+//  📇 CONCEPTOS · el catálogo contable (SKU + descripción, como Dragonfish)
+//  🚨 Regla: crear concepto es para un tipo de gasto GENUINAMENTE nuevo, no
+//  para variantes de nombre. Y mientras el Dragonfish siga vivo, todo
+//  concepto creado acá tiene que existir también como artículo allá, sino
+//  el .txt de exportación lo va a rechazar.
+// ═══════════════════════════════════════════════════════════════════════
+let CONC_LISTA = [], concBusca = '';
+
+async function vistaConceptos(){
+  const c = document.getElementById('cont');
+  c.innerHTML = '<div class="vacio">Cargando catálogo…</div>';
+  const {data, error} = await sb.from('compras_conceptos')
+    .select('codigo,descripcion,alicuota,usos_historicos,activo,origen')
+    .order('usos_historicos', {ascending:false}).limit(2000);
+  if (error){ c.innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return; }
+  CONC_LISTA = data || [];
+  pintarConceptos();
+}
+
+function pintarConceptos(){
+  const c = document.getElementById('cont');
+  const t = concBusca.toLowerCase();
+  const lista = CONC_LISTA.filter(x => !t ||
+    (x.codigo + ' ' + (x.descripcion||'')).toLowerCase().includes(t));
+  c.innerHTML = `<div class="kpis">
+      <div class="kpi"><div class="lbl">Conceptos</div><div class="val">${CONC_LISTA.length}</div>
+        <div class="sub">${CONC_LISTA.filter(x=>x.activo).length} activos</div></div>
+      <div class="kpi" style="border-left-color:var(--info)"><div class="lbl">Creados a mano</div>
+        <div class="val">${CONC_LISTA.filter(x=>x.origen==='manual').length}</div>
+        <div class="sub">el resto vino del histórico</div></div>
+    </div>
+    <div class="card">
+      <h3 style="font-size:15px;margin-bottom:4px">Catálogo de conceptos contables</h3>
+      <p class="mini" style="margin-bottom:11px">Cada concepto es un SKU + su descripción, igual que los artículos
+        del Dragonfish. 🚨 Mientras el Dragonfish siga en uso, todo concepto creado acá hay que darlo de alta
+        también allá como artículo — sino la exportación lo rechaza.</p>
+      <div class="filtros">
+        <input type="search" placeholder="Buscar por SKU o descripción…" value="${esc(concBusca)}"
+               oninput="concBusca=this.value; pintarConceptos()">
+        <button class="act" onclick="toggleAltaConcepto()">➕ Nuevo concepto</button>
+      </div>
+      <div id="alta-conc" style="display:none;background:#fff7ed;border:1px solid var(--primary);border-radius:9px;padding:11px;margin-bottom:11px;">
+        <div style="display:flex;gap:7px;flex-wrap:wrap;">
+          <input id="ac-sku" placeholder="SKU (ej: SEGVIG)" maxlength="20" style="width:150px;text-transform:uppercase">
+          <input id="ac-desc" placeholder="Descripción para los listados" style="flex:1;min-width:180px">
+          <select id="ac-alic"><option value="21" selected>IVA 21%</option><option value="10.5">IVA 10,5%</option>
+            <option value="27">IVA 27%</option><option value="0">No gravado / exento</option></select>
+          <button class="act" style="font-size:12.5px;padding:6px 11px" onclick="altaConcepto()">Crear</button>
+        </div>
+        <div class="mini" style="margin-top:6px">Recordá darlo de alta también en el Dragonfish.</div>
+      </div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>SKU</th><th>Descripción</th><th>Alíc.</th><th class="num">Usos</th>
+          <th style="text-align:center">Activo</th><th></th></tr></thead>
+        <tbody>${lista.slice(0,150).map(x => `<tr class="${x.activo ? '' : 'dim'}" style="${x.activo?'':'opacity:.5'}">
+          <td><b>${esc(x.codigo)}</b>${x.origen==='manual' ? ' <span class="chip" style="background:#dbeafe;color:#1e40af">manual</span>' : ''}</td>
+          <td><input value="${esc(x.descripcion||'')}" id="cd-${esc(x.codigo)}" style="width:100%;min-width:200px;font-size:13px;padding:6px 8px"></td>
+          <td><select id="ca-${esc(x.codigo)}" style="font-size:13px;padding:6px">
+            ${['21','10.5','27','0'].map(al=>`<option value="${al}" ${x.alicuota===al?'selected':''}>${al==='0'?'No grav.':al+'%'}</option>`).join('')}
+          </select></td>
+          <td class="num">${x.usos_historicos||0}</td>
+          <td style="text-align:center"><input type="checkbox" id="cx-${esc(x.codigo)}" ${x.activo?'checked':''}></td>
+          <td class="num"><button class="act gh" style="font-size:12px;padding:5px 10px"
+              onclick="guardarConcepto('${esc(x.codigo)}')">Guardar</button></td>
+        </tr>`).join('')}</tbody></table></div>
+      ${lista.length>150 ? `<p class="mini" style="margin-top:8px">Mostrando 150 de ${lista.length} — afiná la búsqueda.</p>` : ''}
+    </div>`;
+}
+
+function toggleAltaConcepto(){
+  const f = document.getElementById('alta-conc');
+  if (f) f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+async function altaConcepto(){
+  const cod = (document.getElementById('ac-sku').value||'').trim().toUpperCase();
+  const desc = (document.getElementById('ac-desc').value||'').trim();
+  if (!cod || !desc){ alert('Completá SKU y descripción.'); return; }
+  const {error} = await sb.rpc('compras_crear_concepto',
+    {p_codigo: cod, p_descripcion: desc, p_alicuota: document.getElementById('ac-alic').value});
+  if (error){ alert('No se pudo crear: ' + error.message); return; }
+  vistaConceptos();
+}
+async function guardarConcepto(cod){
+  const {error} = await sb.from('compras_conceptos').update({
+    descripcion: document.getElementById('cd-'+cod).value.trim(),
+    alicuota:    document.getElementById('ca-'+cod).value,
+    activo:      document.getElementById('cx-'+cod).checked,
+  }).eq('codigo', cod);
+  if (error){ alert('No se pudo guardar: ' + error.message); return; }
+  const x = CONC_LISTA.find(y=>y.codigo===cod);
+  if (x){ x.descripcion=document.getElementById('cd-'+cod).value.trim();
+          x.alicuota=document.getElementById('ca-'+cod).value;
+          x.activo=document.getElementById('cx-'+cod).checked; }
+  pintarConceptos();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  📄 Resumen de una factura contabilizada (click en la fila de Facturas)
+//  Muestra CÓMO se contabilizó, y el ✏️ abre el mismo modal de control
+//  para re-contabilizarla (queda marcada "corregida" y asentada en eventos).
+// ═══════════════════════════════════════════════════════════════════════
+async function abrirResumenDoc(docId){
+  const d = DOCS.find(x => x.id === docId);
+  if (!d) return;
+  let ov = document.getElementById('res-overlay');
+  if (!ov){
+    ov = document.createElement('div');
+    ov.id = 'res-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9998;display:flex;align-items:flex-start;justify-content:center;padding:18px 12px;overflow-y:auto;';
+    ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML = `<div class="c-box"><div class="c-body"><div class="vacio">Cargando…</div></div></div>`;
+  const [full, lin] = await Promise.all([
+    sb.from('compras_documentos').select('*').eq('id', docId).single(),
+    sb.from('compras_lineas').select('*').eq('documento_id', docId).order('nroitem'),
+  ]);
+  const doc = full.data || d, lineas = lin.data || [];
+  const neto = Number(doc.neto_gravado||0)+Number(doc.neto_no_gravado||0)+Number(doc.exento||0);
+  const iva = Number(doc.iva_21||0)+Number(doc.iva_105||0)+Number(doc.iva_27||0)+Number(doc.iva_otros||0);
+  const cMap = Object.fromEntries(CONCEPTOS.map(c=>[c.codigo, c.descripcion]));
+
+  ov.innerHTML = `<div class="c-box">
+    <div class="c-head">
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:16px">${esc(doc.proveedor_nombre || doc.cuit_emisor)}</div>
+        <div style="font-size:12.5px;opacity:.9">${esc(doc.tipo)} ${esc(doc.letra)}
+          ${String(doc.punto_venta).padStart(4,'0')}-${String(doc.numero).padStart(8,'0')} ·
+          ${fechaCorta(doc.fecha_emision)} · CUIT ${esc(doc.cuit_emisor)}</div>
+      </div>
+      <button class="hbtn" title="Modificar la contabilización" onclick="editarContabilizacion(${docId})">✏️</button>
+      <button class="m-x" onclick="document.getElementById('res-overlay').remove()">✕</button>
+    </div>
+    <div class="c-body">
+      <div class="c-nums">
+        <div><span class="lbl">Neto</span><span class="v">${plata(neto)}</span></div>
+        <div><span class="lbl">IVA</span><span class="v">${plata(iva)}</span></div>
+        <div><span class="lbl">Total</span><span class="v" style="color:var(--primary)">${plata(doc.total)}</span></div>
+      </div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:11px">
+        ${doc.tipo_gasto ? `<span class="chip c-${doc.tipo_gasto}">${TIPOS[doc.tipo_gasto]||doc.tipo_gasto}</span>` : ''}
+        <span class="chip e-${esc(doc.estado)}">${esc(doc.estado)}</span>
+        ${doc.corregida ? '<span class="chip" style="background:#fef3c7;color:#92400e">✏️ corregida</span>' : ''}
+        ${doc.computa_formal ? '<span class="chip" style="background:#f1f5f9;color:#475569">Libro IVA</span>' : '<span class="chip" style="background:#fee2e2;color:#991b1b">Fuera del Libro IVA</span>'}
+        ${doc.computa_gestion ? '<span class="chip" style="background:#f1f5f9;color:#475569">Gasto real</span>' : '<span class="chip" style="background:#fee2e2;color:#991b1b">No es gasto real</span>'}
+      </div>
+      <h4 style="font-size:14px;margin:4px 0 7px">Cómo se contabilizó</h4>
+      ${lineas.length ? `<table>
+        <thead><tr><th>Concepto</th><th>Alíc.</th><th class="num">Neto</th></tr></thead>
+        <tbody>${lineas.map(l => `<tr>
+          <td><b>${esc(l.concepto_codigo||'—')}</b> <span class="mini">${esc(cMap[l.concepto_codigo]||l.descripcion||'')}</span></td>
+          <td>${esc(l.alicuota==='0'?'No grav.':(l.alicuota||'')+'%')}</td>
+          <td class="num">${plata(l.monto_neto)}</td>
+        </tr>`).join('')}</tbody></table>`
+        : '<div class="vacio">Sin líneas de contabilización.</div>'}
+      ${doc.aprobada_por ? `<p class="mini" style="margin-top:9px">Contabilizada por ${esc(doc.aprobada_por)}
+        el ${doc.aprobada_at ? new Date(doc.aprobada_at).toLocaleDateString('es-AR') : '—'}</p>`
+        : '<p class="mini" style="margin-top:9px">Contabilización migrada del Dragonfish.</p>'}
+      ${doc.archivo_path ? `<p class="mini">📄 ${esc(doc.archivo_path.split('/').pop())}</p>` : ''}
+    </div>
+  </div>`;
+}
+
+async function editarContabilizacion(docId){
+  const {data: doc} = await sb.from('compras_documentos').select('*').eq('id', docId).single();
+  const {data: lin} = await sb.from('compras_lineas').select('*').eq('documento_id', docId).order('nroitem');
+  if (!doc) return;
+  if (doc.origen === 'dragonfish' &&
+      !confirm('Esta contabilización vino del Dragonfish y es parte del historial del que aprende el sistema.\n\n¿Seguro que hay que corregirla?')) return;
+  const r = document.getElementById('res-overlay');
+  if (r) r.remove();
+  enControl = {...doc, esEdicion: true};
+  lineasControl = (lin && lin.length)
+    ? lin.map(l => ({concepto: l.concepto_codigo || '', monto: Number(l.monto_neto)||0}))
+    : [{concepto:'', monto: Number(doc.neto_gravado||0)+Number(doc.neto_no_gravado||0)+Number(doc.exento||0)}];
+  pintarControl();
+  const {data} = await sb.rpc('compras_conceptos_proveedor', {p_cuit: doc.cuit_emisor});
+  enControl._usados = data || [];
+  pintarControl();
+}
+
 // ── Sesión persistente ──────────────────────────────────────────────────
 (async () => {
   const {data} = await sb.auth.getSession();
@@ -999,6 +1185,6 @@ async function abrirDetalleMerc(docId, numero){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=4"></script>
+<script src="manual.js?v=5"></script>
 </body>
 </html>
