@@ -22,8 +22,31 @@ function _manualSecciones() {
       ],
     },
     {
+      icon: '🔄', titulo: 'El circuito del día a día',
+      desc: 'Para las facturas nuevas ya no hace falta esperar el archivo mensual: el circuito arranca en la carpeta CONTABILIZAR.',
+      pasos: [
+        'Dejá el PDF en DOCUMENTOS → CONTABILIZAR → SIN CONTABILIZAR, con la nomenclatura de siempre (G/M/I/Z + proveedor + FC número).',
+        'El motor pasa cada 10 minutos: lo lee y lo manda a la Bandeja con el concepto propuesto. La franja 🤖 de arriba muestra la última pasada.',
+        '🚨 Solo procesa PDFs SUELTOS en la raíz y con nomenclatura. Subcarpetas, otros formatos y nombres fuera de norma quedan listados como "fuera de norma" — corregí el nombre y en la próxima pasada entra.',
+        'Si un escaneo salió mal y lo reemplazás con el MISMO nombre, el motor no lo reintenta solo (recuerda lo que ya intentó): renombralo apenas distinto o avisale a JP.',
+        'El sistema NO mueve los archivos entre carpetas: mientras siga el Dragonfish, mover cada PDF por el circuito sigue siendo trabajo de administración.',
+        '🧪 Si arriba de todo hay una franja amarilla "AMBIENTE DE PRUEBA", el módulo está en etapa de test: muestra solo comprobantes de prueba y el motor trabaja sobre la carpeta CONTABILIZAR → PRUEBA. El histórico real está guardado pero oculto.',
+      ],
+    },
+    {
+      icon: '💵', titulo: 'Facturas en dólares (Anthropic, software, etc.)',
+      desc: 'El Dragonfish las rechazaba y quedaban como "NO CONTABILIZABLE". Este sistema sí las toma.',
+      pasos: [
+        'Nombrala normal: "G ANTHROPIC FC xxx.pdf" — SIN el "NO CONTABILIZABLE".',
+        'El motor la pesifica solo con el dólar oficial VENTA del día de emisión, y SIEMPRE muestra qué cotización usó (en la Bandeja, en el control y en el resumen).',
+        'Si el cambio real fue otro (el del resumen de la tarjeta, por ejemplo), corregí la cotización en el control: el total en pesos se recalcula.',
+        'No entran al Libro IVA (si corresponde declararlas lo define el estudio) pero SÍ computan como gasto real del negocio — que es el punto: hoy esa plata es invisible en los listados.',
+        'El proveedor extranjero se da de alta solo (código EXT-…) la primera vez.',
+      ],
+    },
+    {
       icon: '🤖', titulo: 'Qué hace el sistema solo',
-      desc: 'Cada hora el motor busca facturas nuevas, las lee y las deja listas para que las controles.',
+      desc: 'El motor busca facturas nuevas, las lee y las deja listas para que las controles.',
       pasos: [
         'Lee el PDF y saca proveedor, CUIT, número, fecha, total y el desglose de IVA.',
         'Verifica que las cuentas cierren: netos + IVA + percepciones tiene que dar el total.',
@@ -65,6 +88,11 @@ function _manualSecciones() {
         '🔻 De menos: a favor nuestro. Conviene mirarla igual.',
         '❔ Sin remito: todavía no se importó el archivo del proveedor, o la factura no lleva remito.',
         'El descuento es POR ARTÍCULO (servilletas 25 %, cosmética 30 %): por eso se compara contra la lista COSTO y no contra un porcentaje único.',
+        '📦 Remitos sin factura: la mercadería suele entrar primero por remito y la factura llega después. Esta lista muestra lo recibido que ninguna factura cubre todavía — el control para que el stock no se cuente dos veces ni quede mercadería sin facturar. Se asocia solo cuando factura y remito tienen el mismo número y proveedor; el resto, botón 🔗 Asociar.',
+        'Si un remito lleva más de 30 días sin factura (queda en rojo), reclamársela al proveedor.',
+        '➕ Cargar remito: cuando llega mercadería de cualquier proveedor (Espalma, etc.) antes que la factura, cargá el remito acá: proveedor, número, sucursal y los renglones (cantidad + SKU nuestro — si el papel trae el código del proveedor, traducilo con 🔗 Equivalencias).',
+        'Al guardar se descarga el TXT para importar al Dragonfish: el stock entra UNA sola vez, por el mismo circuito que los archivos de FGR. Nada de cargar los renglones dos veces.',
+        'Cuando después llegue la factura de ese remito, el sistema la engancha (o la enganchás con 🔗) y de paso le corre el control de precios renglón por renglón.',
       ],
     },
     {
