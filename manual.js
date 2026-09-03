@@ -107,7 +107,7 @@ function _manualSecciones() {
     },
     {
       icon: '📄', titulo: 'Facturas',
-      desc: 'El histórico completo, desde 2019 en adelante.',
+      desc: 'El listado de lo YA contabilizado (histórico desde 2019 + lo que se aprueba en la Bandeja). Lo que espera control no aparece acá hasta que le das el OK.',
       pasos: [
         'Buscá por proveedor, número o CUIT. Filtrá por año, mes y tipo de gasto.',
         'Tocá los títulos de las columnas para ordenar.',

@@ -207,6 +207,9 @@ async function cargarTodo(){
     let q = sb.from('compras_documentos')
       .select('id,tipo,letra,punto_venta,numero,cuit_emisor,proveedor_nombre,fecha_emision,total,estado,estado_pago,tipo_gasto,archivo_path,archivo_alerta,confianza,origen,moneda,cotizacion,importe_moneda,cotizacion_fuente,es_prueba')
       .eq('es_prueba', MODO_PRUEBA)
+      // (2-sep, regla JP) Facturas = SOLO lo contabilizado (aprobada). Lo que
+      // espera control vive en la Bandeja y recién pasa acá al darle el OK.
+      .eq('estado', 'aprobada')
       .order('fecha_emision', {ascending:false}).range(desde, desde+999);
     if (!MODO_PRUEBA) q = q.gte('fecha_emision', filtro.anio + '-01-01').lte('fecha_emision', filtro.anio + '-12-31');
     const {data, error} = await q;
@@ -1624,6 +1627,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=6"></script>
+<script src="manual.js?v=7"></script>
 </body>
 </html>
