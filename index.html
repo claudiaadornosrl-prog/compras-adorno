@@ -306,12 +306,62 @@ async function cargarBandeja(){
   MOTOR = (m.data && m.data[0]) || null;
 }
 
+let MOTOR_PEDIDO = null;   // {id, estado} del pedido en curso (botón 🤖)
+
+async function pedirMotor(){
+  const btn = document.getElementById('btn-motor');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Pidiendo…'; }
+  const {data, error} = await sb.rpc('compras_pedir_motor');
+  if (error){ alert('No pude pedir la lectura: ' + error.message); if (btn){ btn.disabled=false; btn.textContent='🤖 Leer SIN CONTABILIZAR'; } return; }
+  MOTOR_PEDIDO = {id: data.id, estado: 'pendiente', desde: Date.now()};
+  pintarEstadoMotor();
+  seguirPedido();
+}
+function pintarEstadoMotor(){
+  const el = document.getElementById('motor-estado'); if (!el) return;
+  const p = MOTOR_PEDIDO;
+  if (!p) { el.innerHTML = ''; return; }
+  const seg = Math.round((Date.now() - p.desde)/1000);
+  if (p.estado === 'pendiente') el.innerHTML = `⏳ Pedido #${p.id} en cola — la PC de JP lo toma en menos de 1 minuto (${seg}s)`;
+  else if (p.estado === 'corriendo') el.innerHTML = `🔄 Leyendo la carpeta… (${seg}s)`;
+  else if (p.estado === 'listo') el.innerHTML = `✅ Listo: ${p.resumen || 'lectura terminada'}`;
+  else if (p.estado === 'error') el.innerHTML = `<span style="color:#dc2626">✗ El motor falló: ${esc(p.error || '')}</span>`;
+}
+async function seguirPedido(){
+  if (!MOTOR_PEDIDO) return;
+  const {data} = await sb.from('compras_motor_cola').select('estado,resultado').eq('id', MOTOR_PEDIDO.id).maybeSingle();
+  if (data){
+    MOTOR_PEDIDO.estado = data.estado;
+    if (data.estado === 'listo'){
+      const r = data.resultado || {};
+      const leidas = (r.a_revisar||0)+(r.sin_regla||0)+(r.auto||0);
+      MOTOR_PEDIDO.resumen = `${leidas} nueva(s) en la Bandeja · ${r.ignoradas||0} fuera de norma · ${r.errores||0} error(es)`;
+      pintarEstadoMotor();
+      await cargarTodo();      // refresca Bandeja + franja 🤖
+      MOTOR_PEDIDO = null;
+      return;
+    }
+    if (data.estado === 'error'){ MOTOR_PEDIDO.error = (data.resultado||{}).error; pintarEstadoMotor(); return; }
+  }
+  pintarEstadoMotor();
+  if (Date.now() - MOTOR_PEDIDO.desde > 5*60*1000){
+    MOTOR_PEDIDO.estado = 'error'; MOTOR_PEDIDO.error = 'pasaron 5 minutos y la PC no respondió — ¿está prendida y con la tarea CRM_Adorno_MotorCompras activa?';
+    pintarEstadoMotor(); return;
+  }
+  setTimeout(seguirPedido, 4000);
+}
+
 function vistaBandeja(){
   const conAlerta = BANDEJA.filter(d => d.archivo_alerta);
   const autos     = BANDEJA.filter(d => d.estado === 'auto');
   const aMano     = BANDEJA.filter(d => d.estado !== 'auto');
 
-  let h = `<div class="kpis">
+  let h = `<div class="card" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;">
+    <button class="act" id="btn-motor" onclick="pedirMotor()" ${MOTOR_PEDIDO ? 'disabled' : ''}>🤖 Leer SIN CONTABILIZAR</button>
+    <span class="mini" style="flex:1">Lee los PDFs nuevos de la carpeta SIN CONTABILIZAR y los trae a esta bandeja con la propuesta de contabilización.</span>
+    <span id="motor-estado" class="mini" style="width:100%"></span>
+  </div>
+  <div class="kpis">
     <div class="kpi"><div class="lbl">Esperando control</div><div class="val">${BANDEJA.length}</div>
       <div class="sub">comprobantes pendientes (todos los años)</div></div>
     <div class="kpi" style="border-left-color:var(--ok)"><div class="lbl">Ya contabilizadas solas</div>
@@ -1627,6 +1677,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=7"></script>
+<script src="manual.js?v=8"></script>
 </body>
 </html>

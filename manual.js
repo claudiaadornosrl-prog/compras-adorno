@@ -26,7 +26,7 @@ function _manualSecciones() {
       desc: 'Para las facturas nuevas ya no hace falta esperar el archivo mensual: el circuito arranca en la carpeta CONTABILIZAR.',
       pasos: [
         'Dejá el PDF en DOCUMENTOS → CONTABILIZAR → SIN CONTABILIZAR, con la nomenclatura de siempre (G/M/I/Z + proveedor + FC número).',
-        'El motor pasa cada 10 minutos: lo lee y lo manda a la Bandeja con el concepto propuesto. La franja 🤖 de arriba muestra la última pasada.',
+        'En la Bandeja tocá 🤖 "Leer SIN CONTABILIZAR": en menos de un minuto el motor lee los PDFs nuevos y los trae con el concepto propuesto. La franja 🤖 muestra la última pasada y qué archivos ignoró.',
         '🚨 Solo procesa PDFs SUELTOS en la raíz y con nomenclatura. Subcarpetas, otros formatos y nombres fuera de norma quedan listados como "fuera de norma" — corregí el nombre y en la próxima pasada entra.',
         'Si un escaneo salió mal y lo reemplazás con el MISMO nombre, el motor no lo reintenta solo (recuerda lo que ya intentó): renombralo apenas distinto o avisale a JP.',
         'El sistema NO mueve los archivos entre carpetas: mientras siga el Dragonfish, mover cada PDF por el circuito sigue siendo trabajo de administración.',
@@ -115,6 +115,7 @@ function _manualSecciones() {
         'El ✏️ del resumen permite corregir la contabilización — queda marcada como corregida y asentado quién la cambió. Si la contabilización vino del Dragonfish, pide confirmación extra.',
         'La columna Estado sigue el circuito de carpetas: Contabilizada s/ controlar → Controlada sin OP → Con OP sin pagar → Pagada y archivada. En el resumen se cambia con el desplegable.',
         'El 📄 al final de la fila abre el PDF directo.',
+        'Al aprobar una factura en la Bandeja, el PDF se renombra solo con el formato definitivo: "G CENCOSUD SA FC 0001 - 00109109.pdf" (tipo de gasto · proveedor · FC/NC/ND · punto de venta - número). Para encontrarla después alcanza con buscar los últimos dígitos del número.',
         '"➕ Cargar sin factura": para gastos reales del negocio sin comprobante fiscal. NO entran al Libro IVA (regla fija) pero sí computan como gasto de gestión. El detalle es obligatorio: es lo único que explica el gasto.',
       ],
     },
