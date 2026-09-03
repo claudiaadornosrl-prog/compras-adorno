@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v13';
+const CACHE_VERSION = 'compras-v14';
 const ASSETS = ['./', './index.html', './manual.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

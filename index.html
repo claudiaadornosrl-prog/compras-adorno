@@ -322,7 +322,9 @@ function pintarEstadoMotor(){
   const p = MOTOR_PEDIDO;
   if (!p) { el.innerHTML = ''; return; }
   const seg = Math.round((Date.now() - p.desde)/1000);
-  if (p.estado === 'pendiente') el.innerHTML = `⏳ Pedido #${p.id} en cola — la PC de JP lo toma en menos de 1 minuto (${seg}s)`;
+  if (p.estado === 'pendiente') el.innerHTML = MODO_PRUEBA
+    ? `📥 Pedido #${p.id} registrado. En la etapa de prueba lo atiende Claude (Cowork) en su próxima pasada — sin consumir saldo de la API. Podés cerrar y volver más tarde: la Bandeja se actualiza sola. (${Math.floor(seg/60)} min)`
+    : `⏳ Pedido #${p.id} en cola — el servidor lo toma en menos de 1 minuto (${seg}s)`;
   else if (p.estado === 'corriendo') el.innerHTML = `🔄 Leyendo la carpeta… (${seg}s)`;
   else if (p.estado === 'listo') el.innerHTML = `✅ Listo: ${p.resumen || 'lectura terminada'}`;
   else if (p.estado === 'error') el.innerHTML = `<span style="color:#dc2626">✗ El motor falló: ${esc(p.error || '')}</span>`;
@@ -344,11 +346,14 @@ async function seguirPedido(){
     if (data.estado === 'error'){ MOTOR_PEDIDO.error = (data.resultado||{}).error; pintarEstadoMotor(); return; }
   }
   pintarEstadoMotor();
-  if (Date.now() - MOTOR_PEDIDO.desde > 5*60*1000){
-    MOTOR_PEDIDO.estado = 'error'; MOTOR_PEDIDO.error = 'pasaron 5 minutos y la PC no respondió — ¿está prendida y con la tarea CRM_Adorno_MotorCompras activa?';
+  const limite = MODO_PRUEBA ? 3*60*60*1000 : 5*60*1000;
+  if (Date.now() - MOTOR_PEDIDO.desde > limite){
+    MOTOR_PEDIDO.estado = 'error'; MOTOR_PEDIDO.error = MODO_PRUEBA
+      ? 'pasaron 3 horas sin respuesta — avisale a JP que corra la pasada desde Cowork'
+      : 'pasaron 5 minutos y el servidor no respondió — revisar el cron de compras en el VPS';
     pintarEstadoMotor(); return;
   }
-  setTimeout(seguirPedido, 4000);
+  setTimeout(seguirPedido, MODO_PRUEBA ? 30000 : 4000);
 }
 
 function vistaBandeja(){
@@ -358,7 +363,7 @@ function vistaBandeja(){
 
   let h = `<div class="card" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;">
     <button class="act" id="btn-motor" onclick="pedirMotor()" ${MOTOR_PEDIDO ? 'disabled' : ''}>🤖 Leer SIN CONTABILIZAR</button>
-    <span class="mini" style="flex:1">Lee los PDFs nuevos de la carpeta SIN CONTABILIZAR y los trae a esta bandeja con la propuesta de contabilización.</span>
+    <span class="mini" style="flex:1">Lee los PDFs nuevos de la carpeta SIN CONTABILIZAR y los trae a esta bandeja con la propuesta de contabilización.${MODO_PRUEBA ? ' <b>En prueba lo atiende Claude desde Cowork (cada ~15 min, sin gastar API).</b>' : ''}</span>
     <span id="motor-estado" class="mini" style="width:100%"></span>
   </div>
   <div class="kpis">
