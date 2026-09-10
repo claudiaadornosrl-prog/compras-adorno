@@ -268,7 +268,8 @@ function renderTabs(){
     document.body.prepend(b);
   }
   const tabs = [['bandeja','📥 Bandeja'],['facturas','📄 Facturas'],['mercaderia','🚚 Mercadería'],
-                ['conceptos','📇 Conceptos'],['equivalencias','🔗 Equivalencias'],['listados','📊 Listados'],['config','⚙️ Retenciones']];
+                ['conceptos','📇 Conceptos'],['proveedores','🏢 Proveedores'],
+                ['equivalencias','🔗 Equivalencias'],['listados','📊 Listados'],['config','⚙️ Retenciones']];
   document.getElementById('tabs').innerHTML = tabs.map(([k,t]) =>
     `<button class="${k===tabActual?'on':''}" onclick="irA('${k}')">${t}</button>`).join('');
 }
@@ -345,7 +346,177 @@ function render(){
   if (tabActual === 'equivalencias') vistaEquivalencias();
   if (tabActual === 'mercaderia') vistaMercaderia();
   if (tabActual === 'conceptos') vistaConceptos();
+  if (tabActual === 'proveedores') vistaProveedores();
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════
+//  🏢 PROVEEDORES · ficha del módulo
+//
+//  🚨 Dragonfish es la AUTORIDAD de la identidad (nombre, CUIT, mail,
+//  teléfono, activo): sync_proveedores.py los pisa cada 4 hs. Por eso lo que
+//  se edita acá vive en `compras_proveedor_datos`, una tabla aparte que el
+//  sync no toca. Si alguien guardara la condición de pago en la tabla de
+//  Dragonfish, se borraría sola a las pocas horas.
+//
+//  El alta manual crea un código propio (MAN- / EXT-) justamente para que el
+//  sync, que matchea por código, nunca lo encuentre y lo pise.
+// ═══════════════════════════════════════════════════════════════════════
+let _provCache = [], _provBusca = '';
+
+async function vistaProveedores(){
+  const c = document.getElementById('cont');
+  c.innerHTML = `<div class="card">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+      <input id="prov-q" placeholder="Buscar por nombre o CUIT…" value="${_mEscP(_provBusca)}"
+             style="flex:1;min-width:220px;padding:9px 11px;border:1px solid var(--bd);border-radius:9px;font-size:14px;font-family:inherit;">
+      <button class="btn" onclick="buscarProveedores()">🔍 Buscar</button>
+      <button class="btn" style="background:var(--primary);color:#fff;border-color:var(--primary);" onclick="altaProveedor()">➕ Nuevo proveedor</button>
+    </div>
+    <div id="prov-lista"><div class="hint">Cargando…</div></div>
+  </div>`;
+  document.getElementById('prov-q').addEventListener('keydown', e => { if (e.key === 'Enter') buscarProveedores(); });
+  await buscarProveedores();
+}
+
+function _mEscP(t){ return String(t ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+const _fmtP = n => '$' + Number(n||0).toLocaleString('es-AR', {maximumFractionDigits:0});
+
+async function buscarProveedores(){
+  _provBusca = (document.getElementById('prov-q')?.value || '').trim();
+  const cont = document.getElementById('prov-lista');
+  cont.innerHTML = '<div class="hint">Buscando…</div>';
+  const { data, error } = await sb.rpc('compras_proveedores_listar', { p_busca: _provBusca || null, p_limite: 60 });
+  if (error){ cont.innerHTML = `<div class="hint" style="color:#b91c1c;">No pude traer los proveedores: ${_mEscP(error.message)}</div>`; return; }
+  _provCache = data || [];
+  if (!_provCache.length){ cont.innerHTML = '<div class="hint">No encontré ningún proveedor con ese nombre o CUIT.</div>'; return; }
+  cont.innerHTML = `
+    <div class="hint" style="margin-bottom:8px;">${_provCache.length} proveedor(es) · ordenados por cuántas facturas les cargamos</div>
+    <table><thead><tr>
+      <th>Proveedor</th><th>CUIT</th><th class="num">Facturas</th><th class="num">Total comprado</th>
+      <th>Última</th><th>Condición de pago</th><th>Ficha</th><th></th></tr></thead><tbody>
+    ${_provCache.map((p,i) => `<tr>
+      <td><strong>${_mEscP(p.nombre)}</strong>
+        ${p.es_exterior ? '<span class="chip" style="background:#ede9fe;color:#5b21b6;margin-left:6px;">🌎 Exterior</span>' : ''}
+        ${p.origen === 'manual' ? '<span class="chip" style="background:#f1f5f9;color:#475569;margin-left:6px;">manual</span>' : ''}
+        ${!p.activo ? '<span class="chip" style="background:#fee2e2;color:#991b1b;margin-left:6px;">inactivo</span>' : ''}
+        ${p.copias_mismo_cuit > 1 ? `<div style="font-size:11px;color:#b45309;margin-top:2px;">⚠ Dragonfish tiene ${p.copias_mismo_cuit} fichas con este mismo CUIT — cargá los datos en una sola</div>` : ''}
+      </td>
+      <td style="font-variant-numeric:tabular-nums;">${_mEscP(p.cuit || '—')}</td>
+      <td class="num">${p.facturas || 0}</td>
+      <td class="num">${p.facturas ? _fmtP(p.total_comprado) : '—'}</td>
+      <td>${p.ultima_compra ? p.ultima_compra.split('-').reverse().join('/') : '—'}</td>
+      <td>${_mEscP(p.condicion_pago || '—')}</td>
+      <td>${p.tiene_ficha ? '✅' : '<span style="color:var(--mut);">sin completar</span>'}</td>
+      <td><button class="btn" onclick="fichaProveedor(${i})">Abrir</button></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+function fichaProveedor(i){
+  const p = _provCache[i];
+  const cp = ['', 'contado', '7 días', '15 días', '30 días', '30/60', '30/60/90', '60 días'];
+  openModalP(`
+    <h3 style="margin:0 0 4px;">🏢 ${_mEscP(p.nombre)}</h3>
+    <div class="hint" style="margin-bottom:12px;">
+      ${p.cuit ? 'CUIT ' + _mEscP(p.cuit) : '<em>sin CUIT</em>'} · código ${_mEscP(p.codigo)} ·
+      ${p.origen === 'dragonfish' ? 'viene de Dragonfish' : 'cargado a mano'}
+      ${p.facturas ? ` · ${p.facturas} facturas por ${_fmtP(p.total_comprado)}` : ' · todavía sin facturas cargadas'}
+    </div>
+    ${p.origen === 'dragonfish' ? `<div class="hint" style="background:#eff6ff;border-left:3px solid #3b82f6;padding:8px 10px;border-radius:6px;margin-bottom:12px;">
+      El nombre, CUIT, mail y teléfono los manda Dragonfish y se actualizan solos cada 4 horas.
+      Lo que cargues acá abajo es del módulo y no se pisa.</div>` : ''}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <label>Condición de pago<select id="pf-cond">${cp.map(v => `<option value="${v}" ${(p.condicion_pago||'')===v?'selected':''}>${v||'— sin definir —'}</option>`).join('')}</select></label>
+      <label>Condición frente al IVA<select id="pf-iva">
+        ${[['','— sin definir —'],['RI','Responsable Inscripto'],['MT','Monotributo'],['EX','Exento'],['CF','Consumidor Final'],['EXT','Del exterior']]
+          .map(([v,t]) => `<option value="${v}" ${(p.cond_iva||'')===v?'selected':''}>${t}</option>`).join('')}</select></label>
+      <label>CBU<input id="pf-cbu" value="${_mEscP(p.cbu||'')}" placeholder="22 dígitos"></label>
+      <label>Alias<input id="pf-alias" value="${_mEscP(p.alias_cbu||'')}"></label>
+      <label>Mail para la orden de pago<input id="pf-mail" value="${_mEscP(p.email_op||'')}" placeholder="pagos@proveedor.com"></label>
+      <label>Moneda habitual<select id="pf-moneda">${['ARS','USD','EUR'].map(m => `<option ${(p.moneda_habitual||'ARS')===m?'selected':''}>${m}</option>`).join('')}</select></label>
+      <label style="grid-column:1/-1;">Domicilio<input id="pf-dom" value="${_mEscP(p.domicilio||'')}"></label>
+      <label style="grid-column:1/-1;display:flex;gap:8px;align-items:flex-start;font-size:13px;">
+        <input type="checkbox" id="pf-ext" ${p.es_exterior?'checked':''} style="width:17px;height:17px;margin-top:2px;">
+        <span>Proveedor del exterior
+          <div class="hint">No lleva CUIT ni IVA discriminado. Las compras al exterior van aparte en el Libro IVA.</div></span></label>
+      <label id="pf-pais-wrap" style="grid-column:1/-1;${p.es_exterior?'':'display:none;'}">País<input id="pf-pais" value="${_mEscP(p.pais||'')}" placeholder="Estados Unidos"></label>
+      <label style="grid-column:1/-1;">Notas<textarea id="pf-notas" rows="2">${_mEscP(p.notas||'')}</textarea></label>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+      <button class="btn" onclick="cerrarModalP()">Cancelar</button>
+      <button class="btn" style="background:var(--primary);color:#fff;border-color:var(--primary);" onclick="guardarFichaProveedor('${_mEscP(p.codigo)}')">Guardar</button>
+    </div>`);
+  document.getElementById('pf-ext').addEventListener('change', e => {
+    document.getElementById('pf-pais-wrap').style.display = e.target.checked ? '' : 'none';
+  });
+}
+
+async function guardarFichaProveedor(codigo){
+  const g = id => (document.getElementById(id)?.value || '').trim();
+  const datos = { condicion_pago:g('pf-cond'), cond_iva:g('pf-iva'), cbu:g('pf-cbu'), alias_cbu:g('pf-alias'),
+    email_op:g('pf-mail'), moneda_habitual:g('pf-moneda'), domicilio:g('pf-dom'), notas:g('pf-notas'),
+    pais:g('pf-pais'), es_exterior: !!document.getElementById('pf-ext')?.checked };
+  const { error } = await sb.rpc('compras_proveedor_guardar', { p_codigo: codigo, p_datos: datos });
+  if (error) return alert('No se pudo guardar: ' + error.message);
+  cerrarModalP(); await buscarProveedores();
+}
+
+async function altaProveedor(){
+  openModalP(`
+    <h3 style="margin:0 0 10px;">➕ Proveedor nuevo</h3>
+    <div class="hint" style="margin-bottom:12px;">
+      Solo para proveedores que NO están en Dragonfish. Si ya existe ahí, aparece solo en el listado —
+      buscalo antes de crearlo, para no terminar con dos fichas del mismo.</div>
+    <div style="display:grid;gap:10px;">
+      <label>Nombre / razón social<input id="pa-nombre" placeholder="ANTHROPIC PBC"></label>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;">
+        <input type="checkbox" id="pa-ext" style="width:17px;height:17px;margin-top:2px;">
+        <span>Es del exterior <div class="hint">Sin CUIT. Se le asigna un código propio.</div></span></label>
+      <label id="pa-cuit-wrap">CUIT<input id="pa-cuit" placeholder="30-70967311-0"></label>
+      <label id="pa-pais-wrap" style="display:none;">País<input id="pa-pais" placeholder="Estados Unidos"></label>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+      <button class="btn" onclick="cerrarModalP()">Cancelar</button>
+      <button class="btn" style="background:var(--primary);color:#fff;border-color:var(--primary);" onclick="confirmarAltaProveedor()">Crear</button>
+    </div>`);
+  document.getElementById('pa-ext').addEventListener('change', e => {
+    document.getElementById('pa-cuit-wrap').style.display = e.target.checked ? 'none' : '';
+    document.getElementById('pa-pais-wrap').style.display = e.target.checked ? '' : 'none';
+  });
+}
+
+async function confirmarAltaProveedor(){
+  const nombre = (document.getElementById('pa-nombre').value || '').trim();
+  const ext = !!document.getElementById('pa-ext').checked;
+  const cuit = (document.getElementById('pa-cuit')?.value || '').trim();
+  const pais = (document.getElementById('pa-pais')?.value || '').trim();
+  if (!nombre) return alert('Poné el nombre del proveedor.');
+  const { data, error } = await sb.rpc('compras_proveedor_alta',
+    { p_nombre: nombre, p_cuit: cuit || null, p_es_exterior: ext,
+      p_datos: { pais, moneda_habitual: ext ? 'USD' : 'ARS', cond_iva: ext ? 'EXT' : '' } });
+  if (error) return alert('No se pudo crear: ' + error.message);
+  if (data && data.ya_existe){
+    alert(`Ese proveedor ya existe: "${data.nombre}" (código ${data.codigo}).\n\nNo lo dupliqué. Buscalo en el listado y completá su ficha.`);
+    cerrarModalP(); _provBusca = nombre; document.getElementById('prov-q').value = nombre; await buscarProveedores(); return;
+  }
+  cerrarModalP(); _provBusca = nombre;
+  const q = document.getElementById('prov-q'); if (q) q.value = nombre;
+  await buscarProveedores();
+}
+
+function openModalP(html){
+  let m = document.getElementById('prov-modal');
+  if (!m){ m = document.createElement('div'); m.id = 'prov-modal';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
+    m.onclick = e => { if (e.target === m) cerrarModalP(); }; document.body.appendChild(m); }
+  m.innerHTML = `<div style="background:#fff;border-radius:12px;padding:20px;width:min(620px,96vw);max-height:92vh;overflow:auto;">${html}</div>`;
+  m.querySelectorAll('input,select,textarea').forEach(el => {
+    el.style.cssText += 'width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:13.5px;font-family:inherit;box-sizing:border-box;';
+    if (el.type === 'checkbox') el.style.cssText = 'width:17px;height:17px;margin-top:2px;';
+  });
+  m.querySelectorAll('label').forEach(l => { l.style.cssText += 'display:block;font-size:12px;color:var(--mut);font-weight:600;'; });
+}
+function cerrarModalP(){ document.getElementById('prov-modal')?.remove(); }
 
 // ═══════════════════════════════════════════════════════════════════════
 //  📥 BANDEJA · el control humano de la contabilización
@@ -1758,6 +1929,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=9"></script>
+<script src="manual.js?v=10"></script>
 </body>
 </html>
