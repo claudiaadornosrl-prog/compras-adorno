@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v20-desglose';
+const CACHE_VERSION = 'compras-v21-corregir-importes';
 const ASSETS = ['./', './index.html', './manual.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

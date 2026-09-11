@@ -932,9 +932,53 @@ function _desgloseImpositivo(d, neto){
     ${filas.length ? `<table style="width:100%;font-size:12.5px;"><thead><tr><th></th><th>Impuesto</th><th class="num">Base</th><th class="num">%</th><th class="num">Importe</th></tr></thead>
       <tbody>${filas.join('')}</tbody>
       <tfoot><tr><td colspan="4" style="text-align:right;color:var(--mut);">Total impuestos</td><td class="num"><b>${plata(sumaImp)}</b></td></tr></tfoot></table>` : ''}
-    <div class="mini" style="margin-top:4px;${Math.abs(dif) > 1 ? 'color:#b91c1c;font-weight:600' : 'color:#166534'}">
-      ${Math.abs(dif) > 1 ? `⚠ Neto + impuestos no llegan al total: faltan ${plata(dif)} (el motor no identificó algún concepto — revisar el PDF)` : '✓ Neto + impuestos = total de la factura'}</div>
+    <div class="mini" style="margin-top:4px;display:flex;justify-content:space-between;align-items:center;gap:8px;${Math.abs(dif) > 1 ? 'color:#b91c1c;font-weight:600' : 'color:#166534'}">
+      <span>${Math.abs(dif) > 1 ? `⚠ Neto + impuestos no llegan al total: faltan ${plata(dif)} (el motor no identificó algún concepto — revisar el PDF)` : '✓ Neto + impuestos = total de la factura'}</span>
+      <button class="act" type="button" onclick="_editarImportes()" title="Si el motor leyó mal algún importe, corregilo a mano">✏ Corregir importes</button>
+    </div>
+    <div id="imp-edit"></div>
   </details>`;
+}
+
+// Edición manual de los importes leídos (queda asentado en compras_eventos y el doc marcado como corregido)
+const _IMP_CAMPOS = [['neto_gravado','Neto gravado'],['neto_no_gravado','Neto no gravado'],['exento','Exento'],
+  ['iva_21','IVA 21 %'],['iva_105','IVA 10,5 %'],['iva_27','IVA 27 %'],['iva_otros','IVA otras alíc.'],
+  ['percep_iva','Percepción IVA'],['percep_iibb_caba','IIBB CABA'],['percep_iibb_ba','IIBB Buenos Aires'],['otros_tributos','Otros tributos'],['total','TOTAL factura']];
+function _editarImportes(){
+  const d = enControl, c = document.getElementById('imp-edit'); if (!d || !c) return;
+  c.innerHTML = `<div style="margin-top:8px;padding:10px;border:1px dashed #f59e0b;border-radius:8px;background:#fffbeb;">
+    <div class="mini" style="margin-bottom:6px;color:#92400e;"><b>Corrección manual.</b> Cargá los importes tal como figuran en la factura. Neto + impuestos tiene que dar el total (tolerancia $1).</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
+      ${_IMP_CAMPOS.map(([k,t]) => `<label style="font-size:11px;color:var(--mut);font-weight:600;display:block;">${t}
+        <input type="number" step="0.01" id="imp-${k}" value="${Number(d[k]||0)}" oninput="_impRecalc()" style="width:100%;padding:5px 7px;border:1px solid var(--bd);border-radius:6px;font-family:inherit;text-align:right;${k==='total'?'font-weight:700;':''}"></label>`).join('')}
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px;flex-wrap:wrap;">
+      <span class="mini" id="imp-suma"></span>
+      <span><input id="imp-motivo" placeholder="motivo (opcional): qué leyó mal el motor" style="width:260px;padding:5px 7px;border:1px solid var(--bd);border-radius:6px;font-family:inherit;font-size:12px;">
+        <button class="act" type="button" onclick="document.getElementById('imp-edit').innerHTML=''">Cancelar</button>
+        <button class="act" type="button" style="background:var(--primary);color:#fff;border-color:var(--primary);" onclick="_guardarImportes()">Guardar importes</button></span>
+    </div></div>`;
+  _impRecalc();
+}
+function _impRecalc(){
+  const v = k => Number(document.getElementById('imp-' + k)?.value || 0);
+  const neto = v('neto_gravado') + v('neto_no_gravado') + v('exento');
+  const imp = ['iva_21','iva_105','iva_27','iva_otros','percep_iva','percep_iibb_caba','percep_iibb_ba','otros_tributos'].reduce((a,k) => a + v(k), 0);
+  const dif = Math.round((v('total') - neto - imp) * 100) / 100;
+  const el = document.getElementById('imp-suma'); if (!el) return;
+  el.style.color = Math.abs(dif) > 1 ? '#b91c1c' : '#166534';
+  el.innerHTML = `Neto ${plata(neto)} + impuestos ${plata(imp)} = <b>${plata(neto + imp)}</b>` + (Math.abs(dif) > 1 ? ` · ⚠ difiere del total en ${plata(dif)}` : ' · ✓ coincide con el total');
+}
+async function _guardarImportes(){
+  const d = enControl; if (!d) return;
+  const imp = {}; _IMP_CAMPOS.forEach(([k]) => imp[k] = Number(document.getElementById('imp-' + k)?.value || 0));
+  const { data, error } = await sb.rpc('compras_corregir_importes', { p_doc: d.id, p_imp: imp, p_motivo: (document.getElementById('imp-motivo')?.value || '').trim() || null });
+  if (error) return alert('No se pudo guardar: ' + error.message);
+  Object.assign(d, imp); d._impuestosOk = true;
+  const b = BANDEJA.find(x => x.id === d.id); if (b) Object.assign(b, { neto_gravado: imp.neto_gravado, neto_no_gravado: imp.neto_no_gravado, exento: imp.exento, total: imp.total });
+  const neto = imp.neto_gravado + imp.neto_no_gravado + imp.exento;
+  if (lineasControl.length === 1) lineasControl[0].monto = Math.round(neto * 100) / 100;   // la línea única sigue al neto nuevo
+  pintarControl();
 }
 
 function pintarControl(){

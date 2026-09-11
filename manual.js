@@ -97,7 +97,7 @@ function _manualSecciones() {
       pasos: [
         'Arriba: neto, IVA y total leídos del PDF, más el nombre del archivo.',
         'Los botones de "conceptos que ya usó este proveedor" son el atajo: casi siempre es uno de esos dos o tres.',
-        '🧾 Desglose impositivo: debajo de Neto / IVA / Total se abre el detalle impuesto por impuesto — IVA por alícuota (21 / 10,5 / 27), percepción de IVA, IIBB CABA, IIBB Buenos Aires y otros tributos — cada uno con su base, su % efectivo y su importe. Si el % efectivo no coincide con el nominal aparece ⚠ (base mal leída); si neto + impuestos no llegan al total, avisa cuánto falta.',
+        '🧾 Desglose impositivo: debajo de Neto / IVA / Total se abre el detalle impuesto por impuesto — IVA por alícuota (21 / 10,5 / 27), percepción de IVA, IIBB CABA, IIBB Buenos Aires y otros tributos — cada uno con su base, su % efectivo y su importe. Si el % efectivo no coincide con el nominal aparece ⚠ (base mal leída); si neto + impuestos no llegan al total, avisa cuánto falta. Con "✏ Corregir importes" se editan a mano todos los importes (netos, IVA por alícuota, percepciones, total) si el motor leyó mal: el sistema exige que neto + impuestos = total, marca la factura como corregida y deja asentado quién cambió qué.',
         'Si no, escribí el código en el campo — se autocompleta contra el catálogo entero.',
         '"Dividir en otro concepto" sirve para las facturas que se reparten (por ejemplo, flete aparte, o gasto partido entre sucursales). El cartelito de abajo te avisa si los importes no suman el neto.',
         '"✳ Concepto nuevo" crea un concepto contable que no existe en el catálogo (código, descripción y alícuota de IVA) sin salir del control, y lo deja puesto en la línea.',
