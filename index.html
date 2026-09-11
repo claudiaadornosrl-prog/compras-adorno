@@ -184,7 +184,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
 })('compras');
 
 
-const TIPOS = {gastos:'Gastos', mercaderia:'Mercadería', inversiones:'Inversiones', no_actividad:'No actividad'};
+const TIPOS = {gastos:'Gastos (G)', mercaderia:'Mercadería (M)', inversiones:'Inversiones (I)', no_actividad:'No actividad (Z)'};
 // El estado de pago espeja el circuito de carpetas de DOCUMENTOS/CONTABILIZAR
 const EPAGO = {
   sin_contabilizar:           {tx:'Sin contabilizar',            bg:'#fee2e2', col:'#991b1b'},
@@ -981,6 +981,13 @@ async function _guardarImportes(){
   pintarControl();
 }
 
+// Regla JP (11-sep): "No actividad (Z)" = gasto que se contabiliza pero NO es del negocio → se destilda "gestión" solo.
+// Al volver a G/M/I se vuelve a tildar, para que el olvido no quede escondido.
+function _tipoGastoCambio(tipo){
+  const g = document.getElementById('ctrl-gestion'); if (!g) return;
+  g.checked = tipo !== 'no_actividad';
+}
+
 function pintarControl(){
   const d = enControl; if (!d) return;
   const cf = CONF[d.sug_confianza] || CONF.baja;
@@ -1071,7 +1078,7 @@ function pintarControl(){
 
       <div class="c-fila">
         <label>Tipo de gasto
-          <select id="ctrl-tipo">
+          <select id="ctrl-tipo" onchange="_tipoGastoCambio(this.value)">
             <option value="">— sin clasificar —</option>
             ${Object.entries(TIPOS).map(([k,v]) =>
               `<option value="${k}" ${d.tipo_gasto===k?'selected':''}>${v}</option>`).join('')}
