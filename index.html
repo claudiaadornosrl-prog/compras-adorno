@@ -879,6 +879,12 @@ async function abrirControl(id){
   const neto = Number(enControl.neto_gravado||0) + Number(enControl.neto_no_gravado||0) + Number(enControl.exento||0);
   lineasControl = [{concepto: enControl.sug_concepto || '', monto: Math.round((neto || Number(enControl.total)) * 100)/100}];
   pintarControl();
+  // Desglose impositivo (la RPC de la bandeja no lo trae): IVA por alícuota, percepciones y otros tributos
+  try {
+    const { data: imp } = await sb.from('compras_documentos')
+      .select('iva_21,iva_105,iva_27,iva_otros,percep_iva,percep_iibb_caba,percep_iibb_ba,otros_tributos').eq('id', id).single();
+    if (imp && enControl && enControl.id === id){ Object.assign(enControl, imp); enControl._impuestosOk = true; pintarControl(); }
+  } catch (_) {}
   const {data} = await sb.rpc('compras_conceptos_proveedor', {p_cuit: enControl.cuit_emisor});
   enControl._usados = data || [];
   pintarControl();
@@ -888,6 +894,47 @@ function cerrarControl(){
   if (o) o.remove();
   document.body.style.overflow = '';
   enControl = null;
+}
+
+// ── Desglose impositivo del comprobante (pedido JP 11-sep: ver IVA, % y percepciones por separado) ──
+function _desgloseImpositivo(d, neto){
+  if (!d._impuestosOk) return '<p class="mini">Cargando desglose impositivo…</p>';
+  const n = x => Number(x || 0);
+  const grav = n(d.neto_gravado), nograv = n(d.neto_no_gravado), ex = n(d.exento);
+  const pct = (imp, base) => base > 0 ? (imp / base * 100).toLocaleString('es-AR', { maximumFractionDigits: 2 }) + ' %' : '—';
+  const filas = [];
+  const add = (grupo, nombre, importe, base, esperado) => {
+    if (!importe) return;
+    const p = base > 0 ? importe / base * 100 : null;
+    const raro = esperado != null && p != null && Math.abs(p - esperado) > 0.6;   // alícuota que no coincide con la nominal
+    filas.push(`<tr><td>${grupo}</td><td>${nombre}</td><td class="num">${plata(base)}</td>
+      <td class="num" style="${raro ? 'color:#b45309;font-weight:600' : ''}" title="${raro ? 'La alícuota efectiva no coincide con la nominal: revisar la base o el importe' : 'importe ÷ base'}">${pct(importe, base)}${raro ? ' ⚠' : ''}</td>
+      <td class="num"><b>${plata(importe)}</b></td></tr>`);
+  };
+  // IVA: base = neto gravado. Si hay más de una alícuota no se puede repartir la base sin los renglones: se usa la alícuota nominal.
+  const ivas = [['IVA 21 %', n(d.iva_21), 21], ['IVA 10,5 %', n(d.iva_105), 10.5], ['IVA 27 %', n(d.iva_27), 27]].filter(x => x[1]);
+  if (ivas.length === 1) add('IVA', ivas[0][0], ivas[0][1], grav, ivas[0][2]);
+  else ivas.forEach(([nom, imp, al]) => add('IVA', nom, imp, imp / (al / 100), al));
+  if (n(d.iva_otros)) add('IVA', 'IVA otras alícuotas', n(d.iva_otros), grav, null);
+  add('Percepción', 'Percepción IVA', n(d.percep_iva), grav, null);
+  add('Percepción', 'IIBB CABA', n(d.percep_iibb_caba), neto, null);
+  add('Percepción', 'IIBB Buenos Aires', n(d.percep_iibb_ba), neto, null);
+  add('Otros', 'Otros tributos / impuestos internos', n(d.otros_tributos), neto, null);
+  const sumaImp = n(d.iva_21) + n(d.iva_105) + n(d.iva_27) + n(d.iva_otros) + n(d.percep_iva) + n(d.percep_iibb_caba) + n(d.percep_iibb_ba) + n(d.otros_tributos);
+  const dif = Math.round((n(d.total) - neto - sumaImp) * 100) / 100;
+  return `<details class="c-imp" ${filas.length ? 'open' : ''} style="margin:6px 0 10px;border:1px solid var(--bd);border-radius:8px;padding:6px 10px;">
+    <summary style="cursor:pointer;font-size:12.5px;font-weight:600;color:var(--mut);">🧾 Desglose impositivo · ${filas.length ? filas.length + ' concepto(s)' : 'sin impuestos discriminados'}</summary>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;margin:6px 0 4px;">
+      <span>Neto gravado <b>${plata(grav)}</b></span>
+      ${nograv ? `<span>No gravado <b>${plata(nograv)}</b></span>` : ''}
+      ${ex ? `<span>Exento <b>${plata(ex)}</b></span>` : ''}
+    </div>
+    ${filas.length ? `<table style="width:100%;font-size:12.5px;"><thead><tr><th></th><th>Impuesto</th><th class="num">Base</th><th class="num">%</th><th class="num">Importe</th></tr></thead>
+      <tbody>${filas.join('')}</tbody>
+      <tfoot><tr><td colspan="4" style="text-align:right;color:var(--mut);">Total impuestos</td><td class="num"><b>${plata(sumaImp)}</b></td></tr></tfoot></table>` : ''}
+    <div class="mini" style="margin-top:4px;${Math.abs(dif) > 1 ? 'color:#b91c1c;font-weight:600' : 'color:#166534'}">
+      ${Math.abs(dif) > 1 ? `⚠ Neto + impuestos no llegan al total: faltan ${plata(dif)} (el motor no identificó algún concepto — revisar el PDF)` : '✓ Neto + impuestos = total de la factura'}</div>
+  </details>`;
 }
 
 function pintarControl(){
@@ -914,9 +961,10 @@ function pintarControl(){
 
       <div class="c-nums">
         <div><span class="lbl">Neto</span><span class="v">${plata(neto)}</span></div>
-        <div><span class="lbl">IVA y percepciones</span><span class="v">${plata(iva)}</span></div>
+        <div><span class="lbl">IVA + percepciones</span><span class="v">${plata(iva)}</span></div>
         <div><span class="lbl">Total</span><span class="v" style="color:var(--primary)">${plata(d.total)}</span></div>
       </div>
+      ${_desgloseImpositivo(d, neto)}
       ${d.archivo_path ? `<p class="mini">📄 ${esc(d.archivo_path.split('/').pop())}</p>` : ''}
 
       ${(d.moneda && d.moneda !== 'ARS' && d.importe_moneda) ? `<div class="c-sug" style="background:#ecfeff;border-color:#0e7490">
