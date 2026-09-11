@@ -390,6 +390,15 @@ async function buscarProveedores(){
   if (error){ cont.innerHTML = `<div class="hint" style="color:#b91c1c;">No pude traer los proveedores: ${_mEscP(error.message)}</div>`; return; }
   _provCache = data || [];
   if (!_provCache.length){ cont.innerHTML = '<div class="hint">No encontré ningún proveedor con ese nombre o CUIT.</div>'; return; }
+  // Última constancia de ARCA guardada para cada CUIT del listado (si se consultó alguna vez)
+  try {
+    const cuits = [...new Set(_provCache.map(p => String(p.cuit||'').replace(/\D/g,'')).filter(c => c.length === 11))];
+    if (cuits.length){
+      const { data: ac } = await sb.from('compras_arca_consultas').select('cuit,vigente,estado_clave,razon_social,tipo_persona,cond_iva,monotributo_categoria,domicilio,impuestos,actividades,errores,consultado_at,error').in('cuit', cuits);
+      const porCuit = Object.fromEntries((ac||[]).map(a => [a.cuit, a]));
+      _provCache.forEach(p => { p.arca = porCuit[String(p.cuit||'').replace(/\D/g,'')] || null; });
+    }
+  } catch(e){ console.warn('arca', e); }
   cont.innerHTML = `
     <div class="hint" style="margin-bottom:8px;">${_provCache.length} proveedor(es) · ordenados por cuántas facturas les cargamos</div>
     <table><thead><tr>
@@ -402,7 +411,9 @@ async function buscarProveedores(){
         ${!p.activo ? '<span class="chip" style="background:#fee2e2;color:#991b1b;margin-left:6px;">inactivo</span>' : ''}
         ${p.copias_mismo_cuit > 1 ? `<div style="font-size:11px;color:#b45309;margin-top:2px;">⚠ Dragonfish tiene ${p.copias_mismo_cuit} fichas con este mismo CUIT — cargá los datos en una sola</div>` : ''}
       </td>
-      <td style="font-variant-numeric:tabular-nums;">${_mEscP(p.cuit || '—')}</td>
+      <td style="font-variant-numeric:tabular-nums;">${_mEscP(p.cuit || '—')}
+        ${p.arca ? (p.arca.vigente === true ? '<span class="chip" title="ARCA: CUIT vigente" style="background:#dcfce7;color:#166534;margin-left:4px;">ARCA ✓</span>'
+                   : `<span class="chip" title="ARCA: ${_mEscP(p.arca.estado_clave || p.arca.error || 'sin dato')}" style="background:#fee2e2;color:#991b1b;margin-left:4px;">ARCA ⚠</span>`) : ''}</td>
       <td class="num">${p.facturas || 0}</td>
       <td class="num">${p.facturas ? _fmtP(p.total_comprado) : '—'}</td>
       <td>${p.ultima_compra ? p.ultima_compra.split('-').reverse().join('/') : '—'}</td>
@@ -442,6 +453,9 @@ function fichaProveedor(i){
       <label id="pf-pais-wrap" style="grid-column:1/-1;${p.es_exterior?'':'display:none;'}">País<input id="pf-pais" value="${_mEscP(p.pais||'')}" placeholder="Estados Unidos"></label>
       <label style="grid-column:1/-1;">Notas<textarea id="pf-notas" rows="2">${_mEscP(p.notas||'')}</textarea></label>
     </div>
+    ${p.cuit && !p.es_exterior ? `<div style="margin-top:12px;">
+      <button class="btn" type="button" onclick="validarArca('${_mEscP(p.cuit)}','pf-arca', true)">🔍 Consultar en ARCA (constancia de inscripción)</button>
+      <div id="pf-arca" style="margin-top:8px;">${p.arca ? _arcaCard(p.arca) : ''}</div></div>` : ''}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
       <button class="btn" onclick="cerrarModalP()">Cancelar</button>
       <button class="btn" style="background:var(--primary);color:#fff;border-color:var(--primary);" onclick="guardarFichaProveedor('${_mEscP(p.codigo)}')">Guardar</button>
@@ -472,7 +486,10 @@ async function altaProveedor(){
       <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;">
         <input type="checkbox" id="pa-ext" style="width:17px;height:17px;margin-top:2px;">
         <span>Es del exterior <div class="hint">Sin CUIT. Se le asigna un código propio.</div></span></label>
-      <label id="pa-cuit-wrap">CUIT<input id="pa-cuit" placeholder="30-70967311-0"></label>
+      <label id="pa-cuit-wrap">CUIT
+        <div style="display:flex;gap:8px;"><input id="pa-cuit" placeholder="30-70967311-0" style="flex:1;">
+          <button class="btn" type="button" style="white-space:nowrap;" onclick="validarAltaArca()">🔍 Validar en ARCA</button></div></label>
+      <div id="pa-arca"></div>
       <label id="pa-pais-wrap" style="display:none;">País<input id="pa-pais" placeholder="Estados Unidos"></label>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
@@ -485,15 +502,34 @@ async function altaProveedor(){
   });
 }
 
+// Valida el CUIT del alta contra ARCA y, si el nombre está vacío, lo completa con la razón social oficial.
+async function validarAltaArca(){
+  const c = await validarArca(document.getElementById('pa-cuit')?.value, 'pa-arca');
+  if (c && c.razon_social && !(document.getElementById('pa-nombre').value || '').trim())
+    document.getElementById('pa-nombre').value = c.razon_social;
+  return c;
+}
+
 async function confirmarAltaProveedor(){
-  const nombre = (document.getElementById('pa-nombre').value || '').trim();
+  let nombre = (document.getElementById('pa-nombre').value || '').trim();
   const ext = !!document.getElementById('pa-ext').checked;
   const cuit = (document.getElementById('pa-cuit')?.value || '').trim();
   const pais = (document.getElementById('pa-pais')?.value || '').trim();
+  let arca = null;
+  if (!ext){
+    if (cuit.replace(/\D/g,'').length !== 11) return alert('Poné el CUIT (11 dígitos). Si es del exterior, tildá "Es del exterior".');
+    // 🚨 Regla JP (11-sep): NUNCA se da de alta un proveedor argentino sin mirar ARCA.
+    arca = (_arcaUltima && _arcaUltima.cuit === cuit.replace(/\D/g,'')) ? _arcaUltima : await validarAltaArca();
+    if (!arca) return alert('No pude validar el CUIT en ARCA. Sin esa validación no se da de alta.');
+    if (arca.vigente !== true && !confirm(`⚠ ARCA dice que este CUIT está ${arca.estado_clave || 'sin estado'} — NO vigente.\n\n¿Igual querés darlo de alta?`)) return;
+    nombre = nombre || arca.razon_social || '';
+  }
   if (!nombre) return alert('Poné el nombre del proveedor.');
+  const domArca = arca?.domicilio ? [arca.domicilio.direccion, arca.domicilio.localidad, arca.domicilio.descripcionProvincia].filter(Boolean).join(', ') : '';
   const { data, error } = await sb.rpc('compras_proveedor_alta',
     { p_nombre: nombre, p_cuit: cuit || null, p_es_exterior: ext,
-      p_datos: { pais, moneda_habitual: ext ? 'USD' : 'ARS', cond_iva: ext ? 'EXT' : '' } });
+      p_datos: { pais, moneda_habitual: ext ? 'USD' : 'ARS', cond_iva: ext ? 'EXT' : (arca?.cond_iva || ''), domicilio: domArca,
+                 notas: arca ? `ARCA ${arca.estado_clave} · ${arca.razon_social || ''} · validado ${new Date().toLocaleDateString('es-AR')}` : '' } });
   if (error) return alert('No se pudo crear: ' + error.message);
   if (data && data.ya_existe){
     alert(`Ese proveedor ya existe: "${data.nombre}" (código ${data.codigo}).\n\nNo lo dupliqué. Buscalo en el listado y completá su ficha.`);
@@ -502,6 +538,57 @@ async function confirmarAltaProveedor(){
   cerrarModalP(); _provBusca = nombre;
   const q = document.getElementById('prov-q'); if (q) q.value = nombre;
   await buscarProveedores();
+}
+
+// ═══ 🔍 Validación de CUIT contra ARCA (constancia de inscripción) ═══
+//  La PWA no habla con ARCA: encola el CUIT (compras_arca_pedir) y el script
+//  arca_padron.py (PC de JP / VPS, con el certificado "AdornoPadron") consulta
+//  el web service y deja el resultado en compras_arca_consultas. Acá se sondea.
+const _condIvaTxt = { RI:'Responsable Inscripto', MT:'Monotributo', EX:'Exento', NI:'Sin IVA (no inscripto)', EXT:'Del exterior', CF:'Consumidor final' };
+let _arcaUltima = null;
+
+async function validarArca(cuit, contId, forzar){
+  const cont = document.getElementById(contId); if (!cont) return null;
+  const limpio = String(cuit||'').replace(/\D/g,'');
+  if (limpio.length !== 11){ cont.innerHTML = '<div class="hint" style="color:#b91c1c;">El CUIT tiene que tener 11 dígitos.</div>'; return null; }
+  cont.innerHTML = '<div class="hint">⏳ Consultando ARCA…</div>';
+  const { data, error } = await sb.rpc('compras_arca_pedir', { p_cuit: limpio, p_forzar: !!forzar });
+  if (error || !data?.ok){ cont.innerHTML = `<div class="hint" style="color:#b91c1c;">${_mEscP(error?.message || data?.motivo || 'No se pudo pedir la consulta')}</div>`; return null; }
+  let c = data.consulta;
+  if (!data.cache){
+    for (let i = 0; i < 45 && !c; i++){
+      await new Promise(r => setTimeout(r, 2000));
+      const { data: e } = await sb.rpc('compras_arca_estado', { p_cola_id: data.cola_id });
+      if (e?.estado === 'listo' && e.consulta) c = e.consulta;
+      if (e?.estado === 'error'){ cont.innerHTML = '<div class="hint" style="color:#b91c1c;">El consultor de ARCA no respondió. ¿Está corriendo arca_padron.py en la PC de JP?</div>'; return null; }
+      if (i === 5) cont.innerHTML = '<div class="hint">⏳ ARCA está tardando… (sigo esperando)</div>';
+    }
+    if (!c){ cont.innerHTML = '<div class="hint" style="color:#b91c1c;">ARCA no respondió en 90 segundos. Probá de nuevo en un rato.</div>'; return null; }
+  }
+  _arcaUltima = c;
+  cont.innerHTML = _arcaCard(c);
+  return c;
+}
+
+function _arcaCard(c){
+  if (c.error) return `<div class="hint" style="background:#fef2f2;border-left:3px solid #ef4444;padding:8px 10px;border-radius:6px;">❌ ARCA: ${_mEscP(c.error)}</div>`;
+  const errs = (c.errores||[]).map(e => typeof e === 'string' ? e : JSON.stringify(e));
+  const ok = c.vigente === true;
+  const col = ok ? '#16a34a' : '#dc2626', bg = ok ? '#f0fdf4' : '#fef2f2';
+  const dom = c.domicilio ? [c.domicilio.direccion, c.domicilio.localidad, c.domicilio.codPostal, c.domicilio.descripcionProvincia].filter(Boolean).join(', ') : '';
+  const imp = (c.impuestos||[]).map(i => i.desc).filter(Boolean);
+  const act = (c.actividades||[]).sort((a,b)=>(a.orden||9)-(b.orden||9)).map(a => a.desc).filter(Boolean);
+  const cuando = c.consultado_at ? new Date(c.consultado_at).toLocaleString('es-AR', {dateStyle:'short', timeStyle:'short'}) : '';
+  return `<div style="background:${bg};border-left:3px solid ${col};padding:10px 12px;border-radius:6px;font-size:13px;line-height:1.5;">
+    <div style="font-weight:700;color:${col};">${ok ? '✅ CUIT VIGENTE' : '⚠ CUIT NO VIGENTE'} · ${_mEscP(c.estado_clave || 'sin estado')}</div>
+    <div><strong>${_mEscP(c.razon_social || '—')}</strong> · ${_mEscP(c.tipo_persona === 'JURIDICA' ? 'persona jurídica' : c.tipo_persona === 'FISICA' ? 'persona física' : '')}</div>
+    <div>IVA: <strong>${_mEscP(_condIvaTxt[c.cond_iva] || c.cond_iva || 'sin dato')}</strong>${c.monotributo_categoria ? ' · categoría ' + _mEscP(c.monotributo_categoria) : ''}</div>
+    ${dom ? `<div>Domicilio fiscal: ${_mEscP(dom)}</div>` : ''}
+    ${act.length ? `<div>Actividad: ${_mEscP(act[0])}${act.length > 1 ? ` (+${act.length-1})` : ''}</div>` : ''}
+    ${imp.length ? `<div class="hint">Inscripto en: ${_mEscP(imp.join(' · '))}</div>` : ''}
+    ${errs.length ? `<div style="color:#b45309;">ARCA informa: ${_mEscP(errs.join(' · '))}</div>` : ''}
+    <div class="hint">Fuente: ARCA, constancia de inscripción · consultado ${_mEscP(cuando)}</div>
+  </div>`;
 }
 
 function openModalP(html){
@@ -1929,6 +2016,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=10"></script>
+<script src="manual.js?v=11"></script>
 </body>
 </html>

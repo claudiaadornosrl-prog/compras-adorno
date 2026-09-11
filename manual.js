@@ -20,6 +20,9 @@ function _manualSecciones() {
         '➕ Nuevo proveedor es SOLO para los que no están en Dragonfish. Si ya existe, el sistema no lo duplica: te avisa y te muestra cuál es.',
         'Proveedores del exterior: se tildan como tales y no piden CUIT (Anthropic, por ejemplo). Sus compras no llevan IVA discriminado y van aparte en el Libro IVA.',
         '⚠ Dragonfish tiene 36 CUITs cargados con dos fichas distintas (el mismo proveedor con dos nombres). Cuando pasa, el listado te lo avisa: completá los datos en UNA sola.',
+        '🔍 Validar en ARCA: al dar de alta un proveedor argentino el sistema consulta la constancia de inscripción en ARCA y muestra razón social oficial, si el CUIT está VIGENTE (activo) o no, condición frente al IVA, domicilio fiscal y actividad. Sin esa validación no se da de alta; si ARCA lo da INACTIVO te pide confirmar.',
+        'En la ficha de cualquier proveedor está el mismo botón para re-consultar. El listado marca "ARCA ✓" o "ARCA ⚠" según la última consulta guardada.',
+        'Vigilancia: una vez por mes se re-consultan los proveedores con compras recientes. Si alguno pasa a NO vigente, JP recibe un aviso para revisarlo antes de pagarle.',
       ],
     },
     {
