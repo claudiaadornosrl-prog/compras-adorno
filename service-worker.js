@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v18-arca';
+const CACHE_VERSION = 'compras-v19-ficha';
 const ASSETS = ['./', './index.html', './manual.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

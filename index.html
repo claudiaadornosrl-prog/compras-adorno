@@ -417,61 +417,171 @@ async function buscarProveedores(){
       <td class="num">${p.facturas || 0}</td>
       <td class="num">${p.facturas ? _fmtP(p.total_comprado) : '—'}</td>
       <td>${p.ultima_compra ? p.ultima_compra.split('-').reverse().join('/') : '—'}</td>
-      <td>${_mEscP(p.condicion_pago || '—')}</td>
+      <td>${_mEscP(p.condicion_pago || '—')}
+        ${p.retenciones_excluidas ? `<span class="chip" title="Certificado de exclusión en ${p.retenciones_excluidas} régimen(es)" style="background:#fef3c7;color:#92400e;margin-left:4px;">excl. ${p.retenciones_excluidas}</span>` : ''}
+        ${(p.descuentos||[]).length ? `<span class="chip" title="${_mEscP((p.descuentos||[]).map(d => (d.porcentaje||0)+'% '+(d.descripcion||'')).join(' · '))}" style="background:#dcfce7;color:#166534;margin-left:4px;">${(p.descuentos||[]).length} dto.</span>` : ''}
+        <div style="margin-top:3px;">${_contactoLinks({ whatsapp: p.whatsapp, email: p.email || p.email_op || p.df_email })}</div></td>
       <td>${p.tiene_ficha ? '✅' : '<span style="color:var(--mut);">sin completar</span>'}</td>
       <td><button class="btn" onclick="fichaProveedor(${i})">Abrir</button></td>
     </tr>`).join('')}</tbody></table>`;
 }
 
-function fichaProveedor(i){
+// ── Helpers de contacto: links directos a WhatsApp y mail ──
+function _waLink(tel){
+  let d = String(tel||'').replace(/\D/g,''); if (!d) return '';
+  if (d.startsWith('0')) d = d.slice(1);
+  if (d.startsWith('15')) d = '11' + d.slice(2);
+  if (!d.startsWith('54')) d = '54' + (d.length <= 10 ? '9' : '') + d;
+  return 'https://wa.me/' + d;
+}
+function _contactoLinks(c){
+  const out = [];
+  if (c.whatsapp) out.push(`<a class="btn" style="padding:3px 8px;font-size:12px;background:#dcfce7;border-color:#86efac;" target="_blank" href="${_waLink(c.whatsapp)}" title="Abrir chat de WhatsApp">💬 WhatsApp</a>`);
+  if (c.telefono) out.push(`<a class="btn" style="padding:3px 8px;font-size:12px;" href="tel:${_mEscP(String(c.telefono).replace(/\s/g,''))}">📞 ${_mEscP(c.telefono)}</a>`);
+  if (c.email) out.push(`<a class="btn" style="padding:3px 8px;font-size:12px;background:#eff6ff;border-color:#93c5fd;" href="mailto:${_mEscP(c.email)}" title="Escribir mail">✉ ${_mEscP(c.email)}</a>`);
+  return out.join(' ');
+}
+let _fContactos = [], _fDescuentos = [], _fRet = [];
+const DESC_TIPOS = [['general','General (siempre)'],['monto_minimo','Por compra mínima ($)'],['cantidad_minima','Por cantidad mínima (unidades)'],['pronto_pago','Por pronto pago'],['linea','Por línea / rubro']];
+const _h4P = t => `<h4 style="margin:18px 0 8px;font-size:13px;letter-spacing:.4px;text-transform:uppercase;color:var(--mut);border-bottom:1px solid var(--bd);padding-bottom:4px;">${t}</h4>`;
+
+function _renderContactos(){
+  const c = document.getElementById('pf-contactos'); if (!c) return;
+  c.innerHTML = (_fContactos.length ? _fContactos.map((x,i) => `
+    <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr 1.2fr auto;gap:6px;align-items:end;margin-bottom:6px;">
+      <label>Nombre<input value="${_mEscP(x.nombre||'')}" onchange="_fContactos[${i}].nombre=this.value"></label>
+      <label>Cargo<input value="${_mEscP(x.cargo||'')}" placeholder="ventas, cobranzas…" onchange="_fContactos[${i}].cargo=this.value"></label>
+      <label>Teléfono<input value="${_mEscP(x.telefono||'')}" onchange="_fContactos[${i}].telefono=this.value"></label>
+      <label>WhatsApp<input value="${_mEscP(x.whatsapp||'')}" placeholder="11 5555 5555" onchange="_fContactos[${i}].whatsapp=this.value;_renderContactos()"></label>
+      <label>Mail<input value="${_mEscP(x.email||'')}" onchange="_fContactos[${i}].email=this.value;_renderContactos()"></label>
+      <button class="btn" type="button" title="Quitar" onclick="_fContactos.splice(${i},1);_renderContactos()">🗑</button>
+      <div style="grid-column:1/-1;">${_contactoLinks(x)}</div>
+    </div>`).join('') : '<div class="hint">Sin contactos cargados.</div>')
+    + `<button class="btn" type="button" onclick="_fContactos.push({});_renderContactos()">➕ Agregar contacto</button>`;
+  _estilarModalP();
+}
+function _renderDescuentos(){
+  const c = document.getElementById('pf-descuentos'); if (!c) return;
+  c.innerHTML = (_fDescuentos.length ? _fDescuentos.map((x,i) => `
+    <div style="display:grid;grid-template-columns:1.4fr 0.6fr 1.3fr 0.9fr 1.2fr auto;gap:6px;align-items:end;margin-bottom:6px;">
+      <label>Descripción<input value="${_mEscP(x.descripcion||'')}" placeholder="Servilletas, cosmética, pedido > $2M…" onchange="_fDescuentos[${i}].descripcion=this.value"></label>
+      <label>%<input type="number" step="0.01" value="${x.porcentaje ?? ''}" onchange="_fDescuentos[${i}].porcentaje=parseFloat(this.value)||0"></label>
+      <label>Tipo<select onchange="_fDescuentos[${i}].tipo=this.value;_renderDescuentos()">${DESC_TIPOS.map(([v,t]) => `<option value="${v}" ${(x.tipo||'general')===v?'selected':''}>${t}</option>`).join('')}</select></label>
+      <label>${x.tipo==='monto_minimo' ? 'Desde $' : x.tipo==='cantidad_minima' ? 'Desde (unid.)' : x.tipo==='pronto_pago' ? 'Hasta (días)' : 'Umbral'}<input type="number" step="1" value="${x.umbral ?? ''}" ${['monto_minimo','cantidad_minima','pronto_pago'].includes(x.tipo) ? '' : 'disabled'} onchange="_fDescuentos[${i}].umbral=parseFloat(this.value)||null"></label>
+      <label>Notas<input value="${_mEscP(x.notas||'')}" onchange="_fDescuentos[${i}].notas=this.value"></label>
+      <button class="btn" type="button" title="Quitar" onclick="_fDescuentos.splice(${i},1);_renderDescuentos()">🗑</button>
+    </div>`).join('') : '<div class="hint">Sin descuentos pactados cargados.</div>')
+    + `<button class="btn" type="button" onclick="_fDescuentos.push({tipo:'general'});_renderDescuentos()">➕ Agregar descuento</button>
+       <div class="hint" style="margin-top:6px;">El descuento POR ARTÍCULO ya vive en Dragonfish (lista COSTO). Acá van las condiciones comerciales pactadas: acuerdos generales, por volumen, pronto pago, etc.</div>`;
+  _estilarModalP();
+}
+function _renderRetenciones(){
+  const c = document.getElementById('pf-ret'); if (!c) return;
+  if (!_fRet.length){ c.innerHTML = '<div class="hint">No hay regímenes configurados (pestaña ⚙️ Retenciones).</div>'; return; }
+  c.innerHTML = `<table style="width:100%;font-size:12.5px;"><thead><tr><th>Régimen</th><th>Aplica</th><th>Excluido</th><th>Alíc. %</th><th>Certificado</th><th>Vence</th><th>Notas</th></tr></thead><tbody>
+    ${_fRet.map((r,i) => `<tr style="${r.cert_vencido ? 'background:#fef2f2;' : ''}">
+      <td title="${_mEscP(r.codigo)}">${_mEscP(r.nombre)}<div class="hint">${_mEscP(r.jurisdiccion||'')}</div></td>
+      <td style="text-align:center;"><input type="checkbox" ${r.aplica?'checked':''} onchange="_fRet[${i}].aplica=this.checked;_renderRetenciones()"></td>
+      <td style="text-align:center;"><input type="checkbox" ${r.exento?'checked':''} ${r.aplica?'':'disabled'} onchange="_fRet[${i}].exento=this.checked;_renderRetenciones()"></td>
+      <td><input type="number" step="0.01" style="width:70px;" value="${r.alicuota ?? ''}" ${r.aplica && !r.exento ? '' : 'disabled'} placeholder="régimen" onchange="_fRet[${i}].alicuota=this.value"></td>
+      <td><input style="width:120px;" value="${_mEscP(r.cert_numero||'')}" ${r.exento?'':'disabled'} placeholder="nº certificado" onchange="_fRet[${i}].cert_numero=this.value"></td>
+      <td><input type="date" style="width:135px;" value="${r.cert_vigencia_hasta||''}" ${r.exento?'':'disabled'} onchange="_fRet[${i}].cert_vigencia_hasta=this.value">${r.cert_vencido ? '<div style="color:#b91c1c;font-size:11px;">⚠ vencido</div>' : ''}</td>
+      <td><input value="${_mEscP(r.notas||'')}" onchange="_fRet[${i}].notas=this.value"></td>
+    </tr>`).join('')}</tbody></table>
+    <div class="hint" style="margin-top:6px;">"Aplica" = a este proveedor le retenemos por ese régimen · "Excluido" = tiene certificado de exclusión (cargá número y vencimiento; vencido se marca en rojo).</div>`;
+  _estilarModalP();
+}
+function _estilarModalP(){
+  const m = document.getElementById('prov-modal'); if (!m) return;
+  m.querySelectorAll('input,select,textarea').forEach(el => {
+    if (el.dataset.st) return; el.dataset.st = '1';
+    if (el.type === 'checkbox'){ el.style.cssText = 'width:17px;height:17px;margin-top:2px;'; return; }
+    el.style.cssText += 'width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:13.5px;font-family:inherit;box-sizing:border-box;';
+  });
+  m.querySelectorAll('label').forEach(l => { if (!l.dataset.st){ l.dataset.st='1'; l.style.cssText += 'display:block;font-size:12px;color:var(--mut);font-weight:600;'; } });
+}
+
+async function fichaProveedor(i){
   const p = _provCache[i];
   const cp = ['', 'contado', '7 días', '15 días', '30 días', '30/60', '30/60/90', '60 días'];
+  _fContactos = JSON.parse(JSON.stringify(p.contactos || []));
+  _fDescuentos = JSON.parse(JSON.stringify(p.descuentos || []));
+  _fRet = [];
   openModalP(`
     <h3 style="margin:0 0 4px;">🏢 ${_mEscP(p.nombre)}</h3>
-    <div class="hint" style="margin-bottom:12px;">
+    <div class="hint" style="margin-bottom:8px;">
       ${p.cuit ? 'CUIT ' + _mEscP(p.cuit) : '<em>sin CUIT</em>'} · código ${_mEscP(p.codigo)} ·
       ${p.origen === 'dragonfish' ? 'viene de Dragonfish' : 'cargado a mano'}
       ${p.facturas ? ` · ${p.facturas} facturas por ${_fmtP(p.total_comprado)}` : ' · todavía sin facturas cargadas'}
     </div>
-    ${p.origen === 'dragonfish' ? `<div class="hint" style="background:#eff6ff;border-left:3px solid #3b82f6;padding:8px 10px;border-radius:6px;margin-bottom:12px;">
-      El nombre, CUIT, mail y teléfono los manda Dragonfish y se actualizan solos cada 4 horas.
-      Lo que cargues acá abajo es del módulo y no se pisa.</div>` : ''}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">${_contactoLinks({ whatsapp: p.whatsapp, telefono: p.telefono || p.df_telefono, email: p.email || p.email_op || p.df_email })}</div>
+    ${p.origen === 'dragonfish' ? `<div class="hint" style="background:#eff6ff;border-left:3px solid #3b82f6;padding:8px 10px;border-radius:6px;margin-bottom:8px;">
+      Nombre, CUIT${p.df_email ? ', mail (' + _mEscP(p.df_email) + ')' : ''}${p.df_telefono ? ' y teléfono (' + _mEscP(p.df_telefono) + ')' : ''} vienen de Dragonfish y se actualizan solos cada 4 horas. Lo de acá abajo es del módulo y no se pisa.</div>` : ''}
+
+    ${_h4P('Datos comerciales')}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <label>Condición de pago<select id="pf-cond">${cp.map(v => `<option value="${v}" ${(p.condicion_pago||'')===v?'selected':''}>${v||'— sin definir —'}</option>`).join('')}</select></label>
       <label>Condición frente al IVA<select id="pf-iva">
-        ${[['','— sin definir —'],['RI','Responsable Inscripto'],['MT','Monotributo'],['EX','Exento'],['CF','Consumidor Final'],['EXT','Del exterior']]
+        ${[['','— sin definir —'],['RI','Responsable Inscripto'],['MT','Monotributo'],['EX','Exento'],['NI','No inscripto'],['CF','Consumidor Final'],['EXT','Del exterior']]
           .map(([v,t]) => `<option value="${v}" ${(p.cond_iva||'')===v?'selected':''}>${t}</option>`).join('')}</select></label>
       <label>CBU<input id="pf-cbu" value="${_mEscP(p.cbu||'')}" placeholder="22 dígitos"></label>
       <label>Alias<input id="pf-alias" value="${_mEscP(p.alias_cbu||'')}"></label>
-      <label>Mail para la orden de pago<input id="pf-mail" value="${_mEscP(p.email_op||'')}" placeholder="pagos@proveedor.com"></label>
       <label>Moneda habitual<select id="pf-moneda">${['ARS','USD','EUR'].map(m => `<option ${(p.moneda_habitual||'ARS')===m?'selected':''}>${m}</option>`).join('')}</select></label>
-      <label style="grid-column:1/-1;">Domicilio<input id="pf-dom" value="${_mEscP(p.domicilio||'')}"></label>
+      <label>Domicilio<input id="pf-dom" value="${_mEscP(p.domicilio||'')}"></label>
       <label style="grid-column:1/-1;display:flex;gap:8px;align-items:flex-start;font-size:13px;">
         <input type="checkbox" id="pf-ext" ${p.es_exterior?'checked':''} style="width:17px;height:17px;margin-top:2px;">
         <span>Proveedor del exterior
           <div class="hint">No lleva CUIT ni IVA discriminado. Las compras al exterior van aparte en el Libro IVA.</div></span></label>
       <label id="pf-pais-wrap" style="grid-column:1/-1;${p.es_exterior?'':'display:none;'}">País<input id="pf-pais" value="${_mEscP(p.pais||'')}" placeholder="Estados Unidos"></label>
-      <label style="grid-column:1/-1;">Notas<textarea id="pf-notas" rows="2">${_mEscP(p.notas||'')}</textarea></label>
     </div>
+
+    ${_h4P('Contacto de la empresa')}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <label>Teléfono<input id="pf-tel" value="${_mEscP(p.telefono||'')}" placeholder="${_mEscP(p.df_telefono||'')}"></label>
+      <label>WhatsApp<input id="pf-wa" value="${_mEscP(p.whatsapp||'')}" placeholder="11 5555 5555"></label>
+      <label>Mail general<input id="pf-email" value="${_mEscP(p.email||'')}" placeholder="${_mEscP(p.df_email||'')}"></label>
+      <label>Mail para la orden de pago<input id="pf-mail" value="${_mEscP(p.email_op||'')}" placeholder="pagos@proveedor.com"></label>
+      <label style="grid-column:1/-1;">Web / Instagram<input id="pf-web" value="${_mEscP(p.web||'')}" placeholder="https://…"></label>
+    </div>
+    ${_h4P('Personas de contacto')}<div id="pf-contactos"></div>
+    ${_h4P('Descuentos pactados')}<div id="pf-descuentos"></div>
+    ${p.cuit && !p.es_exterior ? _h4P('Retenciones') + '<div id="pf-ret"><div class="hint">Cargando…</div></div>' : ''}
+    ${_h4P('Notas')}
+    <textarea id="pf-notas" rows="2">${_mEscP(p.notas||'')}</textarea>
     ${p.cuit && !p.es_exterior ? `<div style="margin-top:12px;">
       <button class="btn" type="button" onclick="validarArca('${_mEscP(p.cuit)}','pf-arca', true)">🔍 Consultar en ARCA (constancia de inscripción)</button>
       <div id="pf-arca" style="margin-top:8px;">${p.arca ? _arcaCard(p.arca) : ''}</div></div>` : ''}
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;position:sticky;bottom:-20px;background:#fff;padding:10px 0;">
       <button class="btn" onclick="cerrarModalP()">Cancelar</button>
-      <button class="btn" style="background:var(--primary);color:#fff;border-color:var(--primary);" onclick="guardarFichaProveedor('${_mEscP(p.codigo)}')">Guardar</button>
+      <button class="btn" style="background:var(--primary);color:#fff;border-color:var(--primary);" onclick="guardarFichaProveedor('${_mEscP(p.codigo)}','${_mEscP(p.cuit||'')}')">Guardar</button>
     </div>`);
   document.getElementById('pf-ext').addEventListener('change', e => {
     document.getElementById('pf-pais-wrap').style.display = e.target.checked ? '' : 'none';
   });
+  _renderContactos(); _renderDescuentos();
+  if (p.cuit && !p.es_exterior){
+    const { data, error } = await sb.rpc('compras_proveedor_retenciones', { p_cuit: p.cuit });
+    _fRet = error ? [] : (data || []);
+    _renderRetenciones();
+  }
 }
 
-async function guardarFichaProveedor(codigo){
+async function guardarFichaProveedor(codigo, cuit){
   const g = id => (document.getElementById(id)?.value || '').trim();
   const datos = { condicion_pago:g('pf-cond'), cond_iva:g('pf-iva'), cbu:g('pf-cbu'), alias_cbu:g('pf-alias'),
     email_op:g('pf-mail'), moneda_habitual:g('pf-moneda'), domicilio:g('pf-dom'), notas:g('pf-notas'),
-    pais:g('pf-pais'), es_exterior: !!document.getElementById('pf-ext')?.checked };
+    pais:g('pf-pais'), es_exterior: !!document.getElementById('pf-ext')?.checked,
+    telefono:g('pf-tel'), whatsapp:g('pf-wa'), email:g('pf-email'), web:g('pf-web'),
+    contactos: _fContactos.filter(c => c.nombre || c.telefono || c.whatsapp || c.email),
+    descuentos: _fDescuentos.filter(d => d.descripcion || d.porcentaje) };
   const { error } = await sb.rpc('compras_proveedor_guardar', { p_codigo: codigo, p_datos: datos });
   if (error) return alert('No se pudo guardar: ' + error.message);
+  if (cuit && _fRet.length){
+    const { error: e2 } = await sb.rpc('compras_proveedor_retenciones_guardar', { p_cuit: cuit,
+      p_filas: _fRet.map(r => ({ regimen_id: r.regimen_id, aplica: !!r.aplica, exento: !!r.exento, alicuota: r.alicuota || null,
+        cert_numero: r.cert_numero || null, cert_vigencia_hasta: r.cert_vigencia_hasta || null, notas: r.notas || null })) });
+    if (e2) return alert('Ficha guardada, pero las retenciones no: ' + e2.message);
+  }
   cerrarModalP(); await buscarProveedores();
 }
 
@@ -596,7 +706,7 @@ function openModalP(html){
   if (!m){ m = document.createElement('div'); m.id = 'prov-modal';
     m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
     m.onclick = e => { if (e.target === m) cerrarModalP(); }; document.body.appendChild(m); }
-  m.innerHTML = `<div style="background:#fff;border-radius:12px;padding:20px;width:min(620px,96vw);max-height:92vh;overflow:auto;">${html}</div>`;
+  m.innerHTML = `<div style="background:#fff;border-radius:12px;padding:20px;width:min(880px,96vw);max-height:92vh;overflow:auto;">${html}</div>`;
   m.querySelectorAll('input,select,textarea').forEach(el => {
     el.style.cssText += 'width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:13.5px;font-family:inherit;box-sizing:border-box;';
     if (el.type === 'checkbox') el.style.cssText = 'width:17px;height:17px;margin-top:2px;';
@@ -2016,6 +2126,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=11"></script>
+<script src="manual.js?v=12"></script>
 </body>
 </html>
