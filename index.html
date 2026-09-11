@@ -983,6 +983,14 @@ async function _guardarImportes(){
 
 // Regla JP (11-sep): "No actividad (Z)" = gasto que se contabiliza pero NO es del negocio → se destilda "gestión" solo.
 // Al volver a G/M/I se vuelve a tildar, para que el olvido no quede escondido.
+// Debajo de cada línea: código · descripción · IVA del concepto elegido (se actualiza al tipear, sin redibujar el modal)
+function _pintarDescLinea(i, cod){
+  const el = document.getElementById('desc-linea-' + i); if (!el) return;
+  const cc = CONCEPTOS.find(c => c.codigo === cod);
+  el.style.color = cc ? '#166534' : (cod ? '#b91c1c' : '');
+  el.innerHTML = cc ? `<b>${esc(cc.codigo)}</b> · ${esc(cc.descripcion||'')} · IVA ${cc.alicuota ?? '?'} %` : (cod ? '⚠ Ese código no está en el catálogo' : 'Escribí o elegí el código: abajo aparece su descripción');
+}
+
 function _tipoGastoCambio(tipo){
   const g = document.getElementById('ctrl-gestion'); if (!g) return;
   g.checked = tipo !== 'no_actividad';
@@ -1047,15 +1055,16 @@ function pintarControl(){
       </div>` : ''}
 
       <h4 style="font-size:14px;margin:12px 0 7px">Cómo se contabiliza</h4>
-      ${lineasControl.map((l,i) => `<div class="c-linea">
+      ${lineasControl.map((l,i) => { const cc = CONCEPTOS.find(c => c.codigo === l.concepto); return `<div class="c-linea" style="flex-wrap:wrap">
         <input list="dl-conceptos" value="${esc(l.concepto)}" placeholder="Código de concepto"
-               oninput="lineasControl[${i}].concepto=this.value.split(' ')[0].trim()" style="flex:1;min-width:150px">
+               oninput="lineasControl[${i}].concepto=this.value.split(' ')[0].trim(); _pintarDescLinea(${i}, this.value.split(' ')[0].trim())" style="flex:1;min-width:150px">
         <input type="text" inputmode="decimal" value="${nmShow(l.monto)}" style="width:140px;text-align:right"
                onfocus="wireImporte(this)"
                oninput="lineasControl[${i}].monto=nmParse(this.value); pintarNums()">
         ${lineasControl.length > 1
           ? `<button class="act gh" onclick="quitarLinea(${i})" title="Quitar">✕</button>` : ''}
-      </div>`).join('')}
+        <div id="desc-linea-${i}" class="mini" style="flex-basis:100%;margin:-2px 0 4px 2px;${cc ? 'color:#166534' : (l.concepto ? 'color:#b91c1c' : '')}">${cc ? `<b>${esc(cc.codigo)}</b> · ${esc(cc.descripcion||'')} · IVA ${cc.alicuota ?? '?'} %` : (l.concepto ? '⚠ Ese código no está en el catálogo' : 'Escribí o elegí el código: abajo aparece su descripción')}</div>
+      </div>`; }).join('')}
       <button class="act gh" style="font-size:12.5px;padding:5px 10px" onclick="agregarLinea()">+ Dividir en otro concepto</button>
       <button class="act gh" style="font-size:12.5px;padding:5px 10px" onclick="toggleNuevoConcepto()">✳ Concepto nuevo</button>
       <div id="nc-form" style="display:none;background:#fff7ed;border:1px solid var(--primary);border-radius:9px;padding:11px;margin-top:9px;">

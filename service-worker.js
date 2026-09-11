@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v23-z-sin-gestion';
+const CACHE_VERSION = 'compras-v24-desc-concepto';
 const ASSETS = ['./', './index.html', './manual.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
