@@ -1251,7 +1251,7 @@ function tabla(lista, bandeja){
 //  Se separan porque responden preguntas distintas: la de gestión mira el
 //  total pagado, la del estudio mira el crédito fiscal.
 // ═══════════════════════════════════════════════════════════════════════
-let listSub = 'gestion', LIST_IVA = null, LIST_PERC = null, LIST_RET = null, LIST_PDET = null;
+let listSub = 'gestion', LIST_IVA = null, LIST_PERC = null, LIST_RET = null, LIST_PDET = null, LIST_FUERA = null;
 const _hoy = new Date();
 let listPer = { desde: `${_hoy.getFullYear()}-${String(_hoy.getMonth()+1).padStart(2,'0')}-01`,
                 hasta: new Date(_hoy.getFullYear(), _hoy.getMonth()+1, 0).toISOString().slice(0,10) };
@@ -1286,14 +1286,24 @@ async function cargarListadosEstudio(){
   if (!c) return;
   if (!LIST_IVA) c.innerHTML = '<div class="vacio">Armando los listados…</div>';
   const [iva, per, ret, pdet] = await Promise.all([
-    sb.rpc('compras_listado_iva',          {p_desde: listPer.desde, p_hasta: listPer.hasta, p_incluir_prueba: MODO_PRUEBA}),
-    sb.rpc('compras_listado_percepciones', {p_desde: listPer.desde, p_hasta: listPer.hasta, p_incluir_prueba: MODO_PRUEBA}),
+    // p_prueba = el AMBIENTE, no "sumar los de prueba": en modo 🧪 se listan
+    // SOLO los de test y en definitivo SOLO los reales. Nunca se mezclan.
+    sb.rpc('compras_listado_iva',          {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA}),
+    sb.rpc('compras_listado_percepciones', {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA}),
     sb.rpc('compras_listado_retenciones',  {p_desde: listPer.desde, p_hasta: listPer.hasta}),
-    sb.rpc('compras_listado_percepciones_detalle', {p_desde: listPer.desde, p_hasta: listPer.hasta, p_incluir_prueba: MODO_PRUEBA}),
+    sb.rpc('compras_listado_percepciones_detalle', {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA}),
   ]);
   if (iva.error){ c.innerHTML = `<div class="alerta">${esc(iva.error.message)}</div>`; return; }
   LIST_IVA = iva.data || []; LIST_PERC = per.data || []; LIST_RET = ret.data || [];
   LIST_PDET = pdet.data || [];
+  // Los que NO van al Libro IVA se muestran aparte: si un comprobante del
+  // período no está en el listado, tiene que verse POR QUÉ, no desaparecer.
+  const {data: fuera} = await sb.from('compras_documentos')
+    .select('tipo,letra,punto_venta,numero,proveedor_nombre,fecha_emision,total,moneda')
+    .eq('es_prueba', MODO_PRUEBA).eq('computa_formal', false)
+    .gte('fecha_emision', listPer.desde).lte('fecha_emision', listPer.hasta)
+    .order('fecha_emision');
+  LIST_FUERA = fuera || [];
   _pintarEstudio();
 }
 
@@ -1319,7 +1329,9 @@ function _pintarEstudio(){
         <button class="act" onclick="_bajarIvaCompras()">⬇ IVA Compras completo</button>
       </div>
       <p class="mini" style="margin-top:9px">Entran solo los comprobantes marcados <b>“computa en el Libro IVA”</b>.
-        Las notas de crédito restan. ${MODO_PRUEBA ? '🧪 Incluye los de prueba.' : ''}</p>
+        Las notas de crédito restan. ${MODO_PRUEBA
+          ? '<b style="color:#92400e">🧪 Ambiente de prueba: se listan SOLO los comprobantes de test.</b>'
+          : ''}</p>
     </div>
 
     <div class="kpis">
@@ -1349,6 +1361,19 @@ function _pintarEstudio(){
           <td class="num">${plata(x.total)}</td>
           <td><span class="chip" style="background:#fef3c7;color:#92400e">${esc(x.alerta)}</span></td></tr>`).join('')}
       </tbody></table></div></div>` : ''}
+
+    ${LIST_FUERA && LIST_FUERA.length ? `<div class="card" style="border-left:4px solid var(--mut)">
+      <h3 style="font-size:14px;margin-bottom:4px">↪ ${LIST_FUERA.length} comprobante${LIST_FUERA.length===1?'':'s'} fuera del Libro IVA</h3>
+      <p class="mini" style="margin-bottom:8px">No están marcados "computa en el Libro IVA", así que no entran en los
+        listados de arriba. Están acá para que se vea que existen y por qué no figuran — típicamente proveedores del
+        exterior o gastos que no se contabilizan formalmente. Si alguno tendría que estar, se corrige en su ficha.</p>
+      <table><tbody>${LIST_FUERA.map(d => `<tr>
+        <td class="mini">${_fecha(d.fecha_emision)}</td>
+        <td>${esc(d.tipo + ' ' + (d.letra||'') + ' ' + String(d.punto_venta??0).padStart(4,'0') + '-' + String(d.numero??0).padStart(8,'0'))}</td>
+        <td>${esc(d.proveedor_nombre||'')}</td>
+        <td class="num">${plata(d.total)}${d.moneda && d.moneda!=='ARS' ? ` <span class="mini">(${esc(d.moneda)})</span>` : ''}</td>
+      </tr>`).join('')}</tbody></table>
+    </div>` : ''}
 
     <div class="card">
       <h3 style="font-size:15px;margin-bottom:4px">🧾 IVA Compras · ${esc(mesTxt)}</h3>
@@ -2619,6 +2644,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=14"></script>
+<script src="manual.js?v=15"></script>
 </body>
 </html>

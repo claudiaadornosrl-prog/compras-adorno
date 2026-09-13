@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v29-formato-estudio';
+const CACHE_VERSION = 'compras-v30-listado-solo-ambiente';
 const ASSETS = ['./', './index.html', './manual.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
