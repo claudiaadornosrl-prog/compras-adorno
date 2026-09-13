@@ -987,7 +987,7 @@ async function _guardarImportes(){
 function _pintarDescLinea(i, cod){
   const el = document.getElementById('desc-linea-' + i); if (!el) return;
   const cc = CONCEPTOS.find(c => c.codigo === cod);
-  el.style.color = cc ? '#166534' : (cod ? '#b91c1c' : '');
+  el.style.color = cc ? '#166534' : (cod ? '#b91c1c' : 'var(--mut)');
   el.innerHTML = cc ? `<b>${esc(cc.codigo)}</b> · ${esc(cc.descripcion||'')} · IVA ${cc.alicuota ?? '?'} %` : (cod ? '⚠ Ese código no está en el catálogo' : 'Escribí o elegí el código: abajo aparece su descripción');
 }
 
@@ -1063,7 +1063,7 @@ function pintarControl(){
                oninput="lineasControl[${i}].monto=nmParse(this.value); pintarNums()">
         ${lineasControl.length > 1
           ? `<button class="act gh" onclick="quitarLinea(${i})" title="Quitar">✕</button>` : ''}
-        <div id="desc-linea-${i}" class="mini" style="flex-basis:100%;margin:-2px 0 4px 2px;${cc ? 'color:#166534' : (l.concepto ? 'color:#b91c1c' : '')}">${cc ? `<b>${esc(cc.codigo)}</b> · ${esc(cc.descripcion||'')} · IVA ${cc.alicuota ?? '?'} %` : (l.concepto ? '⚠ Ese código no está en el catálogo' : 'Escribí o elegí el código: abajo aparece su descripción')}</div>
+        <div id="desc-linea-${i}" style="flex-basis:100%;margin:0 0 5px 2px;font-size:14px;line-height:1.35;${cc ? 'color:#166534' : (l.concepto ? 'color:#b91c1c' : 'color:var(--mut)')}">${cc ? `<b>${esc(cc.codigo)}</b> · ${esc(cc.descripcion||'')} · IVA ${cc.alicuota ?? '?'} %` : (l.concepto ? '⚠ Ese código no está en el catálogo' : 'Escribí o elegí el código: abajo aparece su descripción')}</div>
       </div>`; }).join('')}
       <button class="act gh" style="font-size:12.5px;padding:5px 10px" onclick="agregarLinea()">+ Dividir en otro concepto</button>
       <button class="act gh" style="font-size:12.5px;padding:5px 10px" onclick="toggleNuevoConcepto()">✳ Concepto nuevo</button>
