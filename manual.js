@@ -166,8 +166,9 @@ function _manualSecciones() {
       pasos: [
         '📈 Gestión — reemplaza la planilla de gastos: por tipo de gasto (gastos, mercadería, inversiones, no-actividad) con su porcentaje, mes a mes, y los 25 proveedores más grandes. Respeta los filtros de arriba.',
         '🧾 Para el estudio — elegís el período con las flechas ‹ › o las dos fechas, y salen los tres listados del mes.',
-        'IVA Compras: un renglón por comprobante con el neto abierto por alícuota, el IVA, las percepciones y el total. Entran solo los marcados "computa en el Libro IVA"; las notas de crédito restan y se ven en rojo. El botón ⬇ baja el listado en Excel.',
-        'Percepciones sufridas: lo que los proveedores le percibieron a la empresa (IVA, IIBB CABA, IIBB Bs.As.). También es crédito.',
+        'IVA Compras: un renglón por comprobante con el neto abierto por alícuota, el IVA, las percepciones y el total. Entran solo los marcados "computa en el Libro IVA"; las notas de crédito restan y se ven en rojo.',
+        'Hay DOS descargas a propósito. "⬇ Formato estudio" saca las mismas columnas del Subdiario que se le manda hoy al contador (comprobante FDC/NCC, Mto grav., No Grav., IVA 21%, una alícuota variable, Per./Ret. IVA, Otros, Total): se lo mandás y no tiene que cambiar nada. "⬇ IVA Compras completo" abre una columna por alícuota y agrega descuadre y alertas: ese es para controlar, no para presentar.',
+        'Percepciones sufridas: lo que los proveedores le percibieron a la empresa (IVA, IIBB CABA, IIBB Bs.As.). También es crédito. Abajo va el detalle por comprobante y jurisdicción, el mismo corte del listado que se manda hoy, con su propia descarga.',
         'Retenciones practicadas: lo que la empresa retuvo al pagar, agrupado por quincena, que es como se declara. Se llena solo cuando el módulo empiece a emitir órdenes de pago.',
         '🚨 Antes de mandárselo al estudio, mirá los dos avisos: "no cierra" (neto + IVA + percepciones ≠ total, hay que revisar el PDF) y "para mirar" (IVA de ajuste, o una imputación contable que no coincide con el neto del comprobante). El listado no los esconde a propósito.',
       ],

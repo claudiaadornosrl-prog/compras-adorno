@@ -1251,7 +1251,7 @@ function tabla(lista, bandeja){
 //  Se separan porque responden preguntas distintas: la de gestión mira el
 //  total pagado, la del estudio mira el crédito fiscal.
 // ═══════════════════════════════════════════════════════════════════════
-let listSub = 'gestion', LIST_IVA = null, LIST_PERC = null, LIST_RET = null;
+let listSub = 'gestion', LIST_IVA = null, LIST_PERC = null, LIST_RET = null, LIST_PDET = null;
 const _hoy = new Date();
 let listPer = { desde: `${_hoy.getFullYear()}-${String(_hoy.getMonth()+1).padStart(2,'0')}-01`,
                 hasta: new Date(_hoy.getFullYear(), _hoy.getMonth()+1, 0).toISOString().slice(0,10) };
@@ -1285,13 +1285,15 @@ async function cargarListadosEstudio(){
   const c = document.getElementById('list-estudio');
   if (!c) return;
   if (!LIST_IVA) c.innerHTML = '<div class="vacio">Armando los listados…</div>';
-  const [iva, per, ret] = await Promise.all([
+  const [iva, per, ret, pdet] = await Promise.all([
     sb.rpc('compras_listado_iva',          {p_desde: listPer.desde, p_hasta: listPer.hasta, p_incluir_prueba: MODO_PRUEBA}),
     sb.rpc('compras_listado_percepciones', {p_desde: listPer.desde, p_hasta: listPer.hasta, p_incluir_prueba: MODO_PRUEBA}),
     sb.rpc('compras_listado_retenciones',  {p_desde: listPer.desde, p_hasta: listPer.hasta}),
+    sb.rpc('compras_listado_percepciones_detalle', {p_desde: listPer.desde, p_hasta: listPer.hasta, p_incluir_prueba: MODO_PRUEBA}),
   ]);
   if (iva.error){ c.innerHTML = `<div class="alerta">${esc(iva.error.message)}</div>`; return; }
   LIST_IVA = iva.data || []; LIST_PERC = per.data || []; LIST_RET = ret.data || [];
+  LIST_PDET = pdet.data || [];
   _pintarEstudio();
 }
 
@@ -1313,7 +1315,8 @@ function _pintarEstudio(){
         <div><label class="mini">Hasta</label><br><input type="date" id="lp-hasta" value="${listPer.hasta}" onchange="_listPerCambio()"></div>
         <button class="act gh" style="padding:7px 11px" onclick="_listMes(1)">›</button>
         <div style="flex:1"></div>
-        <button class="act" onclick="_bajarIvaCompras()">⬇ IVA Compras (Excel)</button>
+        <button class="act gh" onclick="_bajarFormatoEstudio()" title="Mismas columnas que el Subdiario que le mandás hoy">⬇ Formato estudio</button>
+        <button class="act" onclick="_bajarIvaCompras()">⬇ IVA Compras completo</button>
       </div>
       <p class="mini" style="margin-top:9px">Entran solo los comprobantes marcados <b>“computa en el Libro IVA”</b>.
         Las notas de crédito restan. ${MODO_PRUEBA ? '🧪 Incluye los de prueba.' : ''}</p>
@@ -1381,15 +1384,28 @@ function _pintarEstudio(){
     </div>
 
     <div class="card">
-      <h3 style="font-size:15px;margin-bottom:4px">📥 Percepciones sufridas</h3>
-      <p class="mini" style="margin-bottom:10px">Lo que los proveedores le percibieron a la empresa. Son crédito
-        contra el impuesto correspondiente, igual que el IVA.</p>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+        <div><h3 style="font-size:15px;margin-bottom:4px">📥 Percepciones sufridas</h3>
+          <p class="mini" style="margin-bottom:10px">Lo que los proveedores le percibieron a la empresa. Son crédito
+            contra el impuesto correspondiente, igual que el IVA. Abajo, el detalle por comprobante y jurisdicción —
+            el mismo corte del listado que se manda hoy.</p></div>
+        ${LIST_PDET && LIST_PDET.length ? '<button class="act gh" onclick="_bajarPercepciones()">⬇ Detalle</button>' : ''}
+      </div>
       ${LIST_PERC && LIST_PERC.length ? `<table><tbody>${LIST_PERC.map(p=>`<tr>
         <td>${esc(p.impuesto)}</td><td class="mini">${p.comprobantes} comprobantes</td>
         <td class="num"><b>${plata(p.importe)}</b></td></tr>`).join('')}
         <tr style="font-weight:700"><td colspan="2">Total</td>
         <td class="num">${plata(LIST_PERC.reduce((a,p)=>a+Number(p.importe||0),0))}</td></tr>
       </tbody></table>` : '<div class="vacio">Sin percepciones en el período.</div>'}
+      ${LIST_PDET && LIST_PDET.length ? `
+        <div style="overflow-x:auto;max-height:300px;margin-top:12px"><table style="font-size:12.5px">
+          <thead><tr><th>Fecha</th><th>Comprobante</th><th>Proveedor</th><th>Impuesto</th>
+            <th>Jurisdicción</th><th class="num">Percepción</th></tr></thead>
+          <tbody>${LIST_PDET.map(p=>`<tr><td class="mini">${_fecha(p.fecha_emision)}</td>
+            <td>${esc(p.comprobante)}</td><td>${esc((p.proveedor||'').slice(0,32))}</td>
+            <td class="mini">${esc(p.impuesto)}</td><td class="mini">${esc(p.jurisdiccion||'—')}</td>
+            <td class="num">${plata(p.importe)}</td></tr>`).join('')}</tbody>
+        </table></div>` : ''}
     </div>
 
     <div class="card">
@@ -1413,12 +1429,76 @@ function _pintarEstudio(){
 const _n0 = v => Number(v) ? Number(v).toLocaleString('es-AR', {maximumFractionDigits:0}) : '—';
 const _fecha = f => f ? f.split('-').reverse().join('/') : '';
 
-// Export CSV con ; y coma decimal: Excel en español lo abre de una, sin librerías.
+// ── Export ───────────────────────────────────────────────────────────────
+// CSV con ; y coma decimal: Excel en español lo abre de una, sin librerías.
+// Hay DOS formatos a propósito:
+//  · "Formato estudio" = las mismas columnas del Subdiario que se manda hoy,
+//    con el prefijo de comprobante del Dragonfish (FDC/NCC) y una sola columna
+//    de alícuota variable, para que el estudio no tenga que cambiar nada.
+//  · "IVA Compras completo" = una columna por alícuota + descuadre + alertas.
+//    Es el que sirve para controlar, no para presentar.
+function _csvBajar(nombre, filas){
+  const blob = new Blob(['﻿' + filas.join('\r\n')], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = nombre;
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+const _csvNum = v => (Number(v)||0).toFixed(2).replace('.', ',');
+const _csvTxt = v => (v === null || v === undefined) ? '' : String(v).replace(/[;\r\n]/g, ' ');
+
+// El Dragonfish nombra los comprobantes de compra FDC (factura), NCC (nota de
+// crédito) y NDC (nota de débito). El módulo guarda FC/NC/ND.
+const _compEstudio = x => ({FC:'FDC', NC:'NCC', ND:'NDC'}[x.tipo] || x.tipo) + ' ' +
+  (x.letra || '') + ' ' + String(x.punto_venta ?? 0).padStart(5,'0') + '-' +
+  String(x.numero ?? 0).padStart(8,'0');
+
+function _bajarFormatoEstudio(){
+  if (!LIST_IVA || !LIST_IVA.length){ alert('No hay comprobantes en el período.'); return; }
+  const enc = ['Comprobante','Fecha emisión','Proveedor','CUIT','Sit.fiscal','Mto grav.','No Grav.',
+               'IVA 21%','IVA %','Importe','Per./Ret. IVA','Otros','Total'];
+  const filas = [enc.join(';')].concat(LIST_IVA.map(x => {
+    // Una sola alícuota variable, como el listado de hoy: la que tenga importe.
+    const otra = Number(x.iva_27) ? {p:'27,00',  i:x.iva_27}
+               : Number(x.iva_105) ? {p:'10,50', i:x.iva_105}
+               : {p:'0,00', i:0};
+    return [
+      _csvTxt(_compEstudio(x)),
+      _fecha(x.fecha_emision),
+      _csvTxt(x.proveedor_nombre),
+      _csvTxt(_cuitFmt(x.cuit_emisor)),
+      _csvTxt(x.sit_fiscal),
+      _csvNum(Number(x.neto_21) + Number(x.neto_105) + Number(x.neto_27)),
+      _csvNum(Number(x.no_gravado) + Number(x.exento)),
+      _csvNum(x.iva_21),
+      otra.p,
+      _csvNum(otra.i),
+      _csvNum(x.percep_iva),
+      _csvNum(Number(x.percep_iibb_caba) + Number(x.percep_iibb_ba) + Number(x.otros_tributos)),
+      _csvNum(x.total),
+    ].join(';');
+  }));
+  _csvBajar(`Subdiario IVA compras ${listPer.desde} a ${listPer.hasta}.csv`, filas);
+}
+
+function _bajarPercepciones(){
+  if (!LIST_PDET || !LIST_PDET.length){ alert('No hay percepciones en el período.'); return; }
+  const enc = ['Fecha emisión','Comprobante','CUIT','Proveedor','Impuesto','Jurisdicción','Percepción'];
+  const filas = [enc.join(';')].concat(LIST_PDET.map(p => [
+    _fecha(p.fecha_emision), _csvTxt(p.comprobante), _csvTxt(_cuitFmt(p.cuit)),
+    _csvTxt(p.proveedor), _csvTxt(p.impuesto), _csvTxt(p.jurisdiccion), _csvNum(p.importe),
+  ].join(';')));
+  _csvBajar(`Percepciones de compras ${listPer.desde} a ${listPer.hasta}.csv`, filas);
+}
+
+const _cuitFmt = c => (c && /^\d{11}$/.test(c)) ? `${c.slice(0,2)}-${c.slice(2,10)}-${c.slice(10)}` : (c || '');
+
 function _bajarIvaCompras(){
   if (!LIST_IVA || !LIST_IVA.length){ alert('No hay comprobantes en el período.'); return; }
   const cols = [
     ['Fecha','fecha_emision'],['Tipo','tipo'],['Letra','letra'],['Pto vta','punto_venta'],['Número','numero'],
-    ['CUIT','cuit_emisor'],['Proveedor','proveedor_nombre'],['Cond. IVA','cond_iva'],
+    ['Sec.','secuencia'],
+    ['CUIT','cuit_emisor'],['Proveedor','proveedor_nombre'],['Sit. fiscal','sit_fiscal'],
     ['Neto 21','neto_21'],['Neto 10.5','neto_105'],['Neto 27','neto_27'],
     ['No gravado','no_gravado'],['Exento','exento'],
     ['IVA 21','iva_21'],['IVA 10.5','iva_105'],['IVA 27','iva_27'],['IVA ajuste','iva_otros'],
@@ -1437,11 +1517,7 @@ function _bajarIvaCompras(){
   };
   const filas = [cols.map(c => c[0]).join(';')]
     .concat(LIST_IVA.map(x => cols.map(c => celda(x, c[1])).join(';')));
-  const blob = new Blob(['﻿' + filas.join('\r\n')], {type:'text/csv;charset=utf-8;'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `IVA Compras ${listPer.desde} a ${listPer.hasta}.csv`;
-  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  _csvBajar(`IVA Compras ${listPer.desde} a ${listPer.hasta}.csv`, filas);
 }
 
 function _listGestion(){
@@ -2543,6 +2619,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=13"></script>
+<script src="manual.js?v=14"></script>
 </body>
 </html>
