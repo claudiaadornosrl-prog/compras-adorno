@@ -2212,11 +2212,22 @@ async function guardarSinFactura(){
   irA('facturas');
 }
 
+// La ETAPA manda (13-sep, JP): retroceder a "sin contabilizar" o "contabilizado sin
+// controlar" devuelve el comprobante a la Bandeja y el motor muda el PDF a esa carpeta.
 async function cambiarEstadoPago(docId, estado){
-  const {error} = await sb.from('compras_documentos')
-    .update({estado_pago: estado}).eq('id', docId);
+  const volvia = ['sin_contabilizar','contabilizado_sin_controlar'].includes(estado);
+  if (volvia && !confirm('Al ponerlo en "' + (EPAGO[estado]?.tx || estado) + '" el comprobante VUELVE a la Bandeja para controlarlo de nuevo, y el PDF se muda a esa carpeta del OneDrive.\n\n¿Seguir?')) return;
+  const {data, error} = await sb.from('compras_documentos')
+    .update({estado_pago: estado}).eq('id', docId).select('estado,estado_pago').single();
   if (error){ alert('No se pudo cambiar: ' + error.message); return; }
-  const d = DOCS.find(x=>x.id===docId); if (d) d.estado_pago = estado;
+  const d = DOCS.find(x=>x.id===docId);
+  if (d){ d.estado_pago = data.estado_pago; d.estado = data.estado; }
+  if (data.estado !== 'aprobada'){
+    document.getElementById('res-overlay')?.remove();
+    await cargarTodo();
+    irA('bandeja');
+    return;
+  }
   abrirResumenDoc(docId);
 }
 
