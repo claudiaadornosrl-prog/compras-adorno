@@ -857,7 +857,8 @@ function vistaBandeja(){
           <td>${fechaCorta(d.fecha_emision)}</td>
           <td>${esc(d.proveedor_nombre || d.cuit_emisor || '—')}
               ${d.archivo_alerta ? '<br><span class="mini" style="color:#dc2626">📎 archivo a revisar</span>' : ''}</td>
-          <td class="oculta-mov">${esc(d.tipo)} ${esc(d.letra)} ${String(d.punto_venta).padStart(4,'0')}-${String(d.numero).padStart(8,'0')}</td>
+          <td class="oculta-mov">${esc(d.tipo)} ${esc(d.letra)} ${String(d.punto_venta).padStart(4,'0')}-${String(d.numero).padStart(8,'0')}
+              ${d.archivo_path ? `<br><a target="_blank" rel="noopener" href="${_pdfUrl(d.archivo_path)}" style="font-size:12px;color:var(--primary);text-decoration:none;" title="Abrir el PDF">📄 ver PDF</a>` : ''}</td>
           <td class="num">${plata(d.total)}
               ${(d.moneda && d.moneda !== 'ARS' && d.importe_moneda)
                 ? `<br><span class="mini" style="color:#0e7490">💵 ${esc(d.moneda)} ${Number(d.importe_moneda).toLocaleString('es-AR',{minimumFractionDigits:2})} × $${Number(d.cotizacion).toLocaleString('es-AR')}</span>` : ''}</td>
@@ -983,6 +984,16 @@ async function _guardarImportes(){
 
 // Regla JP (11-sep): "No actividad (Z)" = gasto que se contabiliza pero NO es del negocio → se destilda "gestión" solo.
 // Al volver a G/M/I se vuelve a tildar, para que el olvido no quede escondido.
+// ── Link directo al PDF en OneDrive (pedido JP 13-sep: abrirlo mientras se controla) ──
+// archivo_path es relativo a la raíz del OneDrive de office@claudiaadorno.onmicrosoft.com
+// (mismo drive que usa el motor por Graph). Misma base que tesoreria_path_a_weburl.
+const ONEDRIVE_BASE = 'https://claudiaadorno-my.sharepoint.com/personal/office_claudiaadorno_onmicrosoft_com/Documents/';
+function _pdfUrl(path){
+  if (!path) return '#';
+  if (/^https?:\/\//i.test(path)) return path;              // ya es una URL (archivo_url del motor)
+  return ONEDRIVE_BASE + String(path).split('/').map(encodeURIComponent).join('/');
+}
+
 // Debajo de cada línea: código · descripción · IVA del concepto elegido (se actualiza al tipear, sin redibujar el modal)
 function _pintarDescLinea(i, cod){
   const el = document.getElementById('desc-linea-' + i); if (!el) return;
@@ -1024,7 +1035,11 @@ function pintarControl(){
         <div><span class="lbl">Total</span><span class="v" style="color:var(--primary)">${plata(d.total)}</span></div>
       </div>
       ${_desgloseImpositivo(d, neto)}
-      ${d.archivo_path ? `<p class="mini">📄 ${esc(d.archivo_path.split('/').pop())}</p>` : ''}
+      ${d.archivo_path ? `<p style="margin:6px 0 2px;">
+        <a class="act" target="_blank" rel="noopener" href="${_pdfUrl(d.archivo_path)}"
+           style="background:var(--primary);color:#fff;border-color:var(--primary);text-decoration:none;display:inline-block;padding:6px 12px;font-size:13px;"
+           title="Abre el PDF en OneDrive, en otra pestaña">📄 Ver la factura</a>
+        <span class="mini" style="margin-left:8px;">${esc(d.archivo_path.split('/').pop())}</span></p>` : ''}
 
       ${(d.moneda && d.moneda !== 'ARS' && d.importe_moneda) ? `<div class="c-sug" style="background:#ecfeff;border-color:#0e7490">
         💵 <b>Factura en ${esc(d.moneda)}</b> · ${esc(d.moneda)} ${Number(d.importe_moneda).toLocaleString('es-AR',{minimumFractionDigits:2})}
