@@ -1244,7 +1244,207 @@ function tabla(lista, bandeja){
 }
 
 // ── 📊 LISTADOS: la ex planilla de gestión ──────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+//  📊 LISTADOS · dos miradas del mismo mes
+//    · Gestión  → cuánto se gastó y en qué (tipo de gasto, mes, proveedor)
+//    · Estudio  → IVA Compras, percepciones sufridas y retenciones
+//  Se separan porque responden preguntas distintas: la de gestión mira el
+//  total pagado, la del estudio mira el crédito fiscal.
+// ═══════════════════════════════════════════════════════════════════════
+let listSub = 'gestion', LIST_IVA = null, LIST_PERC = null, LIST_RET = null;
+const _hoy = new Date();
+let listPer = { desde: `${_hoy.getFullYear()}-${String(_hoy.getMonth()+1).padStart(2,'0')}-01`,
+                hasta: new Date(_hoy.getFullYear(), _hoy.getMonth()+1, 0).toISOString().slice(0,10) };
+
 function vistaListados(){
+  const subs = [['gestion','📈 Gestión'],['estudio','🧾 Para el estudio']];
+  setTimeout(() => { if (listSub === 'estudio') cargarListadosEstudio(); }, 0);
+  return `<div class="card" style="padding:10px 12px">
+      <div style="display:flex;gap:7px;flex-wrap:wrap">${subs.map(([k,t]) =>
+        `<button class="act ${listSub===k?'':'gh'}" style="font-size:13px;padding:7px 13px"
+                 onclick="listSub='${k}'; render()">${t}</button>`).join('')}</div>
+    </div>
+    ${listSub === 'gestion' ? _listGestion()
+      : `<div id="list-estudio"><div class="vacio">Cargando…</div></div>`}`;
+}
+
+function _listMes(delta){
+  const d = new Date(listPer.desde + 'T12:00:00');
+  d.setMonth(d.getMonth() + delta);
+  listPer.desde = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+  listPer.hasta = new Date(d.getFullYear(), d.getMonth()+1, 0).toISOString().slice(0,10);
+  LIST_IVA = null; cargarListadosEstudio();
+}
+function _listPerCambio(){
+  listPer.desde = document.getElementById('lp-desde').value;
+  listPer.hasta = document.getElementById('lp-hasta').value;
+  LIST_IVA = null; cargarListadosEstudio();
+}
+
+async function cargarListadosEstudio(){
+  const c = document.getElementById('list-estudio');
+  if (!c) return;
+  if (!LIST_IVA) c.innerHTML = '<div class="vacio">Armando los listados…</div>';
+  const [iva, per, ret] = await Promise.all([
+    sb.rpc('compras_listado_iva',          {p_desde: listPer.desde, p_hasta: listPer.hasta, p_incluir_prueba: MODO_PRUEBA}),
+    sb.rpc('compras_listado_percepciones', {p_desde: listPer.desde, p_hasta: listPer.hasta, p_incluir_prueba: MODO_PRUEBA}),
+    sb.rpc('compras_listado_retenciones',  {p_desde: listPer.desde, p_hasta: listPer.hasta}),
+  ]);
+  if (iva.error){ c.innerHTML = `<div class="alerta">${esc(iva.error.message)}</div>`; return; }
+  LIST_IVA = iva.data || []; LIST_PERC = per.data || []; LIST_RET = ret.data || [];
+  _pintarEstudio();
+}
+
+function _pintarEstudio(){
+  const c = document.getElementById('list-estudio'); if (!c) return;
+  const R = LIST_IVA, s = k => R.reduce((a,x) => a + (Number(x[k])||0), 0);
+  const grav = s('neto_21') + s('neto_105') + s('neto_27');
+  const iva  = s('iva_21') + s('iva_105') + s('iva_27');
+  const perc = s('percep_iva') + s('percep_iibb_caba') + s('percep_iibb_ba') + s('otros_tributos');
+  const malos = R.filter(x => Math.abs(Number(x.descuadre)||0) > 1);
+  const avisos = R.filter(x => x.alerta);
+  const mesTxt = new Date(listPer.desde + 'T12:00:00').toLocaleDateString('es-AR', {month:'long', year:'numeric'});
+
+  c.innerHTML = `
+    <div class="card">
+      <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end">
+        <button class="act gh" style="padding:7px 11px" onclick="_listMes(-1)">‹</button>
+        <div><label class="mini">Desde</label><br><input type="date" id="lp-desde" value="${listPer.desde}" onchange="_listPerCambio()"></div>
+        <div><label class="mini">Hasta</label><br><input type="date" id="lp-hasta" value="${listPer.hasta}" onchange="_listPerCambio()"></div>
+        <button class="act gh" style="padding:7px 11px" onclick="_listMes(1)">›</button>
+        <div style="flex:1"></div>
+        <button class="act" onclick="_bajarIvaCompras()">⬇ IVA Compras (Excel)</button>
+      </div>
+      <p class="mini" style="margin-top:9px">Entran solo los comprobantes marcados <b>“computa en el Libro IVA”</b>.
+        Las notas de crédito restan. ${MODO_PRUEBA ? '🧪 Incluye los de prueba.' : ''}</p>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="lbl">Comprobantes</div><div class="val">${R.length}</div>
+        <div class="sub">${R.filter(x=>x.es_nc).length} notas de crédito</div></div>
+      <div class="kpi"><div class="lbl">Neto gravado</div><div class="val">${platac(grav)}</div>
+        <div class="sub">no gravado + exento ${platac(s('no_gravado')+s('exento'))}</div></div>
+      <div class="kpi" style="border-left-color:var(--ok)"><div class="lbl">Crédito fiscal IVA</div>
+        <div class="val">${platac(iva)}</div>
+        <div class="sub">${s('iva_otros') ? 'ajustes ' + platac(s('iva_otros')) : 'sin ajustes'}</div></div>
+      <div class="kpi" style="border-left-color:var(--info)"><div class="lbl">Percepciones sufridas</div>
+        <div class="val">${platac(perc)}</div><div class="sub">también son crédito</div></div>
+    </div>
+
+    ${malos.length ? `<div class="alerta"><b>${malos.length} comprobante${malos.length===1?'':'s'} no cierra${malos.length===1?'':'n'}</b>
+      (neto + IVA + percepciones ≠ total, por ${platac(malos.reduce((a,x)=>a+Math.abs(Number(x.descuadre)||0),0))}).
+      Revisalos antes de mandarle el listado al estudio:<br>
+      ${malos.slice(0,6).map(x=>`· ${esc(x.comprobante)} — ${esc(x.proveedor_nombre||'')} (${plata(x.descuadre)})`).join('<br>')}</div>` : ''}
+
+    ${avisos.length ? `<div class="card" style="border-left:4px solid #f59e0b">
+      <h3 style="font-size:14px;margin-bottom:4px">⚠ ${avisos.length} comprobante${avisos.length===1?'':'s'} para mirar</h3>
+      <p class="mini" style="margin-bottom:8px">El libro cierra igual, pero estos tienen algo raro: un IVA de ajuste
+        (la reconstrucción metió un tapón para que cuadre) o una imputación contable que no coincide con el neto.</p>
+      <div style="overflow-x:auto;max-height:230px"><table><tbody>
+        ${avisos.map(x=>`<tr><td class="mini">${_fecha(x.fecha_emision)}</td>
+          <td>${esc(x.comprobante)}</td><td>${esc(x.proveedor_nombre||'')}</td>
+          <td class="num">${plata(x.total)}</td>
+          <td><span class="chip" style="background:#fef3c7;color:#92400e">${esc(x.alerta)}</span></td></tr>`).join('')}
+      </tbody></table></div></div>` : ''}
+
+    <div class="card">
+      <h3 style="font-size:15px;margin-bottom:4px">🧾 IVA Compras · ${esc(mesTxt)}</h3>
+      <p class="mini" style="margin-bottom:10px">Un renglón por comprobante, con el neto abierto por alícuota.
+        Es lo que va al Libro IVA Compras.</p>
+      <div style="overflow-x:auto;max-height:520px"><table style="font-size:12.5px">
+        <thead><tr><th>Fecha</th><th>Comprobante</th><th>CUIT</th><th>Proveedor</th><th>IVA</th>
+          <th class="num">Neto 21%</th><th class="num">Neto 10,5%</th><th class="num">Neto 27%</th>
+          <th class="num">No grav./ex.</th><th class="num">IVA 21%</th><th class="num">IVA 10,5%</th>
+          <th class="num">IVA 27%</th><th class="num">Ajuste</th><th class="num">Percep.</th><th class="num">Total</th></tr></thead>
+        <tbody>${R.map(x => `<tr${x.es_nc ? ' style="background:#fef2f2"' : ''}>
+          <td class="mini">${_fecha(x.fecha_emision)}</td>
+          <td>${esc(x.comprobante)}</td>
+          <td class="mini">${esc(x.cuit_emisor||'')}</td>
+          <td>${esc((x.proveedor_nombre||'').slice(0,34))}</td>
+          <td class="mini">${esc(x.cond_iva||'—')}</td>
+          <td class="num">${_n0(x.neto_21)}</td><td class="num">${_n0(x.neto_105)}</td><td class="num">${_n0(x.neto_27)}</td>
+          <td class="num">${_n0(Number(x.no_gravado)+Number(x.exento))}</td>
+          <td class="num">${_n0(x.iva_21)}</td><td class="num">${_n0(x.iva_105)}</td><td class="num">${_n0(x.iva_27)}</td>
+          <td class="num"${Number(x.iva_otros) ? ' style="color:#b45309"' : ''}>${_n0(x.iva_otros)}</td>
+          <td class="num">${_n0(Number(x.percep_iva)+Number(x.percep_iibb_caba)+Number(x.percep_iibb_ba)+Number(x.otros_tributos))}</td>
+          <td class="num"><b>${_n0(x.total)}</b></td></tr>`).join('')}
+        </tbody>
+        <tfoot><tr style="font-weight:700;background:#f8fafc">
+          <td colspan="5">Totales</td>
+          <td class="num">${_n0(s('neto_21'))}</td><td class="num">${_n0(s('neto_105'))}</td><td class="num">${_n0(s('neto_27'))}</td>
+          <td class="num">${_n0(s('no_gravado')+s('exento'))}</td>
+          <td class="num">${_n0(s('iva_21'))}</td><td class="num">${_n0(s('iva_105'))}</td><td class="num">${_n0(s('iva_27'))}</td>
+          <td class="num">${_n0(s('iva_otros'))}</td><td class="num">${_n0(perc)}</td>
+          <td class="num">${_n0(s('total'))}</td></tr></tfoot>
+      </table></div>
+      ${R.length ? '' : '<div class="vacio">No hay comprobantes en este período.</div>'}
+    </div>
+
+    <div class="card">
+      <h3 style="font-size:15px;margin-bottom:4px">📥 Percepciones sufridas</h3>
+      <p class="mini" style="margin-bottom:10px">Lo que los proveedores le percibieron a la empresa. Son crédito
+        contra el impuesto correspondiente, igual que el IVA.</p>
+      ${LIST_PERC && LIST_PERC.length ? `<table><tbody>${LIST_PERC.map(p=>`<tr>
+        <td>${esc(p.impuesto)}</td><td class="mini">${p.comprobantes} comprobantes</td>
+        <td class="num"><b>${plata(p.importe)}</b></td></tr>`).join('')}
+        <tr style="font-weight:700"><td colspan="2">Total</td>
+        <td class="num">${plata(LIST_PERC.reduce((a,p)=>a+Number(p.importe||0),0))}</td></tr>
+      </tbody></table>` : '<div class="vacio">Sin percepciones en el período.</div>'}
+    </div>
+
+    <div class="card">
+      <h3 style="font-size:15px;margin-bottom:4px">📤 Retenciones practicadas</h3>
+      <p class="mini" style="margin-bottom:10px">Lo que la empresa le retuvo a sus proveedores al pagarles, agrupado
+        por quincena (que es como se declara). Se llena solo con las órdenes de pago que emita el módulo.</p>
+      ${LIST_RET && LIST_RET.length ? `<div style="overflow-x:auto"><table>
+        <thead><tr><th>Quincena</th><th>Fecha</th><th>OP</th><th>Proveedor</th><th>Régimen</th>
+          <th class="num">Base</th><th class="num">Alíc.</th><th class="num">Retenido</th><th>Certificado</th></tr></thead>
+        <tbody>${LIST_RET.map(r=>`<tr><td class="mini">${esc(r.quincena)}</td><td class="mini">${_fecha(r.fecha)}</td>
+          <td>#${r.orden_pago_id}</td><td>${esc(r.proveedor||'')}</td>
+          <td class="mini">${esc(r.regimen_codigo||'')} ${esc(r.regimen_nombre||'')}</td>
+          <td class="num">${_n0(r.base_calculo)}</td><td class="num">${Number(r.alicuota||0)}%</td>
+          <td class="num"><b>${plata(r.importe)}</b></td><td class="mini">${esc(r.certificado_nro||'—')}</td></tr>`).join('')}
+        </tbody></table></div>`
+      : `<div class="vacio">Todavía no hay retenciones: se practican al emitir órdenes de pago,
+           que es el punto que sigue del módulo.</div>`}
+    </div>`;
+}
+
+const _n0 = v => Number(v) ? Number(v).toLocaleString('es-AR', {maximumFractionDigits:0}) : '—';
+const _fecha = f => f ? f.split('-').reverse().join('/') : '';
+
+// Export CSV con ; y coma decimal: Excel en español lo abre de una, sin librerías.
+function _bajarIvaCompras(){
+  if (!LIST_IVA || !LIST_IVA.length){ alert('No hay comprobantes en el período.'); return; }
+  const cols = [
+    ['Fecha','fecha_emision'],['Tipo','tipo'],['Letra','letra'],['Pto vta','punto_venta'],['Número','numero'],
+    ['CUIT','cuit_emisor'],['Proveedor','proveedor_nombre'],['Cond. IVA','cond_iva'],
+    ['Neto 21','neto_21'],['Neto 10.5','neto_105'],['Neto 27','neto_27'],
+    ['No gravado','no_gravado'],['Exento','exento'],
+    ['IVA 21','iva_21'],['IVA 10.5','iva_105'],['IVA 27','iva_27'],['IVA ajuste','iva_otros'],
+    ['Percep. IVA','percep_iva'],['Percep. IIBB CABA','percep_iibb_caba'],['Percep. IIBB BsAs','percep_iibb_ba'],
+    ['Otros tributos','otros_tributos'],['Total','total'],['Descuadre','descuadre'],['Alerta','alerta'],
+    ['Tipo gasto','tipo_gasto'],['Moneda','moneda']];
+  const num = k => ['neto_21','neto_105','neto_27','no_gravado','exento','iva_21','iva_105','iva_27',
+                    'iva_otros','percep_iva','percep_iibb_caba','percep_iibb_ba','otros_tributos',
+                    'total','descuadre'].includes(k);
+  const celda = (x, k) => {
+    let v = x[k];
+    if (v === null || v === undefined) return '';
+    if (num(k)) return Number(v).toFixed(2).replace('.', ',');
+    if (k === 'fecha_emision') return _fecha(v);
+    return String(v).replace(/[;\r\n]/g, ' ');
+  };
+  const filas = [cols.map(c => c[0]).join(';')]
+    .concat(LIST_IVA.map(x => cols.map(c => celda(x, c[1])).join(';')));
+  const blob = new Blob(['﻿' + filas.join('\r\n')], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `IVA Compras ${listPer.desde} a ${listPer.hasta}.csv`;
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function _listGestion(){
   const f = filtrados(DOCS);
   const porTipo = {}, porMes = {}, porProv = {};
   f.forEach(d => {
@@ -1993,7 +2193,10 @@ function pintarConceptos(){
           </select></td>
           <td class="num">${x.usos_historicos||0}</td>
           <td style="text-align:center"><input type="checkbox" id="cx-${esc(x.codigo)}" ${x.activo?'checked':''}></td>
-          <td class="num"><button class="act gh" style="font-size:12px;padding:5px 10px"
+          <td class="num" style="white-space:nowrap">
+            <button class="act gh" style="font-size:12px;padding:5px 8px" title="Cambiar el SKU y arrastrar todo lo ya contabilizado"
+              onclick="abrirRenombreSKU('${esc(x.codigo)}')">✏ SKU</button>
+            <button class="act gh" style="font-size:12px;padding:5px 10px"
               onclick="guardarConcepto('${esc(x.codigo)}')">Guardar</button></td>
         </tr>`).join('')}</tbody></table></div>
       ${lista.length>150 ? `<p class="mini" style="margin-top:8px">Mostrando 150 de ${lista.length} — afiná la búsqueda.</p>` : ''}
@@ -2025,6 +2228,86 @@ async function guardarConcepto(cod){
           x.alicuota=document.getElementById('ca-'+cod).value;
           x.activo=document.getElementById('cx-'+cod).checked; }
   pintarConceptos();
+}
+
+// ── ✏ Cambiar el SKU de un concepto ───────────────────────────────────
+//  El SKU es la clave con la que está escrito TODO lo ya contabilizado.
+//  La RPC compras_concepto_renombrar hace el cambio completo en una sola
+//  transacción (líneas, proveedores, sugerencias, simulación) y deja el
+//  SKU viejo en compras_concepto_alias para poder rastrear los asientos.
+//  Si el SKU destino ya existe, es una FUSIÓN y hay que confirmarla aparte.
+async function abrirRenombreSKU(cod){
+  const {data, error} = await sb.rpc('compras_concepto_impacto', {p_codigo: cod});
+  if (error){ alert('No se pudo leer el concepto: ' + error.message); return; }
+  const i = data || {};
+  const n = v => Number(v || 0).toLocaleString('es-AR');
+  openModalP(`
+    <h3 style="margin:0 0 4px">✏ Cambiar el SKU de <span style="font-family:monospace">${esc(cod)}</span></h3>
+    <p class="mini" style="margin:0 0 12px">${esc(i.descripcion || '')}${i.alicuota ? ' · alícuota ' + esc(i.alicuota) + '%' : ''}</p>
+    <div style="background:#f8fafc;border:1px solid var(--bd);border-radius:9px;padding:11px;margin-bottom:12px;font-size:13px;line-height:1.7">
+      <b>Lo que se va a reescribir con el SKU nuevo:</b><br>
+      · <b>${n(i.lineas)}</b> renglón${Number(i.lineas)===1?'':'es'} ya contabilizado${Number(i.lineas)===1?'':'s'} en <b>${n(i.documentos)}</b> comprobante${Number(i.documentos)===1?'':'s'}${Number(i.monto)?` (${plata(i.monto)})`:''}<br>
+      · <b>${n(i.proveedores)}</b> proveedor${Number(i.proveedores)===1?'':'es'} que lo tienen como concepto habitual<br>
+      · <b>${n(i.sugerencias)}</b> sugerencia${Number(i.sugerencias)===1?'':'s'} pendiente${Number(i.sugerencias)===1?'':'s'} en la Bandeja
+      ${Number(i.simulacion) ? `<br>· ${n(i.simulacion)} fila${Number(i.simulacion)===1?'':'s'} del back-test` : ''}
+      ${Number(i.alias_previos) ? `<br>· ${n(i.alias_previos)} SKU viejo${Number(i.alias_previos)===1?'':'s'} que ya apuntaban acá` : ''}
+    </div>
+    <label>SKU nuevo</label>
+    <input id="rs-nuevo" maxlength="20" placeholder="Ej: 71401004" value="${esc(cod)}"
+           style="text-transform:uppercase;font-family:monospace" oninput="_rsChequear()">
+    <div id="rs-aviso" class="mini" style="margin:6px 0 10px;min-height:18px"></div>
+    <label>Por qué lo cambiás (queda asentado)</label>
+    <input id="rs-motivo" placeholder="Ej: el SKU viejo no servía para el listado de IVA" style="margin-bottom:12px">
+    <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:9px;padding:10px;font-size:12.5px;line-height:1.6;margin-bottom:14px">
+      🚨 Mientras el Dragonfish siga en uso, el SKU nuevo <b>tiene que existir también allá</b> como artículo,
+      sino la exportación lo rechaza. El SKU viejo queda guardado en el historial para poder rastrear los asientos.
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="act gh" onclick="cerrarModalP()">Cancelar</button>
+      <button class="act" id="rs-ok" onclick="confirmarRenombreSKU('${esc(cod)}')">Cambiar el SKU</button>
+    </div>`);
+  setTimeout(() => { const el = document.getElementById('rs-nuevo'); if (el){ el.focus(); el.select(); } }, 40);
+}
+
+function _rsChequear(){
+  const el = document.getElementById('rs-nuevo'); if (!el) return;
+  const v = (el.value || '').trim().toUpperCase();
+  const av = document.getElementById('rs-aviso');
+  const existe = CONC_LISTA.find(c => c.codigo === v);
+  if (!v){ av.innerHTML = ''; return; }
+  if (!/^[A-Z0-9][A-Z0-9._-]*$/.test(v)){
+    av.innerHTML = '<span style="color:var(--bad)">Solo letras, números, punto, guión y guión bajo.</span>'; return;
+  }
+  av.innerHTML = existe
+    ? `<span style="color:#b45309">⚠ Ya existe <b>${esc(v)}</b> (${esc(existe.descripcion||'')}). Se van a <b>fusionar</b> los dos en uno.</span>`
+    : '<span style="color:var(--mut)">SKU libre.</span>';
+}
+
+async function confirmarRenombreSKU(cod){
+  const nuevo  = (document.getElementById('rs-nuevo').value || '').trim().toUpperCase();
+  const motivo = (document.getElementById('rs-motivo').value || '').trim();
+  if (!nuevo || nuevo === cod){ alert('Escribí un SKU distinto al actual.'); return; }
+  const fusiona = !!CONC_LISTA.find(c => c.codigo === nuevo);
+  const texto = fusiona
+    ? `Vas a FUSIONAR "${cod}" dentro de "${nuevo}".\n\nTodo lo contabilizado con ${cod} pasa a ${nuevo} y ${cod} deja de existir.\n\n¿Seguimos?`
+    : `Vas a cambiar el SKU "${cod}" por "${nuevo}".\n\nTodo lo ya contabilizado se reescribe con el SKU nuevo.\n\n¿Seguimos?`;
+  if (!confirm(texto)) return;
+  const btn = document.getElementById('rs-ok');
+  if (btn){ btn.disabled = true; btn.textContent = 'Cambiando…'; }
+  const {data, error} = await sb.rpc('compras_concepto_renombrar',
+    {p_viejo: cod, p_nuevo: nuevo, p_motivo: motivo || null, p_fusionar: fusiona});
+  if (error){
+    alert('No se pudo cambiar: ' + error.message);
+    if (btn){ btn.disabled = false; btn.textContent = 'Cambiar el SKU'; }
+    return;
+  }
+  cerrarModalP();
+  const r = data || {};
+  alert(`Listo: ${cod} → ${nuevo}\n\n${Number(r.lineas||0).toLocaleString('es-AR')} renglones en ${Number(r.documentos||0).toLocaleString('es-AR')} comprobantes` +
+        `${r.proveedores ? `\n${r.proveedores} proveedor(es) actualizados` : ''}` +
+        `${r.sugerencias ? `\n${r.sugerencias} sugerencia(s) de la Bandeja` : ''}`);
+  CONCEPTOS = [];
+  vistaConceptos();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2260,6 +2543,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=12"></script>
+<script src="manual.js?v=13"></script>
 </body>
 </html>
