@@ -514,8 +514,13 @@ async function _opCalcular(){
     cont.innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return;
   }
   opPrep = data; if (btn) btn.disabled = false;
-  const r = data.retenciones || [], av = data.avisos || [];
+  const r = data.retenciones || [], av = data.avisos || [], pp = data.pagos_posibles || [];
   cont.innerHTML = `
+    ${pp.length ? `<div class="alerta" style="margin-bottom:10px;border-left:4px solid #b45309">
+       <b>⚠ Puede que este pago YA esté hecho.</b><br>
+       Hay ${pp.length} egreso${pp.length===1?'':'s'} del banco por este mismo importe sin conciliar:<br>
+       ${pp.map(m => `· ${_fecha(m.fecha)} · ${esc(m.cuenta||'')} · ${plata(Math.abs(m.importe))} · ${esc((m.descripcion||'').slice(0,50))} <span class="mini">(${esc(m.evidencia)})</span>`).join('<br>')}
+       <br><span class="mini">Si emitís igual, Tesorería lo vincula sola en vez de duplicar el pago.</span></div>` : ''}
     ${av.length ? `<div class="alerta" style="margin-bottom:10px"><b>Antes de emitir, mirá esto:</b><br>
        ${av.map(a => '· ' + esc(a)).join('<br>')}</div>` : ''}
     <table style="font-size:13px"><tbody>
@@ -561,8 +566,11 @@ async function emitirOP(){
   }
   cerrarModalP();
   alert(`${data.comprobante} emitida\n\nA pagar: ${plata(data.neto_a_pagar)}` +
-        (data.pendiente_tesoreria ? '\n\nYa quedó el pendiente cargado en Tesorería.' : '') +
-        '\n\nLos PDF se mudan a CON OP SIN PAGAR en aproximadamente un minuto.');
+        (data.mensaje_pago ? `\n\n${data.mensaje_pago}`
+          : data.pendiente_tesoreria ? '\n\nYa quedó el pendiente cargado en Tesorería.' : '') +
+        (data.estado_pendiente === 'pagado'
+          ? '\n\nLos PDF se archivan como PAGADAS en aproximadamente un minuto.'
+          : '\n\nLos PDF se mudan a CON OP SIN PAGAR en aproximadamente un minuto.'));
   vistaOrdenes();
 }
 
@@ -2903,6 +2911,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=16"></script>
+<script src="manual.js?v=17"></script>
 </body>
 </html>

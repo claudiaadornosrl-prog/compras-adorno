@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v31-ordenes-de-pago';
+const CACHE_VERSION = 'compras-v32-op-sigue-al-pago';
 const ASSETS = ['./', './index.html', './manual.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

@@ -170,6 +170,8 @@ function _manualSecciones() {
         '🚨 El sistema NUNCA inventa una retención. Si al régimen le falta la alícuota, sale $0 y te lo dice en el recuadro de avisos. Lo mismo si el proveedor no tiene régimen asignado en su ficha: te propone uno según el tipo de gasto (mercadería → enajenación de bienes; gastos → locaciones y servicios) y te avisa que lo confirmes.',
         'Los proveedores del exterior no llevan retención de la RG 830 (son beneficiarios del exterior, es otro régimen) — el sistema los saltea diciendo por qué.',
         'Al emitir: la factura pasa a "con OP sin pagar" y el PDF se muda solo a esa carpeta (tarda un minuto), y se crea el pendiente de pago en Tesorería para que la plata no se cargue dos veces.',
+        '🚨 Si la plata YA salió antes de armar la OP, no se duplica nada: el módulo te avisa ANTES de emitir que hay egresos del banco por ese mismo importe sin conciliar, y al emitir Tesorería los vincula sola. La OP nace PAGADA y las facturas van derecho al archivo definitivo.',
+        'Y al revés también: cuando el pago salga más adelante y Tesorería lo concilie, la OP pasa sola a "pagada" y las facturas avanzan de etapa sin que nadie toque nada.',
         '"Anular" devuelve las facturas a "controlado sin OP" y cancela el pendiente de Tesorería. Pide motivo y queda asentado. Una OP ya pagada no se puede anular desde acá.',
         '🧪 En modo prueba las OP llevan punto de venta 9999 y NO generan el pendiente en Tesorería, así no ensucian la numeración real ni los pagos.',
       ],
