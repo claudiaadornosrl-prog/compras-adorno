@@ -161,6 +161,20 @@ function _manualSecciones() {
       ],
     },
     {
+      icon: '💸', titulo: 'Órdenes de pago',
+      desc: 'Donde se arma lo que se le va a pagar a cada proveedor, con las retenciones ya calculadas.',
+      pasos: [
+        'Arriba están los proveedores con facturas ya controladas esperando OP, con el total y hace cuántos días espera la más vieja (en rojo si pasó el mes).',
+        '"Armar OP" abre el detalle: vienen todos los comprobantes tildados y podés destildar los que no querés pagar todavía. Las notas de crédito RESTAN, y se ven en rojo.',
+        'Abajo se calcula solo: subtotal, las retenciones que correspondan y el neto a pagar. Cambiá lo que quieras arriba y el número se recalcula al instante.',
+        '🚨 El sistema NUNCA inventa una retención. Si al régimen le falta la alícuota, sale $0 y te lo dice en el recuadro de avisos. Lo mismo si el proveedor no tiene régimen asignado en su ficha: te propone uno según el tipo de gasto (mercadería → enajenación de bienes; gastos → locaciones y servicios) y te avisa que lo confirmes.',
+        'Los proveedores del exterior no llevan retención de la RG 830 (son beneficiarios del exterior, es otro régimen) — el sistema los saltea diciendo por qué.',
+        'Al emitir: la factura pasa a "con OP sin pagar" y el PDF se muda solo a esa carpeta (tarda un minuto), y se crea el pendiente de pago en Tesorería para que la plata no se cargue dos veces.',
+        '"Anular" devuelve las facturas a "controlado sin OP" y cancela el pendiente de Tesorería. Pide motivo y queda asentado. Una OP ya pagada no se puede anular desde acá.',
+        '🧪 En modo prueba las OP llevan punto de venta 9999 y NO generan el pendiente en Tesorería, así no ensucian la numeración real ni los pagos.',
+      ],
+    },
+    {
       icon: '📊', titulo: 'Listados',
       desc: 'Dos miradas del mismo período: la de gestión (cuánto se gastó) y la del estudio contable (cuánto crédito fiscal hay).',
       pasos: [

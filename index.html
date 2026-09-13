@@ -267,7 +267,8 @@ function renderTabs(){
     b.textContent = '🧪 AMBIENTE DE PRUEBA — se muestran solo los comprobantes y remitos de test. El histórico real está guardado pero oculto.';
     document.body.prepend(b);
   }
-  const tabs = [['bandeja','📥 Bandeja'],['facturas','📄 Facturas'],['mercaderia','🚚 Mercadería'],
+  const tabs = [['bandeja','📥 Bandeja'],['facturas','📄 Facturas'],['ordenes','💸 Órdenes de pago'],
+                ['mercaderia','🚚 Mercadería'],
                 ['conceptos','📇 Conceptos'],['proveedores','🏢 Proveedores'],
                 ['equivalencias','🔗 Equivalencias'],['listados','📊 Listados'],['config','⚙️ Retenciones']];
   document.getElementById('tabs').innerHTML = tabs.map(([k,t]) =>
@@ -347,8 +348,266 @@ function render(){
   if (tabActual === 'mercaderia') vistaMercaderia();
   if (tabActual === 'conceptos') vistaConceptos();
   if (tabActual === 'proveedores') vistaProveedores();
+  if (tabActual === 'ordenes') vistaOrdenes();
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════
+//  💸 ÓRDENES DE PAGO · punto 4
+//
+//  El circuito: una factura controlada espera OP → se elige el proveedor,
+//  se marcan las facturas a pagar (pueden ser varias, y las NC restan), el
+//  sistema calcula las retenciones que correspondan y muestra el neto a
+//  pagar → al emitir, la factura avanza a "con OP sin pagar" (el PDF se muda
+//  solo) y se crea el pendiente en Tesorería para no cargar la plata dos veces.
+//
+//  🚨 El sistema NUNCA inventa una retención: si al régimen le falta la
+//  alícuota, sale $0 y lo dice. Los avisos se muestran SIEMPRE, antes de emitir.
+// ═══════════════════════════════════════════════════════════════════════
+let OP_PROVS = null, OP_LISTA = null, opSel = null, opDocs = [], opPrep = null;
+
+async function vistaOrdenes(){
+  const c = document.getElementById('cont');
+  c.innerHTML = '<div class="vacio">Cargando…</div>';
+  const [provs, lista] = await Promise.all([
+    sb.rpc('compras_op_proveedores', {p_prueba: MODO_PRUEBA}),
+    sb.rpc('compras_ordenes_listar', {p_desde: null, p_hasta: null, p_prueba: MODO_PRUEBA}),
+  ]);
+  if (provs.error){ c.innerHTML = `<div class="alerta">${esc(provs.error.message)}</div>`; return; }
+  OP_PROVS = provs.data || []; OP_LISTA = lista.data || [];
+  pintarOrdenes();
+}
+
+function pintarOrdenes(){
+  const c = document.getElementById('cont'); if (!c) return;
+  const pend = OP_PROVS.reduce((a,p) => a + Number(p.total||0), 0);
+  c.innerHTML = `
+    <div class="kpis">
+      <div class="kpi"><div class="lbl">Proveedores a pagar</div><div class="val">${OP_PROVS.length}</div>
+        <div class="sub">${OP_PROVS.reduce((a,p)=>a+Number(p.facturas||0),0)} comprobantes controlados</div></div>
+      <div class="kpi"><div class="lbl">Total pendiente de OP</div><div class="val">${platac(pend)}</div>
+        <div class="sub">antes de retenciones</div></div>
+      <div class="kpi" style="border-left-color:var(--info)"><div class="lbl">Órdenes emitidas</div>
+        <div class="val">${OP_LISTA.filter(o=>o.estado!=='anulada').length}</div>
+        <div class="sub">${OP_LISTA.filter(o=>o.estado==='anulada').length} anuladas</div></div>
+    </div>
+
+    <div class="card">
+      <h3 style="font-size:15px;margin-bottom:4px">Facturas esperando orden de pago</h3>
+      <p class="mini" style="margin-bottom:11px">Son los comprobantes ya controlados. Tocá un proveedor para armarle la OP.
+        ${MODO_PRUEBA ? '<b style="color:#92400e">🧪 En prueba: las OP llevan punto de venta 9999 y NO generan el pendiente en Tesorería.</b>' : ''}</p>
+      ${OP_PROVS.length ? `<div style="overflow-x:auto"><table>
+        <thead><tr><th>Proveedor</th><th>CUIT</th><th class="num">Comprob.</th>
+          <th class="num">Total</th><th>Más vieja</th><th></th></tr></thead>
+        <tbody>${OP_PROVS.map(p => `<tr>
+          <td><b>${esc(p.proveedor||'—')}</b></td>
+          <td class="mini">${esc(p.cuit||'')}</td>
+          <td class="num">${p.facturas}</td>
+          <td class="num"><b>${plata(p.total)}</b></td>
+          <td class="mini">${_fecha(p.mas_vieja)}${_diasDesde(p.mas_vieja)}</td>
+          <td class="num"><button class="act" style="font-size:12.5px;padding:6px 11px"
+              onclick="abrirOP('${esc(p.cuit)}')">Armar OP</button></td>
+        </tr>`).join('')}</tbody></table></div>`
+      : '<div class="vacio">No hay comprobantes controlados esperando orden de pago.</div>'}
+    </div>
+
+    <div class="card">
+      <h3 style="font-size:15px;margin-bottom:11px">Órdenes emitidas</h3>
+      ${OP_LISTA.length ? `<div style="overflow-x:auto"><table>
+        <thead><tr><th>Orden</th><th>Fecha</th><th>Proveedor</th><th class="num">Comp.</th>
+          <th class="num">Subtotal</th><th class="num">Retenciones</th><th class="num">A pagar</th>
+          <th>Estado</th><th></th></tr></thead>
+        <tbody>${OP_LISTA.map(o => `<tr${o.estado==='anulada' ? ' style="opacity:.5"' : ''}>
+          <td><b>${esc(o.comprobante)}</b></td>
+          <td class="mini">${_fecha(o.fecha)}</td>
+          <td>${esc((o.proveedor||'').slice(0,30))}</td>
+          <td class="num">${o.comprobantes}</td>
+          <td class="num">${plata(o.subtotal)}</td>
+          <td class="num">${Number(o.retenciones_total) ? plata(o.retenciones_total) : '—'}</td>
+          <td class="num"><b>${plata(o.neto_a_pagar)}</b></td>
+          <td><span class="chip" style="background:${o.estado==='anulada'?'#fee2e2;color:#991b1b':'#dcfce7;color:#166534'}">${esc(o.estado)}</span>
+            ${(o.avisos && o.avisos.length) ? ` <span title="${esc((o.avisos||[]).join(' · '))}">⚠</span>` : ''}</td>
+          <td class="num" style="white-space:nowrap">
+            <button class="act gh" style="font-size:12px;padding:5px 9px" onclick="verOP(${o.id})">Ver</button>
+            ${o.estado!=='anulada' ? `<button class="act gh" style="font-size:12px;padding:5px 9px;color:var(--bad)"
+                onclick="anularOP(${o.id}, '${esc(o.comprobante)}')">Anular</button>` : ''}</td>
+        </tr>`).join('')}</tbody></table></div>`
+      : '<div class="vacio">Todavía no se emitió ninguna orden de pago.</div>'}
+    </div>`;
+}
+
+const _diasDesde = f => {
+  if (!f) return '';
+  const d = Math.floor((Date.now() - new Date(f+'T12:00:00')) / 86400000);
+  return d > 30 ? ` <span style="color:var(--bad)">(${d} días)</span>` : ` <span class="mini">(${d} d)</span>`;
+};
+
+async function abrirOP(cuit){
+  opSel = cuit; opPrep = null;
+  const {data, error} = await sb.rpc('compras_op_candidatos', {p_cuit: cuit, p_prueba: MODO_PRUEBA});
+  if (error){ alert(error.message); return; }
+  opDocs = (data||[]).map(d => d.documento_id);   // por defecto, todas
+  _pintarModalOP(data || []);
+}
+
+function _pintarModalOP(cands){
+  const prov = OP_PROVS.find(p => p.cuit === opSel) || {};
+  openModalP(`
+    <h3 style="margin:0 0 3px">💸 Orden de pago · ${esc(prov.proveedor || opSel)}</h3>
+    <p class="mini" style="margin:0 0 12px">CUIT ${esc(opSel)}${MODO_PRUEBA ? ' · 🧪 prueba (PV 9999, sin pendiente en Tesorería)' : ''}</p>
+
+    <div style="max-height:230px;overflow:auto;border:1px solid var(--bd);border-radius:9px;margin-bottom:12px">
+      <table style="font-size:13px"><thead><tr>
+        <th style="width:34px"></th><th>Fecha</th><th>Comprobante</th><th>Tipo</th><th class="num">Total</th></tr></thead>
+      <tbody>${cands.map(d => `<tr${d.es_nc ? ' style="background:#fef2f2"' : ''}>
+        <td style="text-align:center"><input type="checkbox" data-doc="${d.documento_id}" checked
+             onchange="_opToggle(${d.documento_id}, this.checked)"></td>
+        <td class="mini">${_fecha(d.fecha_emision)}</td>
+        <td>${esc(d.comprobante)}</td>
+        <td class="mini">${esc(d.tipo_gasto||'')}${d.moneda!=='ARS' ? ' · '+esc(d.moneda) : ''}</td>
+        <td class="num"${d.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(d.total)}</td>
+      </tr>`).join('')}</tbody></table>
+    </div>
+
+    <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:12px">
+      <div><label>Fecha de la OP</label><input type="date" id="op-fecha" value="${_hoyISO()}"></div>
+      <div><label>Vence</label><input type="date" id="op-venc" value="${_hoyISO()}"></div>
+      <div style="flex:1;min-width:150px"><label>Medio de pago</label>
+        <input id="op-medio" list="dl-medios" placeholder="transferencia / cheque / efectivo">
+        <datalist id="dl-medios"><option>transferencia</option><option>cheque</option>
+          <option>echeq</option><option>efectivo</option><option>Mercado Pago</option></datalist></div>
+    </div>
+    <label>Observaciones</label>
+    <input id="op-obs" placeholder="opcional" style="margin-bottom:12px">
+
+    <div id="op-calc"><div class="vacio">Calculando retenciones…</div></div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+      <button class="act gh" onclick="cerrarModalP()">Cancelar</button>
+      <button class="act" id="op-emitir" onclick="emitirOP()">Emitir orden de pago</button>
+    </div>`);
+  _opCalcular();
+}
+
+const _hoyISO = () => new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+
+function _opToggle(id, on){
+  opDocs = on ? Array.from(new Set(opDocs.concat([id]))) : opDocs.filter(x => x !== id);
+  _opCalcular();
+}
+
+async function _opCalcular(){
+  const cont = document.getElementById('op-calc'); if (!cont) return;
+  const btn = document.getElementById('op-emitir');
+  if (!opDocs.length){
+    opPrep = null;
+    cont.innerHTML = '<div class="alerta">Marcá al menos un comprobante.</div>';
+    if (btn) btn.disabled = true;
+    return;
+  }
+  cont.innerHTML = '<div class="vacio">Calculando…</div>';
+  const {data, error} = await sb.rpc('compras_op_preparar',
+    {p_cuit: opSel, p_docs: opDocs, p_fecha: document.getElementById('op-fecha')?.value || null,
+     p_prueba: MODO_PRUEBA});
+  if (error){
+    opPrep = null; if (btn) btn.disabled = true;
+    cont.innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return;
+  }
+  opPrep = data; if (btn) btn.disabled = false;
+  const r = data.retenciones || [], av = data.avisos || [];
+  cont.innerHTML = `
+    ${av.length ? `<div class="alerta" style="margin-bottom:10px"><b>Antes de emitir, mirá esto:</b><br>
+       ${av.map(a => '· ' + esc(a)).join('<br>')}</div>` : ''}
+    <table style="font-size:13px"><tbody>
+      <tr><td>Comprobantes (${data.comprobantes})</td><td class="num"><b>${plata(data.subtotal)}</b></td></tr>
+      <tr><td class="mini" style="padding-left:14px">neto sobre el que se calcula</td>
+          <td class="num mini">${plata(data.neto)}</td></tr>
+      ${r.map(x => `<tr>
+        <td>${esc(x.codigo)} · ${esc((x.nombre||'').slice(0,40))}
+          ${x.propuesto ? ' <span class="chip" style="background:#fef3c7;color:#92400e">propuesto</span>' : ''}
+          ${x.alicuota ? ` <span class="mini">${Number(x.alicuota)}%</span>` : ''}
+          ${x.aviso ? `<br><span class="mini" style="color:#b45309">${esc(x.aviso)}</span>` : ''}</td>
+        <td class="num">${Number(x.importe) ? '−' + plata(x.importe) : '—'}</td></tr>`).join('')}
+      <tr style="font-weight:700;border-top:2px solid var(--bd)">
+        <td>Neto a pagar</td><td class="num" style="font-size:16px">${plata(data.neto_a_pagar)}</td></tr>
+    </tbody></table>
+    <p class="mini" style="margin-top:8px">Se va a emitir como <b>OP X ${String(data.punto_venta).padStart(4,'0')}-${String(data.proximo_numero).padStart(8,'0')}</b>.</p>`;
+}
+
+async function emitirOP(){
+  if (!opPrep){ alert('Todavía no se calculó la orden.'); return; }
+  const av = opPrep.avisos || [];
+  const txt = `Emitir la orden de pago de ${opPrep.proveedor}\n\n` +
+    `${opPrep.comprobantes} comprobante(s): ${plata(opPrep.subtotal)}\n` +
+    `Retenciones: ${plata(opPrep.retenciones_total)}\n` +
+    `A pagar: ${plata(opPrep.neto_a_pagar)}\n\n` +
+    (av.length ? `⚠ ${av.length} aviso(s) sin resolver:\n${av.map(a=>'· '+a).join('\n')}\n\n` : '') +
+    (MODO_PRUEBA ? '🧪 Prueba: no se crea el pendiente en Tesorería.\n\n' : 'Se va a crear el pendiente de pago en Tesorería.\n\n') +
+    '¿Confirmás?';
+  if (!confirm(txt)) return;
+  const btn = document.getElementById('op-emitir');
+  if (btn){ btn.disabled = true; btn.textContent = 'Emitiendo…'; }
+  const {data, error} = await sb.rpc('compras_op_emitir', {
+    p_cuit: opSel, p_docs: opDocs,
+    p_fecha: document.getElementById('op-fecha').value || null,
+    p_vencimiento: document.getElementById('op-venc').value || null,
+    p_medio_pago: document.getElementById('op-medio').value || null,
+    p_observaciones: document.getElementById('op-obs').value || null,
+    p_prueba: MODO_PRUEBA });
+  if (error){
+    alert('No se pudo emitir: ' + error.message);
+    if (btn){ btn.disabled = false; btn.textContent = 'Emitir orden de pago'; }
+    return;
+  }
+  cerrarModalP();
+  alert(`${data.comprobante} emitida\n\nA pagar: ${plata(data.neto_a_pagar)}` +
+        (data.pendiente_tesoreria ? '\n\nYa quedó el pendiente cargado en Tesorería.' : '') +
+        '\n\nLos PDF se mudan a CON OP SIN PAGAR en aproximadamente un minuto.');
+  vistaOrdenes();
+}
+
+async function verOP(id){
+  const {data, error} = await sb.rpc('compras_op_detalle', {p_op: id});
+  if (error){ alert(error.message); return; }
+  const o = data.orden, f = data.facturas || [], r = data.retenciones || [];
+  openModalP(`
+    <h3 style="margin:0 0 3px">${esc(o.comprobante)}</h3>
+    <p class="mini" style="margin:0 0 12px">${esc(o.proveedor_nombre||'')} · CUIT ${esc(o.cuit_proveedor||'')} ·
+      ${_fecha(o.fecha)} · emitida por ${esc(o.emitida_por||'')}
+      ${o.estado==='anulada' ? ' · <b style="color:var(--bad)">ANULADA</b>' : ''}</p>
+    ${(o.avisos && o.avisos.length) ? `<div class="alerta" style="margin-bottom:10px">
+      ${o.avisos.map(a => '· ' + esc(a)).join('<br>')}</div>` : ''}
+    <h4 style="font-size:13px;margin:0 0 5px">Comprobantes imputados</h4>
+    <table style="font-size:13px;margin-bottom:12px"><tbody>${f.map(x => `<tr>
+      <td class="mini">${_fecha(x.fecha)}</td>
+      <td>${esc(x.comprobante)}${x.archivo_path ? ` <a href="${_pdfUrl(x.archivo_path)}" target="_blank" rel="noopener">📄</a>` : ''}</td>
+      <td class="num"${x.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(x.total)}</td></tr>`).join('')}
+      <tr style="font-weight:700"><td colspan="2">Subtotal</td><td class="num">${plata(o.subtotal)}</td></tr>
+    </tbody></table>
+    <h4 style="font-size:13px;margin:0 0 5px">Retenciones practicadas</h4>
+    <table style="font-size:13px"><tbody>${r.length ? r.map(x => `<tr>
+      <td>${esc(x.codigo)} · ${esc((x.nombre||'').slice(0,38))}
+        ${x.aviso ? `<br><span class="mini" style="color:#b45309">${esc(x.aviso)}</span>` : ''}</td>
+      <td class="num mini">${x.alicuota ? Number(x.alicuota)+'%' : '—'}</td>
+      <td class="num">${Number(x.importe) ? plata(x.importe) : '—'}</td></tr>`).join('')
+      : '<tr><td colspan="3" class="mini">Sin retenciones.</td></tr>'}
+      <tr style="font-weight:700;border-top:2px solid var(--bd)">
+        <td colspan="2">Neto a pagar</td><td class="num" style="font-size:16px">${plata(o.neto_a_pagar)}</td></tr>
+    </tbody></table>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+      <button class="act gh" onclick="cerrarModalP()">Cerrar</button></div>`);
+}
+
+async function anularOP(id, comp){
+  const motivo = prompt(`Anular ${comp}\n\nLas facturas vuelven a quedar disponibles para armar otra OP` +
+    (MODO_PRUEBA ? '.' : ' y se cancela el pendiente en Tesorería.') + '\n\n¿Por qué la anulás?');
+  if (motivo === null) return;
+  if (!motivo.trim()){ alert('El motivo es obligatorio.'); return; }
+  const {data, error} = await sb.rpc('compras_op_anular', {p_op: id, p_motivo: motivo.trim()});
+  if (error){ alert('No se pudo anular: ' + error.message); return; }
+  alert(`Anulada. ${data.comprobantes_liberados} comprobante(s) volvieron a "controlado sin OP".`);
+  vistaOrdenes();
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 //  🏢 PROVEEDORES · ficha del módulo
@@ -2644,6 +2903,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=15"></script>
+<script src="manual.js?v=16"></script>
 </body>
 </html>
