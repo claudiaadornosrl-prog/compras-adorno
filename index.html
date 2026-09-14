@@ -364,7 +364,7 @@ function render(){
 //  🚨 El sistema NUNCA inventa una retención: si al régimen le falta la
 //  alícuota, sale $0 y lo dice. Los avisos se muestran SIEMPRE, antes de emitir.
 // ═══════════════════════════════════════════════════════════════════════
-let OP_PROVS = null, OP_LISTA = null, opSel = null, opDocs = [], opPrep = null;
+let OP_PROVS = null, OP_LISTA = null, opSel = null, opDocs = [], opPrep = null, opRets = [];
 
 async function vistaOrdenes(){
   const c = document.getElementById('cont');
@@ -443,7 +443,12 @@ const _diasDesde = f => {
 };
 
 async function abrirOP(cuit){
-  opSel = cuit; opPrep = null;
+  opSel = cuit; opPrep = null; opRets = [];
+  // el catálogo de regímenes lo carga la pestaña ⚙️; si nunca la abrieron, acá
+  if (!REGIMENES.length){
+    const rg = await sb.from('compras_regimenes').select('*').order('codigo');
+    REGIMENES = rg.data || [];
+  }
   const {data, error} = await sb.rpc('compras_op_candidatos', {p_cuit: cuit, p_prueba: MODO_PRUEBA});
   if (error){ alert(error.message); return; }
   opDocs = (data||[]).map(d => d.documento_id);   // por defecto, todas
@@ -481,6 +486,9 @@ function _pintarModalOP(cands){
     <input id="op-obs" placeholder="opcional" style="margin-bottom:12px">
 
     <div id="op-calc"><div class="vacio">Calculando retenciones…</div></div>
+    <p class="mini" style="margin:8px 0 0">Los importes de retención se pueden editar. Si ponés uno
+      distinto al calculado, el sistema te va a pedir el motivo: es lo que explica el número en el
+      certificado que se le entrega al proveedor.</p>
 
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
       <button class="act gh" onclick="cerrarModalP()">Cancelar</button>
@@ -514,7 +522,13 @@ async function _opCalcular(){
     cont.innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return;
   }
   opPrep = data; if (btn) btn.disabled = false;
-  const r = data.retenciones || [], av = data.avisos || [], pp = data.pagos_posibles || [];
+  // copia de trabajo: acá es donde se pueden tocar los importes a mano
+  opRets = (data.retenciones || []).map(x => ({
+    codigo: x.codigo, nombre: x.nombre, propuesto: !!x.propuesto,
+    alicuota: x.alicuota, aviso: x.aviso,
+    importe: Number(x.importe || 0), calculado: Number(x.importe || 0),
+    motivo_edicion: '', agregada: false }));
+  const av = data.avisos || [], pp = data.pagos_posibles || [];
   cont.innerHTML = `
     ${pp.length ? `<div class="alerta" style="margin-bottom:10px;border-left:4px solid #b45309">
        <b>⚠ Puede que este pago YA esté hecho.</b><br>
@@ -527,25 +541,119 @@ async function _opCalcular(){
       <tr><td>Comprobantes (${data.comprobantes})</td><td class="num"><b>${plata(data.subtotal)}</b></td></tr>
       <tr><td class="mini" style="padding-left:14px">neto sobre el que se calcula</td>
           <td class="num mini">${plata(data.neto)}</td></tr>
-      ${r.map(x => `<tr>
-        <td>${esc(x.codigo)} · ${esc((x.nombre||'').slice(0,40))}
-          ${x.propuesto ? ' <span class="chip" style="background:#fef3c7;color:#92400e">propuesto</span>' : ''}
-          ${x.alicuota ? ` <span class="mini">${Number(x.alicuota)}%</span>` : ''}
-          ${x.aviso ? `<br><span class="mini" style="color:#b45309">${esc(x.aviso)}</span>` : ''}</td>
-        <td class="num">${Number(x.importe) ? '−' + plata(x.importe) : '—'}</td></tr>`).join('')}
-      <tr style="font-weight:700;border-top:2px solid var(--bd)">
-        <td>Neto a pagar</td><td class="num" style="font-size:16px">${plata(data.neto_a_pagar)}</td></tr>
     </tbody></table>
+    <div id="op-rets"></div>
     <p class="mini" style="margin-top:8px">Se va a emitir como <b>OP X ${String(data.punto_venta).padStart(4,'0')}-${String(data.proximo_numero).padStart(8,'0')}</b>.</p>`;
+  _opPintarRets();
 }
+
+// ── Retenciones editables ──────────────────────────────────────────────
+//  El sistema propone el número, pero quien firma la OP es una persona: si
+//  el régimen todavía no tiene alícuota cargada (⚙️ Retenciones), o el
+//  contador indica otro importe, se pone a mano. 🚨 Todo importe que difiera
+//  de lo calculado EXIGE motivo — el certificado de retención que se le
+//  entrega al proveedor tiene que poder explicar de dónde salió el número.
+//  La base valida igual: el código y el nombre del régimen los pone la DB.
+const _opEditada = r => Math.abs(Number(r.importe||0) - Number(r.calculado||0)) > 0.005;
+const _opTotRet  = () => opRets.reduce((a,r) => a + (Number(r.importe)||0), 0);
+const _opNeto    = () => Number(opPrep?.subtotal || 0) - _opTotRet();
+
+function _opPintarRets(){
+  const cont = document.getElementById('op-rets'); if (!cont) return;
+  const libres = (REGIMENES||[]).filter(r => r.activo && !opRets.some(x => x.codigo === r.codigo));
+  cont.innerHTML = `
+    <table style="font-size:13px"><tbody>
+      ${opRets.length ? opRets.map((r,i) => {
+        const ed = _opEditada(r);
+        return `<tr>
+        <td style="padding-right:10px">${esc(r.codigo)} · ${esc((r.nombre||'').slice(0,42))}
+          ${r.propuesto ? ' <span class="chip" style="background:#fef3c7;color:#92400e">propuesto</span>' : ''}
+          ${r.agregada ? ' <span class="chip" style="background:#e0e7ff;color:#3730a3">agregada</span>' : ''}
+          <span class="chip" id="op-mano-${i}" style="background:#fee2e2;color:#991b1b;${ed?'':'display:none'}">a mano</span>
+          ${r.alicuota ? ` <span class="mini">${Number(r.alicuota)}%</span>` : ''}
+          ${r.aviso ? `<br><span class="mini" style="color:#b45309">${esc(r.aviso)}</span>` : ''}
+          <div id="op-motivo-${i}" style="${ed?'':'display:none'};margin-top:4px">
+            <input id="op-motivo-in-${i}" placeholder="¿Por qué este importe? (va al certificado)"
+                   value="${esc(r.motivo_edicion||'')}" oninput="_opRetMotivo(${i}, this.value)"
+                   style="font-size:12px;padding:4px 7px">
+            <span class="mini">calculado: ${plata(r.calculado)}</span>
+          </div></td>
+        <td class="num" style="white-space:nowrap">−
+          <input type="number" step="0.01" min="0" id="op-imp-${i}" value="${Number(r.importe)||0}"
+                 oninput="_opRetImporte(${i}, this.value)"
+                 style="width:118px;text-align:right;display:inline-block;padding:4px 7px">
+          ${r.agregada
+            ? `<button class="act gh" onclick="_opRetQuitar(${i})" title="Quitar" style="padding:2px 7px;margin-left:3px">✕</button>`
+            : `<button class="act gh" onclick="_opRetReset(${i})" title="Volver a lo calculado" style="padding:2px 7px;margin-left:3px">↺</button>`}
+        </td></tr>`; }).join('')
+        : '<tr><td class="mini">Sin retenciones para este proveedor.</td><td></td></tr>'}
+      ${libres.length ? `<tr><td colspan="2" style="padding-top:6px">
+        <select onchange="_opRetAgregar(this.value); this.value='';"
+                style="font-size:12px;padding:4px 7px;max-width:100%">
+          <option value="">➕ Agregar otra retención…</option>
+          ${libres.map(r => `<option value="${esc(r.codigo)}">${esc(r.codigo)} · ${esc(r.nombre)}</option>`).join('')}
+        </select></td></tr>` : ''}
+      <tr style="font-weight:700;border-top:2px solid var(--bd)">
+        <td>Neto a pagar</td>
+        <td class="num" style="font-size:16px" id="op-neto">${plata(_opNeto())}</td></tr>
+    </tbody></table>`;
+}
+
+function _opRetImporte(i, val){
+  const r = opRets[i]; if (!r) return;
+  r.importe = Math.max(0, Number(String(val).replace(',', '.')) || 0);
+  const ed = _opEditada(r);
+  const chip = document.getElementById('op-mano-' + i);
+  const mot  = document.getElementById('op-motivo-' + i);
+  if (chip) chip.style.display = ed ? '' : 'none';
+  if (mot)  mot.style.display  = ed ? '' : 'none';
+  const neto = document.getElementById('op-neto');
+  if (neto){
+    neto.textContent = plata(_opNeto());
+    neto.style.color = _opNeto() < 0 ? 'var(--bad)' : '';
+  }
+}
+
+function _opRetReset(i){
+  const r = opRets[i]; if (!r) return;
+  r.importe = Number(r.calculado) || 0; r.motivo_edicion = '';
+  const inp = document.getElementById('op-imp-' + i);
+  if (inp) inp.value = r.importe;
+  _opRetImporte(i, r.importe);
+}
+
+function _opRetAgregar(cod){
+  if (!cod) return;
+  const reg = (REGIMENES||[]).find(r => r.codigo === cod); if (!reg) return;
+  opRets.push({codigo: reg.codigo, nombre: reg.nombre, propuesto: false,
+    alicuota: null, aviso: null, importe: 0, calculado: 0,
+    motivo_edicion: '', agregada: true});
+  _opPintarRets();
+}
+
+function _opRetMotivo(i, val){ if (opRets[i]) opRets[i].motivo_edicion = val; }
+function _opRetQuitar(i){ opRets.splice(i,1); _opPintarRets(); }
 
 async function emitirOP(){
   if (!opPrep){ alert('Todavía no se calculó la orden.'); return; }
   const av = opPrep.avisos || [];
+  const editadas = opRets.filter(_opEditada);
+  const sinMotivo = editadas.find(r => !(r.motivo_edicion||'').trim());
+  if (sinMotivo){
+    alert(`Cambiaste a mano la retención de ${sinMotivo.codigo}.\n\n` +
+          'Escribí el motivo: queda guardado y es lo que explica el número en el ' +
+          'certificado de retención que se le entrega al proveedor.');
+    document.getElementById('op-motivo-in-' + opRets.indexOf(sinMotivo))?.focus();
+    return;
+  }
+  if (_opNeto() < 0){ alert('Las retenciones superan el total de la orden.'); return; }
   const txt = `Emitir la orden de pago de ${opPrep.proveedor}\n\n` +
     `${opPrep.comprobantes} comprobante(s): ${plata(opPrep.subtotal)}\n` +
-    `Retenciones: ${plata(opPrep.retenciones_total)}\n` +
-    `A pagar: ${plata(opPrep.neto_a_pagar)}\n\n` +
+    `Retenciones: ${plata(_opTotRet())}` +
+    (editadas.length ? ` (${editadas.length} puesta(s) a mano)` : '') + '\n' +
+    `A pagar: ${plata(_opNeto())}\n\n` +
+    (editadas.length ? editadas.map(r =>
+       `✏ ${r.codigo}: ${plata(r.importe)} en vez de ${plata(r.calculado)} — ${r.motivo_edicion.trim()}`).join('\n') + '\n\n' : '') +
     (av.length ? `⚠ ${av.length} aviso(s) sin resolver:\n${av.map(a=>'· '+a).join('\n')}\n\n` : '') +
     (MODO_PRUEBA ? '🧪 Prueba: no se crea el pendiente en Tesorería.\n\n' : 'Se va a crear el pendiente de pago en Tesorería.\n\n') +
     '¿Confirmás?';
@@ -558,6 +666,8 @@ async function emitirOP(){
     p_vencimiento: document.getElementById('op-venc').value || null,
     p_medio_pago: document.getElementById('op-medio').value || null,
     p_observaciones: document.getElementById('op-obs').value || null,
+    p_retenciones: opRets.map(r => ({codigo: r.codigo, importe: Number(r.importe)||0,
+                                     motivo_edicion: (r.motivo_edicion||'').trim() || null})),
     p_prueba: MODO_PRUEBA });
   if (error){
     alert('No se pudo emitir: ' + error.message);
@@ -595,13 +705,18 @@ async function verOP(id){
     <h4 style="font-size:13px;margin:0 0 5px">Retenciones practicadas</h4>
     <table style="font-size:13px"><tbody>${r.length ? r.map(x => `<tr>
       <td>${esc(x.codigo)} · ${esc((x.nombre||'').slice(0,38))}
-        ${x.aviso ? `<br><span class="mini" style="color:#b45309">${esc(x.aviso)}</span>` : ''}</td>
-      <td class="num mini">${x.alicuota ? Number(x.alicuota)+'%' : '—'}</td>
+        ${x.editado ? ' <span class="chip" style="background:#fee2e2;color:#991b1b">a mano</span>' : ''}
+        ${x.aviso ? `<br><span class="mini" style="color:#b45309">${esc(x.aviso)}</span>` : ''}
+        ${x.editado ? `<br><span class="mini">el sistema había calculado ${plata(x.calculado)} · motivo: ${esc(x.motivo_edicion||'—')}</span>` : ''}</td>
+      <td class="num mini">${x.alicuota ? Number(x.alicuota)+'%' : '—'}${x.editado ? ' <span title="alícuota efectiva que resulta del importe puesto a mano">*</span>' : ''}</td>
       <td class="num">${Number(x.importe) ? plata(x.importe) : '—'}</td></tr>`).join('')
       : '<tr><td colspan="3" class="mini">Sin retenciones.</td></tr>'}
       <tr style="font-weight:700;border-top:2px solid var(--bd)">
         <td colspan="2">Neto a pagar</td><td class="num" style="font-size:16px">${plata(o.neto_a_pagar)}</td></tr>
     </tbody></table>
+    ${o.estado === 'emitida' ? `<p class="mini" style="margin-top:8px">Una orden emitida no se edita:
+      si algún importe quedó mal, anulala y volvé a emitirla — así el pendiente de Tesorería
+      y el certificado quedan diciendo lo mismo.</p>` : ''}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
       <button class="act gh" onclick="cerrarModalP()">Cerrar</button></div>`);
 }
@@ -1557,7 +1672,7 @@ async function cargarListadosEstudio(){
     // SOLO los de test y en definitivo SOLO los reales. Nunca se mezclan.
     sb.rpc('compras_listado_iva',          {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA}),
     sb.rpc('compras_listado_percepciones', {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA}),
-    sb.rpc('compras_listado_retenciones',  {p_desde: listPer.desde, p_hasta: listPer.hasta}),
+    sb.rpc('compras_listado_retenciones',  {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA}),
     sb.rpc('compras_listado_percepciones_detalle', {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA}),
   ]);
   if (iva.error){ c.innerHTML = `<div class="alerta">${esc(iva.error.message)}</div>`; return; }
@@ -1707,14 +1822,20 @@ function _pintarEstudio(){
       ${LIST_RET && LIST_RET.length ? `<div style="overflow-x:auto"><table>
         <thead><tr><th>Quincena</th><th>Fecha</th><th>OP</th><th>Proveedor</th><th>Régimen</th>
           <th class="num">Base</th><th class="num">Alíc.</th><th class="num">Retenido</th><th>Certificado</th></tr></thead>
-        <tbody>${LIST_RET.map(r=>`<tr><td class="mini">${esc(r.quincena)}</td><td class="mini">${_fecha(r.fecha)}</td>
-          <td>#${r.orden_pago_id}</td><td>${esc(r.proveedor||'')}</td>
-          <td class="mini">${esc(r.regimen_codigo||'')} ${esc(r.regimen_nombre||'')}</td>
+        <tbody>${LIST_RET.map(r=>`<tr${r.editado ? ' style="background:#fff7ed"' : ''}>
+          <td class="mini">${esc(r.quincena)}</td><td class="mini">${_fecha(r.fecha)}</td>
+          <td>${esc(r.orden_pago || ('#'+r.orden_pago_id))}</td><td>${esc(r.proveedor||'')}</td>
+          <td class="mini">${esc(r.regimen_codigo||'')} ${esc(r.regimen_nombre||'')}
+            ${r.editado ? `<br><span class="chip" style="background:#fee2e2;color:#991b1b">a mano</span>
+              <span class="mini">${esc(r.motivo_edicion||'')}</span>` : ''}</td>
           <td class="num">${_n0(r.base_calculo)}</td><td class="num">${Number(r.alicuota||0)}%</td>
           <td class="num"><b>${plata(r.importe)}</b></td><td class="mini">${esc(r.certificado_nro||'—')}</td></tr>`).join('')}
-        </tbody></table></div>`
-      : `<div class="vacio">Todavía no hay retenciones: se practican al emitir órdenes de pago,
-           que es el punto que sigue del módulo.</div>`}
+        </tbody></table></div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button class="act gh" onclick="_bajarRetenciones()">⬇ Retenciones quincenal (CSV)</button></div>
+        ${LIST_RET.some(r=>r.editado) ? `<p class="mini" style="margin-top:8px">Las filas naranjas tienen
+          el importe puesto a mano: el motivo es lo que explica el número en el certificado.</p>` : ''}`
+      : `<div class="vacio">Todavía no hay retenciones en este período: se practican al emitir órdenes de pago.</div>`}
     </div>`;
 }
 
@@ -1784,6 +1905,24 @@ function _bajarPercepciones(){
 }
 
 const _cuitFmt = c => (c && /^\d{11}$/.test(c)) ? `${c.slice(0,2)}-${c.slice(2,10)}-${c.slice(10)}` : (c || '');
+
+// El estudio recibe esto por quincena ("Comprobantes orden de pago con detalle").
+// Va también la marca de edición: si el número lo puso una persona, el listado
+// que sostiene el certificado tiene que decirlo y decir por qué.
+function _bajarRetenciones(){
+  if (!LIST_RET || !LIST_RET.length){ alert('No hay retenciones en el período.'); return; }
+  const enc = ['Quincena','Fecha','Orden de pago','CUIT','Proveedor','Régimen','Descripción',
+               'Impuesto','Base','Alícuota','Retenido','Certificado','Puesto a mano','Motivo'];
+  const filas = [enc.join(';')].concat(LIST_RET.map(r => [
+    _csvTxt(r.quincena), _fecha(r.fecha),
+    _csvTxt(r.orden_pago || ('#' + r.orden_pago_id)),
+    _csvTxt(_cuitFmt(r.cuit)), _csvTxt(r.proveedor),
+    _csvTxt(r.regimen_codigo), _csvTxt(r.regimen_nombre), _csvTxt(r.impuesto),
+    _csvNum(r.base_calculo), _csvNum(r.alicuota), _csvNum(r.importe),
+    _csvTxt(r.certificado_nro), r.editado ? 'SÍ' : '', _csvTxt(r.motivo_edicion),
+  ].join(';')));
+  _csvBajar(`Retenciones practicadas ${listPer.desde} a ${listPer.hasta}.csv`, filas);
+}
 
 function _bajarIvaCompras(){
   if (!LIST_IVA || !LIST_IVA.length){ alert('No hay comprobantes en el período.'); return; }
@@ -2911,6 +3050,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=17"></script>
+<script src="manual.js?v=18"></script>
 </body>
 </html>
