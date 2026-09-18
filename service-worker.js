@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v33-retenciones-a-mano';
+const CACHE_VERSION = 'compras-v34-parametros-retencion';
 const ASSETS = ['./', './index.html', './manual.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

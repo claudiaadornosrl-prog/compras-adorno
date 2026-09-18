@@ -2010,7 +2010,9 @@ async function vistaConfig(){
   const {data, error} = await sb.from('compras_regimenes').select('*').order('impuesto').order('codigo');
   if (error){ c.innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return; }
   REGIMENES = data || [];
-  const faltan = REGIMENES.filter(r => r.activo && r.alicuota == null).length;
+  const tieneEscala = r => Array.isArray(r.escala) && r.escala.length > 0;
+  const faltan = REGIMENES.filter(r => r.activo && r.alicuota == null && !tieneEscala(r)).length;
+  const inactivos = REGIMENES.filter(r => !r.activo).length;
 
   c.innerHTML = `
     ${faltan ? `<div class="alerta">⚠ Hay ${faltan} régimen(es) sin alícuota cargada. Hasta que los completes,
@@ -2018,9 +2020,10 @@ async function vistaConfig(){
     <div class="card">
       <h3 style="font-size:16px;margin-bottom:4px">Regímenes de retención y percepción</h3>
       <p class="mini" style="margin-bottom:12px">
-        Estos son los regímenes que usan hoy, sacados del histórico del Dragonfish. Cargá la alícuota y el mínimo
-        que te pase el estudio. <b>El mínimo no imponible se computa sobre el acumulado del mes por proveedor</b>
+        Parámetros tomados del Dragonfish (los que aplica hoy administración, RG 830). Si el estudio informa
+        un cambio, se corrige acá. <b>El mínimo no imponible se computa sobre el acumulado del mes por proveedor</b>
         cuando la casilla está tildada — así, si le pagás tres facturas en el mes, el mínimo se descuenta una sola vez.
+        ${inactivos ? `Los regímenes atenuados están <b>inactivos</b>: el Dragonfish no los practica hace años y no se proponen en ninguna orden de pago.` : ''}
       </p>
       <div style="overflow-x:auto"><table>
         <thead><tr>
@@ -2028,12 +2031,25 @@ async function vistaConfig(){
           <th class="num">Mínimo no imponible</th><th class="num">Retención mínima</th>
           <th>Base</th><th style="text-align:center">Acum. mes</th><th></th>
         </tr></thead>
-        <tbody>${REGIMENES.map(r => `<tr>
-          <td><b>${esc(r.codigo)}</b><br><span class="mini">${esc(r.jurisdiccion||'')}</span></td>
+        <tbody>${REGIMENES.map(r => `<tr style="${r.activo ? '' : 'opacity:.5'}">
+          <td><b>${esc(r.codigo)}</b><br><span class="mini">${esc(r.jurisdiccion||'')}</span>
+              ${r.activo ? '' : '<br><span class="mini" style="color:#b91c1c">inactivo</span>'}</td>
           <td style="max-width:280px">${esc(r.nombre)}
-              ${r.notas ? `<br><span class="mini">${esc(r.notas)}</span>` : ''}</td>
-          <td class="num"><input type="number" step="0.0001" style="width:88px;text-align:right"
-                 id="al-${r.id}" value="${r.alicuota ?? ''}" placeholder="—"></td>
+              ${r.notas ? `<br><span class="mini">${esc(r.notas)}</span>` : ''}
+              ${tieneEscala(r) ? `<details style="margin-top:4px"><summary class="mini" style="cursor:pointer">
+                  Escala progresiva · ${r.escala.length} tramos (sobre el neto menos el mínimo)</summary>
+                  <table style="font-size:12px;margin-top:4px"><thead><tr>
+                    <th class="num">Más de</th><th class="num">Hasta</th><th class="num">Fijo</th><th class="num">+ % s/exced.</th>
+                  </tr></thead><tbody>${r.escala.map(t => `<tr>
+                    <td class="num">${plata(t.mayor_a)}</td><td class="num">${t.hasta == null ? '∞' : plata(t.hasta)}</td>
+                    <td class="num">${plata(t.fijo)}</td><td class="num">${t.porcentaje} %</td></tr>`).join('')}
+                  </tbody></table>
+                  <span class="mini">La escala se edita en la base (columna <code>escala</code>), no desde acá.</span>
+                </details>` : ''}</td>
+          <td class="num">${tieneEscala(r)
+              ? '<span class="mini">escala</span>'
+              : `<input type="number" step="0.0001" style="width:88px;text-align:right"
+                 id="al-${r.id}" value="${r.alicuota ?? ''}" placeholder="—">`}</td>
           <td class="num"><input type="number" step="0.01" style="width:120px;text-align:right"
                  id="mn-${r.id}" value="${r.minimo_no_imponible ?? ''}" placeholder="—"></td>
           <td class="num"><input type="number" step="0.01" style="width:100px;text-align:right"
@@ -2061,9 +2077,12 @@ async function vistaConfig(){
 }
 
 async function guardarRegimen(id){
-  const val = x => { const v = document.getElementById(x + '-' + id).value; return v === '' ? null : Number(v); };
+  const val = x => { const el = document.getElementById(x + '-' + id); if (!el) return null;
+                     const v = el.value; return v === '' ? null : Number(v); };
+  const reg = REGIMENES.find(r => r.id === id) || {};
   const {error} = await sb.from('compras_regimenes').update({
-    alicuota:            val('al'),
+    // con escala progresiva no hay alícuota única: se conserva null y manda la escala
+    alicuota:            (Array.isArray(reg.escala) && reg.escala.length) ? null : val('al'),
     minimo_no_imponible: val('mn'),
     minimo_retencion:    val('mr'),
     base:            document.getElementById('ba-' + id).value,
@@ -3050,6 +3069,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=18"></script>
+<script src="manual.js?v=19"></script>
 </body>
 </html>
