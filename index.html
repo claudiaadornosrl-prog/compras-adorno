@@ -2351,10 +2351,11 @@ async function vistaMercaderia(){
         <div class="val">${n('sin_remito').length}</div><div class="sub">no se pueden controlar</div></div>
     </div>
     ${REM_ESP.length ? `<div class="card" style="border-left:4px solid var(--info)">
-      <h3 style="font-size:15px;margin-bottom:6px">📥 Mercadería por recibir · ${REM_ESP.length}</h3>
-      <p class="mini" style="margin-bottom:9px">Remitos <b>anunciados</b> (por la factura o por el PDF del remito) que ningún local
-        confirmó todavía. <b>El stock se mueve UNA sola vez, cuando el local recibe</b>: al confirmar se genera el TXT
-        para importar en el Dragonfish. Un renglón sin SKU frena la recepción — se resuelve en 🔗 Equivalencias.</p>
+      <h3 style="font-size:15px;margin-bottom:6px">📥 Remitos para importar al Dragonfish · ${REM_ESP.length}</h3>
+      <p class="mini" style="margin-bottom:9px">Remitos <b>anunciados</b> por la factura o por el PDF del remito. Mientras el stock viva en el
+        Dragonfish, el módulo solo <b>genera el TXT</b>: se importa allá como remito de compra y el tránsito, la recepción y el
+        stock los sigue haciendo el Dragon. Un renglón sin SKU frena el TXT — se resuelve en 🔗 Equivalencias.
+        El TXT se puede volver a bajar (queda registrado cuándo), pero <b>importalo una sola vez</b>.</p>
       <div style="overflow-x:auto"><table>
         <thead><tr><th>Remito</th><th>Proveedor</th><th>Fecha</th><th>Factura</th><th>Destino</th>
           <th class="num">Renglones</th><th>Origen</th><th></th></tr></thead>
@@ -2370,7 +2371,8 @@ async function vistaMercaderia(){
           <td class="num" style="white-space:nowrap">
             ${!r.factura?`<button class="act gh" style="font-size:12px;padding:4px 9px" onclick="asociarRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">🔗</button> `:''}
             <button class="act" style="font-size:12px;padding:4px 9px" ${(!r.renglones||r.sin_sku)?'disabled title="Faltan renglones o SKUs"':''}
-              onclick="recibirRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero},'${esc(r.local_destino||'')}')">📥 Recibir</button></td>
+              title="${r.txt_generado_at?'TXT ya generado el '+fechaCorta(r.txt_generado_at)+' — volver a bajar':'Generar el TXT para el importador'}"
+              onclick="txtRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero},'${esc(r.local_destino||'')}')">${r.txt_generado_at?'⬇ TXT ✓':'⬇ TXT'}</button></td>
         </tr>`).join('')}</tbody></table></div>
     </div>` : ''}
     ${REM_SIN.length ? `<div class="card">
@@ -2442,8 +2444,24 @@ async function asociarRemito(cuit, pv, num){
 let remitoLineas = [], SUCS = [], REM_ESP = [];
 
 // ── Recepción (20-sep) · DISENO_REMITOS_STOCK.md ─────────────────────────
-// El local confirma lo que llegó → el remito pasa a 'recibido' → TXT para el
-// importador del Dragonfish. La puerta es la RPC (SKUs resueltos, local, no dos veces).
+// 21-sep (JP): mientras el stock viva en el Dragon, el módulo SOLO genera el TXT
+// (no "recibe"). Pide el local si falta y baja el archivo. La puerta es la RPC
+// (SKUs resueltos, local válido). compras_stock_en_dragon() en la base decide
+// si el TXT exige recibir o no.
+async function txtRemito(cuit, pv, num, local){
+  const locales = (SUCS.length ? SUCS : [{clave:'alcorta'},{clave:'unicenter'},{clave:'oficina'}]).filter(x => x.activo !== false).map(x => x.clave);
+  if (!local){
+    local = (prompt(`¿A qué base va la mercadería del remito ${pv}-${num}?\n(${locales.join(' / ')})`) || '').trim().toLowerCase();
+    if (!local) return;
+    if (!locales.includes(local)){ alert('Local inválido. Opciones: ' + locales.join(', ')); return; }
+    const {error} = await sb.rpc('compras_remito_set_local', {p_cuit: cuit, p_punto_venta: pv, p_numero: num, p_local: local});
+    if (error){ alert('No se pudo guardar el local: ' + error.message); return; }
+  }
+  await descargarTxtRemito(cuit, pv, num);
+  vistaMercaderia();
+}
+
+// Recepción real (cuando el módulo pase a mover stock, sin Dragon). Hoy no tiene botón.
 async function recibirRemito(cuit, pv, num, local){
   const locales = (SUCS.length ? SUCS : [{clave:'alcorta'},{clave:'unicenter'},{clave:'oficina'}]).filter(x => x.activo !== false).map(x => x.clave);
   if (!local){
@@ -2460,14 +2478,14 @@ async function recibirRemito(cuit, pv, num, local){
 
 async function descargarTxtRemito(cuit, pv, num){
   const {data, error} = await sb.rpc('compras_remito_txt', {p_cuit: cuit, p_punto_venta: pv, p_numero: num});
-  if (error){ alert('Recibido ✅, pero el TXT no se pudo generar: ' + error.message); return false; }
+  if (error){ alert('El TXT no se pudo generar: ' + error.message); return false; }
   const blob = new Blob([data.contenido], {type:'text/plain'});
   const aEl = document.createElement('a');
   aEl.href = URL.createObjectURL(blob);
   aEl.download = data.nombre;
   aEl.click();
   URL.revokeObjectURL(aEl.href);
-  alert(`Remito recibido ✅ · TXT descargado: ${data.nombre}\n${data.lineas} renglones · ${data.unidades} unidades · destino ${data.destino}\n\nImportalo en el Dragonfish UNA sola vez.`);
+  alert(`TXT descargado: ${data.nombre}\n${data.lineas} renglones · ${data.unidades} unidades · destino ${data.destino}\n\nImportalo en el Dragonfish UNA sola vez.`);
   return true;
 }
 
@@ -3117,6 +3135,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=20"></script>
+<script src="manual.js?v=21"></script>
 </body>
 </html>
