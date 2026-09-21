@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v37-destino-y-txt-proveedor';
+const CACHE_VERSION = 'compras-v38-op-pagos-y-calculo';
 const ASSETS = ['./', './index.html', './manual.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

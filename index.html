@@ -129,6 +129,11 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 #ctrl-overlay .c-chk,#map-overlay .c-chk,#res-overlay .c-chk,#merc-overlay .c-chk{flex-direction:row!important;align-items:center;gap:6px!important;font-size:13px!important;color:var(--tx)!important;}
 #ctrl-overlay .c-pie,#map-overlay .c-pie,#res-overlay .c-pie,#merc-overlay .c-pie,#sf-overlay .c-pie{display:flex;gap:8px;align-items:center;padding:12px 17px;border-top:1px solid var(--bd);
   background:#f8fafc;border-radius:0 0 14px 14px;position:sticky;bottom:0;}
+.op-tip{position:relative;cursor:help;border-bottom:1px dotted currentColor}
+.op-tip .op-tipbox{display:none;position:absolute;left:0;top:calc(100% + 4px);z-index:60;background:#1f2937;color:#f9fafb;
+  border-radius:9px;padding:9px 11px;font-size:12px;line-height:1.45;width:min(420px,80vw);box-shadow:0 8px 24px rgba(0,0,0,.25);white-space:normal;text-align:left;font-weight:400}
+.op-tip:hover .op-tipbox,.op-tip.abierto .op-tipbox{display:block}
+.op-tip .op-tipbox div+div{margin-top:3px;padding-top:3px;border-top:1px solid rgba(255,255,255,.12)}
 </style>
 </head>
 <body>
@@ -364,7 +369,7 @@ function render(){
 //  🚨 El sistema NUNCA inventa una retención: si al régimen le falta la
 //  alícuota, sale $0 y lo dice. Los avisos se muestran SIEMPRE, antes de emitir.
 // ═══════════════════════════════════════════════════════════════════════
-let OP_PROVS = null, OP_LISTA = null, opSel = null, opDocs = [], opPrep = null, opRets = [];
+let OP_PROVS = null, OP_LISTA = null, opSel = null, opDocs = [], opPrep = null, opRets = [], opPagos = [], OP_CUENTAS = null;
 
 async function vistaOrdenes(){
   const c = document.getElementById('cont');
@@ -425,7 +430,7 @@ function pintarOrdenes(){
           <td class="num">${plata(o.subtotal)}</td>
           <td class="num">${Number(o.retenciones_total) ? plata(o.retenciones_total) : '—'}</td>
           <td class="num"><b>${plata(o.neto_a_pagar)}</b></td>
-          <td><span class="chip" style="background:${o.estado==='anulada'?'#fee2e2;color:#991b1b':'#dcfce7;color:#166534'}">${esc(o.estado)}</span>
+          <td><span class="chip" style="background:${o.estado==='anulada'?'#fee2e2;color:#991b1b':o.estado==='pago_parcial'?'#fef3c7;color:#92400e':o.estado==='pagada'?'#dcfce7;color:#166534':'#e0e7ff;color:#3730a3'}">${esc(o.estado==='pago_parcial'?'pago parcial':o.estado)}</span>${o.medio_pago ? ` <span class="mini">${esc(o.medio_pago)}</span>` : ''}
             ${(o.avisos && o.avisos.length) ? ` <span title="${esc((o.avisos||[]).join(' · '))}">⚠</span>` : ''}</td>
           <td class="num" style="white-space:nowrap">
             <button class="act gh" style="font-size:12px;padding:5px 9px" onclick="verOP(${o.id})">Ver</button>
@@ -443,7 +448,7 @@ const _diasDesde = f => {
 };
 
 async function abrirOP(cuit){
-  opSel = cuit; opPrep = null; opRets = [];
+  opSel = cuit; opPrep = null; opRets = []; opPagos = [];
   // el catálogo de regímenes lo carga la pestaña ⚙️; si nunca la abrieron, acá
   if (!REGIMENES.length){
     const rg = await sb.from('compras_regimenes').select('*').order('codigo');
@@ -477,11 +482,9 @@ function _pintarModalOP(cands){
     <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:12px">
       <div><label>Fecha de la OP</label><input type="date" id="op-fecha" value="${_hoyISO()}"></div>
       <div><label>Vence</label><input type="date" id="op-venc" value="${_hoyISO()}"></div>
-      <div style="flex:1;min-width:150px"><label>Medio de pago</label>
-        <input id="op-medio" list="dl-medios" placeholder="transferencia / cheque / efectivo">
-        <datalist id="dl-medios"><option>transferencia</option><option>cheque</option>
-          <option>echeq</option><option>efectivo</option><option>Mercado Pago</option></datalist></div>
     </div>
+    <datalist id="dl-medios"><option>transferencia</option><option>cheque</option>
+      <option>echeq</option><option>efectivo</option><option>Mercado Pago</option></datalist>
     <label>Observaciones</label>
     <input id="op-obs" placeholder="opcional" style="margin-bottom:12px">
 
@@ -527,7 +530,14 @@ async function _opCalcular(){
     codigo: x.codigo, nombre: x.nombre, propuesto: !!x.propuesto,
     alicuota: x.alicuota, aviso: x.aviso,
     importe: Number(x.importe || 0), calculado: Number(x.importe || 0),
-    motivo_edicion: '', agregada: false }));
+    motivo_edicion: '', agregada: false,
+    calculo: Array.isArray(x.calculo) ? x.calculo : [] }));
+  if (!opPagos.length) opPagos = [{medio: '', importe: 0, cuenta_id: null, cheque_numero: '', cheque_banco: '', cheque_fecha: '', notas: ''}];
+  if (opPagos.length === 1) opPagos[0].importe = Math.round(_opNeto() * 100) / 100;
+  if (OP_CUENTAS === null){
+    const cu = await sb.from('tesoreria_cuentas').select('id,nombre,tipo,moneda,local').eq('activa', true).order('orden_display');
+    OP_CUENTAS = cu.error ? [] : (cu.data || []);
+  }
   const av = data.avisos || [], pp = data.pagos_posibles || [];
   cont.innerHTML = `
     ${pp.length ? `<div class="alerta" style="margin-bottom:10px;border-left:4px solid #b45309">
@@ -543,8 +553,93 @@ async function _opCalcular(){
           <td class="num mini">${plata(data.neto)}</td></tr>
     </tbody></table>
     <div id="op-rets"></div>
+    <div id="op-pagos" style="margin-top:12px"></div>
     <p class="mini" style="margin-top:8px">Se va a emitir como <b>OP X ${String(data.punto_venta).padStart(4,'0')}-${String(data.proximo_numero).padStart(8,'0')}</b>.</p>`;
   _opPintarRets();
+  _opPintarPagos();
+}
+
+// ── Cálculo de la retención, a la vista ────────────────────────────────
+//  La RPC devuelve los pasos en castellano (calculo[]) — el front solo los
+//  muestra. Así lo que se lee al pasar el mouse es EXACTAMENTE lo que se
+//  calculó, y en la OP emitida queda guardado tal cual.
+function _opTip(lineas, texto){
+  const ls = Array.isArray(lineas) ? lineas.filter(Boolean) : [];
+  if (!ls.length) return esc(texto);
+  return `<span class="op-tip" title="${esc(ls.join('\n'))}" onclick="this.classList.toggle('abierto');event.stopPropagation()">${esc(texto)}
+    <span class="op-tipbox">${ls.map(l => `<div>${esc(l)}</div>`).join('')}</span></span>`;
+}
+
+// ── Medios de pago: uno o varios ───────────────────────────────────────
+//  Una OP puede pagarse parte por transferencia, parte con cheque, parte en
+//  efectivo. Cada fila es un medio con su importe; la suma tiene que dar el
+//  neto a pagar (la RPC lo vuelve a controlar). Fuera de prueba, cada medio
+//  crea SU pendiente en Tesorería, así el banco concilia cada egreso solo.
+const _opSumPagos = () => opPagos.reduce((a,p) => a + (Number(p.importe)||0), 0);
+const _opEsCheque = m => /cheq|echeq/i.test(m||'');
+
+function _opPintarPagos(){
+  const cont = document.getElementById('op-pagos'); if (!cont) return;
+  const neto = _opNeto(), suma = _opSumPagos(), dif = Math.round((neto - suma)*100)/100;
+  const ctas = OP_CUENTAS || [];
+  cont.innerHTML = `
+    <h4 style="font-size:13px;margin:0 0 5px">Medio de pago${opPagos.length>1 ? 's' : ''}</h4>
+    ${opPagos.map((p,i) => `
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px;padding:6px 8px;border:1px solid var(--bd);border-radius:9px">
+        <div style="flex:1;min-width:130px"><label>Medio</label>
+          <input list="dl-medios" value="${esc(p.medio||'')}" placeholder="transferencia / cheque / efectivo"
+                 oninput="_opPagoSet(${i},'medio',this.value)" style="font-size:12.5px;padding:5px 7px"></div>
+        <div style="width:140px"><label>Importe</label>
+          <input type="number" step="0.01" min="0" value="${Number(p.importe)||0}" ${opPagos.length===1 ? 'readonly title="Con un solo medio, el importe es el neto a pagar"' : ''}
+                 oninput="_opPagoSet(${i},'importe',this.value)" style="text-align:right;font-size:12.5px;padding:5px 7px"></div>
+        ${ctas.length ? `<div style="min-width:150px"><label>Cuenta</label>
+          <select onchange="_opPagoSet(${i},'cuenta_id',this.value)" style="font-size:12.5px;padding:5px 7px">
+            <option value="">—</option>
+            ${ctas.map(c => `<option value="${c.id}" ${String(p.cuenta_id||'')===String(c.id)?'selected':''}>${esc(c.nombre)}</option>`).join('')}
+          </select></div>` : ''}
+        ${_opEsCheque(p.medio) ? `
+          <div style="width:110px"><label>N° cheque</label><input value="${esc(p.cheque_numero||'')}" oninput="_opPagoSet(${i},'cheque_numero',this.value)" style="font-size:12.5px;padding:5px 7px"></div>
+          <div style="width:110px"><label>Banco</label><input value="${esc(p.cheque_banco||'')}" oninput="_opPagoSet(${i},'cheque_banco',this.value)" style="font-size:12.5px;padding:5px 7px"></div>
+          <div style="width:135px"><label>Fecha de pago</label><input type="date" value="${esc(p.cheque_fecha||'')}" onchange="_opPagoSet(${i},'cheque_fecha',this.value)" style="font-size:12.5px;padding:5px 7px"></div>` : ''}
+        ${opPagos.length>1 ? `<button class="act gh" onclick="_opPagoQuitar(${i})" title="Quitar este medio" style="padding:4px 8px">✕</button>` : ''}
+      </div>`).join('')}
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+      <button class="act gh" style="font-size:12px;padding:5px 9px" onclick="_opPagoAgregar()">➕ Otro medio de pago</button>
+      <span class="mini" id="op-pagos-dif" style="${Math.abs(dif) > 0.005 ? 'color:var(--bad);font-weight:700' : 'color:var(--ok,#166534)'}">
+        ${opPagos.length>1 ? (Math.abs(dif) > 0.005
+            ? (dif > 0 ? `faltan asignar ${plata(dif)}` : `sobran ${plata(-dif)}`) + ` · asignado ${plata(suma)} de ${plata(neto)}`
+            : `✓ ${plata(suma)} repartidos en ${opPagos.length} medios`) : ''}
+      </span>
+    </div>`;
+}
+function _opPagoSet(i, campo, val){
+  const p = opPagos[i]; if (!p) return;
+  if (campo === 'importe') p.importe = Math.max(0, Number(String(val).replace(',', '.')) || 0);
+  else if (campo === 'cuenta_id') p.cuenta_id = val ? Number(val) : null;
+  else p[campo] = val;
+  if (campo === 'medio' || campo === 'importe'){
+    // el medio decide si aparecen los campos del cheque; el importe mueve el "faltan"
+    if (campo === 'medio'){ const era = !!p._chq, es = _opEsCheque(val); p._chq = es; if (era !== es) { _opPintarPagos(); return; } }
+    const d = document.getElementById('op-pagos-dif');
+    if (d && opPagos.length > 1){
+      const neto = _opNeto(), suma = _opSumPagos(), dif = Math.round((neto - suma)*100)/100;
+      d.style.cssText = Math.abs(dif) > 0.005 ? 'color:var(--bad);font-weight:700' : 'color:var(--ok,#166534)';
+      d.textContent = Math.abs(dif) > 0.005
+        ? (dif > 0 ? `faltan asignar ${plata(dif)}` : `sobran ${plata(-dif)}`) + ` · asignado ${plata(suma)} de ${plata(neto)}`
+        : `✓ ${plata(suma)} repartidos en ${opPagos.length} medios`;
+    }
+  }
+}
+function _opPagoAgregar(){
+  // el nuevo medio arranca con lo que falta asignar
+  const resto = Math.round((_opNeto() - _opSumPagos())*100)/100;
+  opPagos.push({medio: '', importe: resto > 0 ? resto : 0, cuenta_id: null, cheque_numero: '', cheque_banco: '', cheque_fecha: '', notas: ''});
+  _opPintarPagos();
+}
+function _opPagoQuitar(i){
+  opPagos.splice(i,1);
+  if (opPagos.length === 1) opPagos[0].importe = Math.round(_opNeto()*100)/100;
+  _opPintarPagos();
 }
 
 // ── Retenciones editables ──────────────────────────────────────────────
@@ -566,7 +661,7 @@ function _opPintarRets(){
       ${opRets.length ? opRets.map((r,i) => {
         const ed = _opEditada(r);
         return `<tr>
-        <td style="padding-right:10px">${esc(r.codigo)} · ${esc((r.nombre||'').slice(0,42))}
+        <td style="padding-right:10px">${_opTip(r.calculo, r.codigo + ' · ' + (r.nombre||'').slice(0,42))}
           ${r.propuesto ? ' <span class="chip" style="background:#fef3c7;color:#92400e">propuesto</span>' : ''}
           ${r.agregada ? ' <span class="chip" style="background:#e0e7ff;color:#3730a3">agregada</span>' : ''}
           <span class="chip" id="op-mano-${i}" style="background:#fee2e2;color:#991b1b;${ed?'':'display:none'}">a mano</span>
@@ -612,6 +707,8 @@ function _opRetImporte(i, val){
     neto.textContent = plata(_opNeto());
     neto.style.color = _opNeto() < 0 ? 'var(--bad)' : '';
   }
+  if (opPagos.length === 1){ opPagos[0].importe = Math.round(_opNeto()*100)/100; }
+  _opPintarPagos();
 }
 
 function _opRetReset(i){
@@ -647,11 +744,22 @@ async function emitirOP(){
     return;
   }
   if (_opNeto() < 0){ alert('Las retenciones superan el total de la orden.'); return; }
+  const sinMedio = opPagos.find(p => !(p.medio||'').trim());
+  if (sinMedio){ alert('Poné el medio de pago (transferencia / cheque / efectivo…).'); return; }
+  if (opPagos.length > 1){
+    const dif = Math.round((_opNeto() - _opSumPagos())*100)/100;
+    if (Math.abs(dif) > 0.005){
+      alert(`Los medios de pago suman ${plata(_opSumPagos())} y el neto a pagar es ${plata(_opNeto())}.\n\n` +
+            (dif > 0 ? `Faltan asignar ${plata(dif)}.` : `Sobran ${plata(-dif)}.`)); return;
+    }
+    if (opPagos.some(p => !(Number(p.importe) > 0))){ alert('Hay un medio de pago con importe cero: sacalo o ponele importe.'); return; }
+  }
   const txt = `Emitir la orden de pago de ${opPrep.proveedor}\n\n` +
     `${opPrep.comprobantes} comprobante(s): ${plata(opPrep.subtotal)}\n` +
     `Retenciones: ${plata(_opTotRet())}` +
     (editadas.length ? ` (${editadas.length} puesta(s) a mano)` : '') + '\n' +
-    `A pagar: ${plata(_opNeto())}\n\n` +
+    `A pagar: ${plata(_opNeto())}\n` +
+    (opPagos.length > 1 ? opPagos.map(p => `   · ${p.medio}: ${plata(p.importe)}`).join('\n') + '\n' : `   · ${opPagos[0].medio}\n`) + '\n' +
     (editadas.length ? editadas.map(r =>
        `✏ ${r.codigo}: ${plata(r.importe)} en vez de ${plata(r.calculado)} — ${r.motivo_edicion.trim()}`).join('\n') + '\n\n' : '') +
     (av.length ? `⚠ ${av.length} aviso(s) sin resolver:\n${av.map(a=>'· '+a).join('\n')}\n\n` : '') +
@@ -664,8 +772,12 @@ async function emitirOP(){
     p_cuit: opSel, p_docs: opDocs,
     p_fecha: document.getElementById('op-fecha').value || null,
     p_vencimiento: document.getElementById('op-venc').value || null,
-    p_medio_pago: document.getElementById('op-medio').value || null,
+    p_medio_pago: opPagos[0]?.medio || null,
     p_observaciones: document.getElementById('op-obs').value || null,
+    p_pagos: opPagos.map(p => ({medio: (p.medio||'').trim(), importe: Math.round((Number(p.importe)||0)*100)/100,
+      cuenta_id: p.cuenta_id || null, cheque_numero: (p.cheque_numero||'').trim() || null,
+      cheque_banco: (p.cheque_banco||'').trim() || null, cheque_fecha: p.cheque_fecha || null,
+      notas: (p.notas||'').trim() || null})),
     p_retenciones: opRets.map(r => ({codigo: r.codigo, importe: Number(r.importe)||0,
                                      motivo_edicion: (r.motivo_edicion||'').trim() || null})),
     p_prueba: MODO_PRUEBA });
@@ -677,7 +789,7 @@ async function emitirOP(){
   cerrarModalP();
   alert(`${data.comprobante} emitida\n\nA pagar: ${plata(data.neto_a_pagar)}` +
         (data.mensaje_pago ? `\n\n${data.mensaje_pago}`
-          : data.pendiente_tesoreria ? '\n\nYa quedó el pendiente cargado en Tesorería.' : '') +
+          : data.pendiente_tesoreria ? (data.pagos > 1 ? `\n\nQuedaron ${data.pagos} pendientes en Tesorería, uno por cada medio de pago.` : '\n\nYa quedó el pendiente cargado en Tesorería.') : '') +
         (data.estado_pendiente === 'pagado'
           ? '\n\nLos PDF se archivan como PAGADAS en aproximadamente un minuto.'
           : '\n\nLos PDF se mudan a CON OP SIN PAGAR en aproximadamente un minuto.'));
@@ -687,12 +799,16 @@ async function emitirOP(){
 async function verOP(id){
   const {data, error} = await sb.rpc('compras_op_detalle', {p_op: id});
   if (error){ alert(error.message); return; }
-  const o = data.orden, f = data.facturas || [], r = data.retenciones || [];
+  const o = data.orden, f = data.facturas || [], r = data.retenciones || [], pg = data.pagos || [];
+  const _estPend = e => e === 'pagado' ? '<span class="chip" style="background:#dcfce7;color:#166534">pagado</span>'
+    : e === 'por_confirmar' ? '<span class="chip" style="background:#fef3c7;color:#92400e">por confirmar</span>'
+    : e === 'cancelado' ? '<span class="chip" style="background:#fee2e2;color:#991b1b">cancelado</span>'
+    : e ? '<span class="chip" style="background:#e5e7eb;color:#374151">pendiente</span>' : '';
   openModalP(`
     <h3 style="margin:0 0 3px">${esc(o.comprobante)}</h3>
     <p class="mini" style="margin:0 0 12px">${esc(o.proveedor_nombre||'')} · CUIT ${esc(o.cuit_proveedor||'')} ·
       ${_fecha(o.fecha)} · emitida por ${esc(o.emitida_por||'')}
-      ${o.estado==='anulada' ? ' · <b style="color:var(--bad)">ANULADA</b>' : ''}</p>
+      ${o.estado==='anulada' ? ' · <b style="color:var(--bad)">ANULADA</b>' : o.estado==='pagada' ? ' · <b style="color:#166534">PAGADA</b>' : o.estado==='pago_parcial' ? ' · <b style="color:#92400e">PAGO PARCIAL</b>' : ''}</p>
     ${(o.avisos && o.avisos.length) ? `<div class="alerta" style="margin-bottom:10px">
       ${o.avisos.map(a => '· ' + esc(a)).join('<br>')}</div>` : ''}
     <h4 style="font-size:13px;margin:0 0 5px">Comprobantes imputados</h4>
@@ -704,7 +820,7 @@ async function verOP(id){
     </tbody></table>
     <h4 style="font-size:13px;margin:0 0 5px">Retenciones practicadas</h4>
     <table style="font-size:13px"><tbody>${r.length ? r.map(x => `<tr>
-      <td>${esc(x.codigo)} · ${esc((x.nombre||'').slice(0,38))}
+      <td>${_opTip(x.calculo, x.codigo + ' · ' + (x.nombre||'').slice(0,38))}
         ${x.editado ? ' <span class="chip" style="background:#fee2e2;color:#991b1b">a mano</span>' : ''}
         ${x.aviso ? `<br><span class="mini" style="color:#b45309">${esc(x.aviso)}</span>` : ''}
         ${x.editado ? `<br><span class="mini">el sistema había calculado ${plata(x.calculado)} · motivo: ${esc(x.motivo_edicion||'—')}</span>` : ''}</td>
@@ -714,6 +830,15 @@ async function verOP(id){
       <tr style="font-weight:700;border-top:2px solid var(--bd)">
         <td colspan="2">Neto a pagar</td><td class="num" style="font-size:16px">${plata(o.neto_a_pagar)}</td></tr>
     </tbody></table>
+    ${pg.length ? `<h4 style="font-size:13px;margin:12px 0 5px">Medio${pg.length>1?'s':''} de pago</h4>
+    <table style="font-size:13px"><tbody>${pg.map(p => `<tr>
+      <td>${esc(p.medio)}${p.cuenta ? ` <span class="mini">· ${esc(p.cuenta)}</span>` : ''}
+        ${p.cheque_numero ? `<br><span class="mini">cheque N° ${esc(p.cheque_numero)}${p.cheque_banco ? ' · ' + esc(p.cheque_banco) : ''}${p.cheque_fecha ? ' · ' + _fecha(p.cheque_fecha) : ''}</span>` : ''}
+        ${p.notas ? `<br><span class="mini">${esc(p.notas)}</span>` : ''}</td>
+      <td>${_estPend(p.estado_pendiente)}${p.pagado_at ? ` <span class="mini">${_fecha(String(p.pagado_at).slice(0,10))}</span>` : ''}</td>
+      <td class="num">${plata(p.importe)}</td></tr>`).join('')}
+    </tbody></table>` : ''}
+    <p class="mini" style="margin-top:6px">Pasá el mouse por el código de cada retención para ver cómo se llegó al importe.</p>
     ${o.estado === 'emitida' ? `<p class="mini" style="margin-top:8px">Una orden emitida no se edita:
       si algún importe quedó mal, anulala y volvé a emitirla — así el pendiente de Tesorería
       y el certificado quedan diciendo lo mismo.</p>` : ''}
@@ -3152,6 +3277,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=22"></script>
+<script src="manual.js?v=23"></script>
 </body>
 </html>
