@@ -193,6 +193,18 @@ function _manualSecciones() {
       ],
     },
     {
+      icon: '⚙️', titulo: 'Retenciones · los regímenes',
+      desc: 'La tabla de regímenes que el sistema conoce, con sus parámetros. Es lo que alimenta el cálculo de cada OP.',
+      pasos: [
+        'Cada fila es un régimen (Ganancias enajenación de bienes, locaciones y servicios, alquileres, honorarios, IIBB…) con su alícuota, mínimo no imponible, retención mínima, base (neto o total) y si acumula en el mes por proveedor. Tocás, cambiás y "Guardar".',
+        '➕ Nuevo régimen: para dar de alta uno que hoy no existe. Código (el MISMO que usa el Dragonfish mientras convivan: RTN-G-5, RIVA, etc.), nombre, impuesto, jurisdicción y los parámetros. Si tiene escala progresiva como honorarios, dejá la alícuota vacía y la escala se carga en la base.',
+        '🚨 Crear el régimen NO retiene a nadie todavía. Un régimen se aplica en una OP solo si está ASIGNADO en la ficha del proveedor (🏢 Proveedores → ficha → Retenciones), o si es el que el sistema propone por tipo de gasto cuando la ficha no tiene ninguno. Después del alta, asignalo a los proveedores que corresponda.',
+        'Sin alícuota cargada el sistema no inventa nada: calcula $0 con aviso y el importe se pone a mano en la OP, con motivo. Es a propósito — un número viejo con aire de autoridad es peor que un cero que avisa.',
+        'La casilla "Activo" saca o vuelve a poner un régimen en juego sin borrarlo: desactivado no se propone en ninguna OP, pero su historia queda (R902 e IIBB Buenos Aires están así porque no se practican desde 2022).',
+        'Al régimen se le puede cargar también una exclusión por proveedor (certificado de no retención con vencimiento) desde la ficha del proveedor; ahí manda la ficha, no la tabla.',
+      ],
+    },
+    {
       icon: '📊', titulo: 'Listados',
       desc: 'Dos miradas del mismo período: la de gestión (cuánto se gastó) y la del estudio contable (cuánto crédito fiscal hay).',
       pasos: [

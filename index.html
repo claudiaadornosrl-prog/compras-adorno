@@ -2215,7 +2215,11 @@ async function vistaConfig(){
     ${faltan ? `<div class="alerta">⚠ Hay ${faltan} régimen(es) sin alícuota cargada. Hasta que los completes,
       el módulo no calcula esas retenciones solo — te las va a dejar en cero para que las pongas a mano.</div>` : ''}
     <div class="card">
-      <h3 style="font-size:16px;margin-bottom:4px">Regímenes de retención y percepción</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <h3 style="font-size:16px;margin-bottom:4px">Regímenes de retención y percepción</h3>
+        <button class="act" onclick="nuevoRegimenForm()">➕ Nuevo régimen</button>
+      </div>
+      <div id="reg-nuevo"></div>
       <p class="mini" style="margin-bottom:12px">
         Parámetros tomados del Dragonfish (los que aplica hoy administración, RG 830). Si el estudio informa
         un cambio, se corrige acá. <b>El mínimo no imponible se computa sobre el acumulado del mes por proveedor</b>
@@ -2226,7 +2230,7 @@ async function vistaConfig(){
         <thead><tr>
           <th>Código</th><th>Régimen</th><th class="num">Alícuota %</th>
           <th class="num">Mínimo no imponible</th><th class="num">Retención mínima</th>
-          <th>Base</th><th style="text-align:center">Acum. mes</th><th></th>
+          <th>Base</th><th style="text-align:center">Acum. mes</th><th style="text-align:center">Activo</th><th></th>
         </tr></thead>
         <tbody>${REGIMENES.map(r => `<tr style="${r.activo ? '' : 'opacity:.5'}">
           <td><b>${esc(r.codigo)}</b><br><span class="mini">${esc(r.jurisdiccion||'')}</span>
@@ -2256,6 +2260,8 @@ async function vistaConfig(){
                 <option value="total" ${r.base==='total'?'selected':''}>Total</option>
               </select></td>
           <td style="text-align:center"><input type="checkbox" id="ac-${r.id}" ${r.acumula_mensual?'checked':''}></td>
+          <td style="text-align:center"><input type="checkbox" id="av-${r.id}" ${r.activo?'checked':''}
+                 title="Desactivado: no se propone en ninguna orden de pago"></td>
           <td class="num"><button class="act" onclick="guardarRegimen(${r.id})">Guardar</button></td>
         </tr>`).join('')}</tbody>
       </table></div>
@@ -2284,10 +2290,70 @@ async function guardarRegimen(id){
     minimo_retencion:    val('mr'),
     base:            document.getElementById('ba-' + id).value,
     acumula_mensual: document.getElementById('ac-' + id).checked,
+    activo:          document.getElementById('av-' + id).checked,
     actualizado_at:  new Date().toISOString(),
     actualizado_por: session.email,
   }).eq('id', id);
   if (error){ alert('No se pudo guardar: ' + error.message); return; }
+  vistaConfig();
+}
+
+// Alta de un régimen nuevo. El código tiene que ser el mismo que usa el
+// Dragonfish (RTN-G-x, R902, RIVA…) mientras coexistan: es lo que ata la
+// ficha del proveedor y el certificado de retención. Nace ACTIVO pero sin
+// aplicarse a nadie: recién retiene cuando se lo asigna a un proveedor en su
+// ficha (o si es el propuesto por tipo de gasto).
+function nuevoRegimenForm(){
+  const c = document.getElementById('reg-nuevo'); if (!c) return;
+  if (c.innerHTML){ c.innerHTML = ''; return; }
+  const inp = (id, ph, extra='') => `<input id="nr-${id}" placeholder="${ph}" ${extra}>`;
+  c.innerHTML = `
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin:8px 0 12px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px">
+        <div><label class="mini">Código *</label><br>${inp('codigo','RTN-G-5 · R902 · RIVA…','style="text-transform:uppercase"')}</div>
+        <div style="grid-column:span 2"><label class="mini">Nombre *</label><br>${inp('nombre','Ganancias · Comisiones…','style="width:100%"')}</div>
+        <div><label class="mini">Impuesto *</label><br>
+          <select id="nr-impuesto"><option value="ganancias">Ganancias</option><option value="iibb">Ingresos Brutos</option>
+          <option value="iva">IVA</option><option value="suss">SUSS</option><option value="otro">Otro</option></select></div>
+        <div><label class="mini">Clase</label><br>
+          <select id="nr-clase"><option value="retencion">Retención (se practica al pagar)</option>
+          <option value="percepcion">Percepción (viene en la factura)</option></select></div>
+        <div><label class="mini">Jurisdicción</label><br>${inp('jurisdiccion','Nacional · CABA · Buenos Aires')}</div>
+        <div><label class="mini">Alícuota %</label><br>${inp('alicuota','2','type="number" step="0.0001"')}</div>
+        <div><label class="mini">Mínimo no imponible</label><br>${inp('mni','224000','type="number" step="0.01"')}</div>
+        <div><label class="mini">Retención mínima</label><br>${inp('mr','240','type="number" step="0.01"')}</div>
+        <div><label class="mini">Base</label><br><select id="nr-base"><option value="neto">Neto (sin IVA)</option><option value="total">Total</option></select></div>
+        <div><label class="mini">Acumula en el mes</label><br><input type="checkbox" id="nr-acum" checked></div>
+        <div style="grid-column:1/-1"><label class="mini">Notas (resolución, desde cuándo, quién lo pidió)</label><br>${inp('notas','RG 830 · vigente desde…','style="width:100%"')}</div>
+      </div>
+      <p class="mini" style="margin:8px 0">Si tiene <b>escala progresiva</b> (como honorarios), dejá la alícuota vacía: la escala se carga en la base, columna <code>escala</code>.
+        Después de crearlo, asignalo en la ficha de cada proveedor al que corresponda — un régimen suelto no retiene a nadie.</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="act gh" onclick="document.getElementById('reg-nuevo').innerHTML=''">Cancelar</button>
+        <button class="act" onclick="guardarRegimenNuevo()">Crear régimen</button>
+      </div>
+    </div>`;
+  document.getElementById('nr-codigo').focus();
+}
+
+async function guardarRegimenNuevo(){
+  const v = id => (document.getElementById('nr-' + id).value || '').trim();
+  const num = id => v(id) === '' ? null : Number(v(id));
+  const codigo = v('codigo').toUpperCase(), nombre = v('nombre');
+  if (!codigo || !nombre){ alert('Código y nombre son obligatorios.'); return; }
+  if (REGIMENES.some(r => r.codigo.toUpperCase() === codigo)){ alert('Ya existe un régimen con el código ' + codigo + '.'); return; }
+  const alic = num('alicuota');
+  if (alic != null && (alic < 0 || alic > 100)){ alert('La alícuota va en porcentaje (ej. 2 para 2 %).'); return; }
+  if (alic == null && !confirm('Sin alícuota, el módulo NO va a calcular esta retención: la va a dejar en cero con aviso, para completar a mano ' +
+      '(o cargar la escala en la base). ¿Crear igual?')) return;
+  const fila = {
+    codigo, nombre, impuesto: v('impuesto'), clase: v('clase'), jurisdiccion: v('jurisdiccion') || null,
+    alicuota: alic, minimo_no_imponible: num('mni'), minimo_retencion: num('mr'),
+    base: v('base'), acumula_mensual: document.getElementById('nr-acum').checked, activo: true,
+    notas: v('notas') || null, actualizado_at: new Date().toISOString(), actualizado_por: session.email,
+  };
+  const {error} = await sb.from('compras_regimenes').insert(fila);
+  if (error){ alert('No se pudo crear: ' + error.message); return; }
   vistaConfig();
 }
 
@@ -3349,6 +3415,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=25"></script>
+<script src="manual.js?v=26"></script>
 </body>
 </html>
