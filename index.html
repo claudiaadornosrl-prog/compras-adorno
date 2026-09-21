@@ -2327,13 +2327,15 @@ const MERC_EST = {
 async function vistaMercaderia(){
   const c = document.getElementById('cont');
   c.innerHTML = '<div class="vacio">Cruzando facturas contra remitos y listas…</div>';
-  const [{data, error}, rs] = await Promise.all([
+  const [{data, error}, rs, re] = await Promise.all([
     sb.rpc('compras_mercaderia_resumen', {p_anio: Number(filtro.anio), p_prueba: MODO_PRUEBA}),
     sb.rpc('compras_remitos_estado', {p_doc_id: null, p_prueba: MODO_PRUEBA}),
+    sb.rpc('compras_remitos_estado', {p_doc_id: null, p_prueba: MODO_PRUEBA, p_modo: 'esperados'}),
   ]);
   if (error){ c.innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return; }
   MERC = data || [];
-  REM_SIN = rs.data || [];
+  REM_SIN = (rs.data || []).filter(r => r.estado !== 'esperado');   // los esperados van en su propia tarjeta
+  REM_ESP = re.data || [];
 
   const n = k => MERC.filter(m => m.estado === k);
   const deMas = n('mas_caro').reduce((a,m) => a + Number(m.dif||0), 0);
@@ -2348,6 +2350,29 @@ async function vistaMercaderia(){
       <div class="kpi"><div class="lbl">Sin remito</div>
         <div class="val">${n('sin_remito').length}</div><div class="sub">no se pueden controlar</div></div>
     </div>
+    ${REM_ESP.length ? `<div class="card" style="border-left:4px solid var(--info)">
+      <h3 style="font-size:15px;margin-bottom:6px">📥 Mercadería por recibir · ${REM_ESP.length}</h3>
+      <p class="mini" style="margin-bottom:9px">Remitos <b>anunciados</b> (por la factura o por el PDF del remito) que ningún local
+        confirmó todavía. <b>El stock se mueve UNA sola vez, cuando el local recibe</b>: al confirmar se genera el TXT
+        para importar en el Dragonfish. Un renglón sin SKU frena la recepción — se resuelve en 🔗 Equivalencias.</p>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Remito</th><th>Proveedor</th><th>Fecha</th><th>Factura</th><th>Destino</th>
+          <th class="num">Renglones</th><th>Origen</th><th></th></tr></thead>
+        <tbody>${REM_ESP.slice(0,150).map(r => `<tr>
+          <td><b>${String(r.punto_venta).padStart(4,'0')}-${String(r.numero).padStart(8,'0')}</b>
+            ${r.archivo_nombre?`<div class="mini" title="${esc(r.archivo_nombre)}">📄 ${esc(r.archivo_nombre.slice(0,28))}${r.archivo_nombre.length>28?'…':''}</div>`:''}</td>
+          <td>${esc(r.proveedor||'—')}</td>
+          <td>${fechaCorta(r.fecha)}</td>
+          <td>${r.factura ? esc(r.factura) : '<span class="mini" style="color:#b45309">sin factura</span>'}</td>
+          <td>${r.local_destino ? esc(r.local_destino) : '<span class="mini" style="color:#b45309">a definir</span>'}</td>
+          <td class="num">${r.renglones||0}${r.sin_sku?` <span class="chip" style="background:#fee2e2;color:#991b1b" title="renglones sin SKU">${r.sin_sku} sin SKU</span>`:''}</td>
+          <td class="mini">${r.origen==='factura'?'📑 factura':r.origen==='proveedor_pdf'?'📄 remito PDF':esc(r.origen)}</td>
+          <td class="num" style="white-space:nowrap">
+            ${!r.factura?`<button class="act gh" style="font-size:12px;padding:4px 9px" onclick="asociarRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">🔗</button> `:''}
+            <button class="act" style="font-size:12px;padding:4px 9px" ${(!r.renglones||r.sin_sku)?'disabled title="Faltan renglones o SKUs"':''}
+              onclick="recibirRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero},'${esc(r.local_destino||'')}')">📥 Recibir</button></td>
+        </tr>`).join('')}</tbody></table></div>
+    </div>` : ''}
     ${REM_SIN.length ? `<div class="card">
       <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
         <h3 style="font-size:15px;flex:1">📦 Remitos sin factura asociada · ${REM_SIN.length}</h3>
@@ -2414,7 +2439,37 @@ async function asociarRemito(cuit, pv, num){
   vistaMercaderia();
 }
 
-let remitoLineas = [], SUCS = [];
+let remitoLineas = [], SUCS = [], REM_ESP = [];
+
+// ── Recepción (20-sep) · DISENO_REMITOS_STOCK.md ─────────────────────────
+// El local confirma lo que llegó → el remito pasa a 'recibido' → TXT para el
+// importador del Dragonfish. La puerta es la RPC (SKUs resueltos, local, no dos veces).
+async function recibirRemito(cuit, pv, num, local){
+  const locales = (SUCS.length ? SUCS : [{clave:'alcorta'},{clave:'unicenter'},{clave:'oficina'}]).filter(x => x.activo !== false).map(x => x.clave);
+  if (!local){
+    local = (prompt(`¿A qué local llegó el remito ${pv}-${num}?\n(${locales.join(' / ')})`) || '').trim().toLowerCase();
+    if (!local) return;
+    if (!locales.includes(local)){ alert('Local inválido. Opciones: ' + locales.join(', ')); return; }
+  }
+  if (!confirm(`Confirmar la recepción del remito ${pv}-${num} en ${local} con las cantidades del remito.\n\nEsto marca la mercadería como INGRESADA (una sola vez) y genera el TXT para el Dragonfish. ¿Seguimos?`)) return;
+  const {data, error} = await sb.rpc('compras_remito_confirmar', {p_cuit: cuit, p_punto_venta: pv, p_numero: num, p_lineas: null, p_local: local});
+  if (error){ alert('No se pudo recibir: ' + error.message); return; }
+  await descargarTxtRemito(cuit, pv, num);
+  vistaMercaderia();
+}
+
+async function descargarTxtRemito(cuit, pv, num){
+  const {data, error} = await sb.rpc('compras_remito_txt', {p_cuit: cuit, p_punto_venta: pv, p_numero: num});
+  if (error){ alert('Recibido ✅, pero el TXT no se pudo generar: ' + error.message); return false; }
+  const blob = new Blob([data.contenido], {type:'text/plain'});
+  const aEl = document.createElement('a');
+  aEl.href = URL.createObjectURL(blob);
+  aEl.download = data.nombre;
+  aEl.click();
+  URL.revokeObjectURL(aEl.href);
+  alert(`Remito recibido ✅ · TXT descargado: ${data.nombre}\n${data.lineas} renglones · ${data.unidades} unidades · destino ${data.destino}\n\nImportalo en el Dragonfish UNA sola vez.`);
+  return true;
+}
 
 async function cargarSucursales(){
   const {data} = await sb.from('compras_sucursales').select('*').order('orden');
@@ -2568,18 +2623,11 @@ async function guardarRemito(){
     p_cuit: cuit, p_punto_venta: pv, p_numero: num,
     p_fecha: fecha, p_destino: dest, p_lineas: lineas, p_prueba: MODO_PRUEBA});
   if (error){ alert('No se pudo guardar: ' + error.message); return; }
-  // TXT para el importador del Dragonfish: "SUC;PV-NUMERO" + "CANT+SKU"
-  const suc = SUCS.find(x => x.clave === dest);
-  const codigoSuc = (suc && suc.codigo_txt) || dest.toUpperCase();
-  const txt = `${codigoSuc};${String(pv).padStart(3,'0')}-${String(num).padStart(4,'0')}\r\n`
-            + lineas.map(l => `${l.cantidad}+${l.sku}`).join('\r\n') + '\r\n';
-  const blob = new Blob([txt], {type:'text/plain'});
-  const aEl = document.createElement('a');
-  aEl.href = URL.createObjectURL(blob);
-  aEl.download = `REMITO ${codigoSuc} ${pv}-${num}.txt`;
-  aEl.click();
-  URL.revokeObjectURL(aEl.href);
-  alert('Remito guardado ✅ y TXT descargado.\n\nImportalo en el Dragonfish para que entre el stock (una sola vez). La factura, cuando llegue, se asocia sola o con el botón 🔗.');
+  // 🚨 (20-sep) el TXT lo arma la base con el formato REAL del importador
+  // (DESTINO;PV;NUMERO + "    cant+SKU", CRLF) — antes se armaba acá con un
+  // formato inventado que el Dragonfish no tomaba.
+  await sb.from('compras_remitos').update({local_destino: dest}).match({proveedor_cuit: cuit, punto_venta: pv, numero: num});
+  await descargarTxtRemito(cuit, pv, num);
   cerrarCargaRemito();
   vistaMercaderia();
 }
@@ -3069,6 +3117,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=19"></script>
+<script src="manual.js?v=20"></script>
 </body>
 </html>

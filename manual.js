@@ -122,6 +122,10 @@ function _manualSecciones() {
         '➕ Cargar remito: cuando llega mercadería de cualquier proveedor (Espalma, etc.) antes que la factura, cargá el remito acá: proveedor, número, sucursal y los renglones (cantidad + SKU nuestro — si el papel trae el código del proveedor, traducilo con 🔗 Equivalencias).',
         'Al guardar se descarga el TXT para importar al Dragonfish: el stock entra UNA sola vez, por el mismo circuito que los archivos de FGR. Nada de cargar los renglones dos veces.',
         'Cuando después llegue la factura de ese remito, el sistema la engancha (o la enganchás con 🔗) y de paso le corre el control de precios renglón por renglón.',
+        '📥 Mercadería por recibir (20-sep): la factura mueve plata, la RECEPCIÓN mueve stock — una sola vez. Cuando entra una factura de mercadería con renglones (FGR trae nuestro SKU) o un PDF de remito ("RTO 17171 ESPALMA SA FC 39668.pdf"), el sistema anuncia un remito ESPERADO. El local confirma con 📥 Recibir y ahí se genera el TXT para importar en el Dragonfish (ALCO / UNI / ADMIN según el destino).',
+        'El PDF de un remito no se lee renglón por renglón (suelen ser escaneos): sus renglones se copian de la factura cuando se vinculan por el número impreso en ella. Si el remito llega antes que la factura, queda esperando; cuando la factura entra, se completa solo.',
+        'FGR web: la venta online no trae TXT de FGR. La factura alcanza — el remito esperado nace con destino ADMIN y el TXT reemplaza al que FGR no manda. Las cajas de envío (CAJA*) se pagan pero no entran al stock.',
+        'Un renglón sin SKU frena la recepción a propósito: resolvelo en 🔗 Equivalencias. Recibir dos veces también está frenado — si hay que corregir cantidades, se hace antes de confirmar.',
       ],
     },
     {
