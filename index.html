@@ -300,9 +300,48 @@ async function cargarTodo(){
     desde += 1000;
   }
   DOCS = todos;
+  await cargarRemitosDeDocs();
   try { await cargarBandeja(); }
   catch(e){ console.warn('bandeja:', e.message); BANDEJA = []; }
   render();
+}
+
+// ── Remitos asociados a cada factura (columna "Remito" de la grilla) ────
+//  El vínculo vive en compras_remitos.documento_id: lo pone el motor al leer
+//  la factura (mismo número, o el nº de remito impreso en la factura) o
+//  administración a mano en 🚚 Mercadería. Acá solo se lee para mostrarlo.
+let REMITOS_DOC = {};
+async function cargarRemitosDeDocs(){
+  REMITOS_DOC = {};
+  let desde = 0;
+  while (true){
+    let q = sb.from('compras_remitos')
+      .select('documento_id,punto_venta,numero,numero_proveedor,estado,origen,local_destino,txt_generado_at,txt_proveedor,asociado_por')
+      .eq('es_prueba', MODO_PRUEBA).not('documento_id', 'is', null)
+      .order('numero').range(desde, desde+999);
+    if (!MODO_PRUEBA) q = q.gte('fecha', (filtro.anio - 1) + '-10-01');
+    const {data, error} = await q;
+    if (error){ console.warn('remitos:', error.message); return; }
+    (data||[]).forEach(r => { (REMITOS_DOC[r.documento_id] ||= []).push(r); });
+    if ((data||[]).length < 1000) break;
+    desde += 1000;
+  }
+}
+// cómo se ve el remito en la grilla: número + en qué estado está su stock
+function celdaRemitos(d){
+  const rs = REMITOS_DOC[d.id] || [];
+  if (!rs.length) return d.tipo_gasto === 'M'
+    ? '<span class="mini" style="color:#b45309" title="Factura de mercadería sin remito asociado">sin remito</span>'
+    : '<span class="mini">—</span>';
+  return rs.map(r => {
+    const num = `${String(r.punto_venta||0).padStart(4,'0')}-${String(r.numero).padStart(8,'0')}`;
+    let chip, tit;
+    if (r.origen === 'fgr_txt' || r.estado === 'recibido'){ chip = '<span class="chip" style="background:#dcfce7;color:#166534">en stock</span>'; tit = 'Ya ingresó al Dragonfish'; }
+    else if (r.txt_proveedor){ chip = '<span class="chip" style="background:#e0e7ff;color:#3730a3">📨 TXT prov.</span>'; tit = 'El TXT lo manda el proveedor'; }
+    else if (r.txt_generado_at){ chip = '<span class="chip" style="background:#dcfce7;color:#166534">TXT ✓</span>'; tit = 'TXT generado ' + fechaCorta(String(r.txt_generado_at).slice(0,10)); }
+    else { chip = '<span class="chip" style="background:#fef3c7;color:#92400e">TXT pend.</span>'; tit = 'Falta generar el TXT para el Dragonfish'; }
+    return `<span title="${esc(tit)}${r.local_destino ? ' · destino ' + esc(r.local_destino) : ''}${r.asociado_por ? ' · vinculado: ' + esc(r.asociado_por) : ''}">R ${num} ${chip}</span>`;
+  }).join('<br>');
 }
 
 // ── Filtro y orden comunes ──────────────────────────────────────────────
@@ -320,6 +359,7 @@ function filtrados(base){
   r.sort((a,b) => {
     let x = a[orden.col], y = b[orden.col];
     if (orden.col === 'total'){ x = Number(x)||0; y = Number(y)||0; }
+    else if (orden.col === 'remito'){ x = (REMITOS_DOC[a.id]||[]).length; y = (REMITOS_DOC[b.id]||[]).length; }
     else { x = String(x??'').toLowerCase(); y = String(y??'').toLowerCase(); }
     return (x<y?-1:x>y?1:0) * (orden.desc?-1:1);
   });
@@ -1731,7 +1771,7 @@ function vistaFacturas(){
 function tabla(lista, bandeja){
   if (!lista.length) return `<div class="vacio">No hay comprobantes con esos filtros.</div>`;
   const cab = [['fecha_emision','Fecha'],['proveedor_nombre','Proveedor'],['numero','Comprobante'],
-               ['tipo_gasto','Tipo'],['total','Total'],['estado_pago','Estado']];
+               ['tipo_gasto','Tipo'],['total','Total'],['estado_pago','Estado'],['remito','Remito']];
   return `<div style="overflow-x:auto"><table>
     <thead><tr>${cab.map(([k,t]) =>
       `<th onclick="ordenar('${k}')" class="${k==='total'?'num':''}">${t}${orden.col===k?(orden.desc?' ▾':' ▴'):''}</th>`).join('')}
@@ -1745,6 +1785,7 @@ function tabla(lista, bandeja){
       <td>${d.tipo_gasto ? `<span class="chip c-${d.tipo_gasto}">${TIPOS[d.tipo_gasto]}</span>` : '<span class="mini">—</span>'}</td>
       <td class="num">${plata(d.total)}</td>
       <td>${chipPago(d.estado_pago)}</td>
+      <td style="white-space:nowrap;font-size:12px">${celdaRemitos(d)}</td>
       <td class="num">${d.archivo_path ? `<a href="${pdfUrl(d.archivo_path)}" target="_blank" title="Ver PDF" onclick="event.stopPropagation()" style="text-decoration:none">📄</a>` : ''}</td>
     </tr>`).join('')}</tbody></table></div>
     ${lista.length > 400 ? `<p class="mini" style="margin-top:9px">Mostrando los primeros 400 de ${lista.length}. Afiná la búsqueda para ver el resto.</p>` : ''}`;
@@ -3277,6 +3318,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=23"></script>
+<script src="manual.js?v=24"></script>
 </body>
 </html>
