@@ -197,7 +197,7 @@ function _manualSecciones() {
       desc: 'Dos miradas del mismo período: la de gestión (cuánto se gastó) y la del estudio contable (cuánto crédito fiscal hay).',
       pasos: [
         '📈 Gestión — reemplaza la planilla de gastos: por tipo de gasto (gastos, mercadería, inversiones, no-actividad) con su porcentaje, mes a mes, y los 25 proveedores más grandes. Respeta los filtros de arriba.',
-        '🧾 Para el estudio — elegís el período con las flechas ‹ › o las dos fechas, y salen los tres listados del mes.',
+        '🧾 Para el estudio — elegís el MES con los desplegables de mes y año (o con las flechas ‹ ›) y salen los tres listados de ese mes completo. Si necesitás un corte distinto (una quincena, un rango entre dos fechas), usás "Desde / Hasta": el desplegable pasa a decir "rango a medida".',
         '🚨 Los listados respetan el ambiente: en modo 🧪 prueba salen SOLO los comprobantes de test, y en definitivo SOLO los reales. Nunca se mezclan.',
         'Si un comprobante del período no está marcado "computa en el Libro IVA", no entra en los listados pero aparece abajo en "fuera del Libro IVA", con su importe. Así se ve que existe y por qué no figura (típicamente proveedores del exterior).',
         'IVA Compras: un renglón por comprobante con el neto abierto por alícuota, el IVA, las percepciones y el total. Entran solo los marcados "computa en el Libro IVA"; las notas de crédito restan y se ven en rojo.',

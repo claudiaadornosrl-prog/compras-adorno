@@ -1823,6 +1823,27 @@ function _listMes(delta){
   listPer.hasta = new Date(d.getFullYear(), d.getMonth()+1, 0).toISOString().slice(0,10);
   LIST_IVA = null; cargarListadosEstudio();
 }
+// ¿el rango actual es exactamente un mes calendario? (para que el selector rápido lo refleje)
+function _listEsMesEntero(){
+  const d = listPer.desde, h = listPer.hasta;
+  if (!d || !h || d.slice(0,7) !== h.slice(0,7) || d.slice(8) !== '01') return false;
+  const fin = new Date(+d.slice(0,4), +d.slice(5,7), 0).getDate();
+  return +h.slice(8) === fin;
+}
+function _listAnios(){
+  const hoy = new Date().getFullYear(), arr = [];
+  for (let a = hoy + 1; a >= 2019; a--) arr.push(a);
+  return arr;
+}
+// Mes + año → el rango se arma solo (1 al último día). Es lo habitual: los
+// listados del estudio son mensuales. El rango exacto queda para casos raros.
+function _listMesRapido(){
+  const m = +document.getElementById('lp-mes').value, a = +document.getElementById('lp-anio').value;
+  if (!m || !a) return;
+  listPer.desde = `${a}-${String(m).padStart(2,'0')}-01`;
+  listPer.hasta = `${a}-${String(m).padStart(2,'0')}-${String(new Date(a, m, 0).getDate()).padStart(2,'0')}`;
+  LIST_IVA = null; cargarListadosEstudio();
+}
 function _listPerCambio(){
   listPer.desde = document.getElementById('lp-desde').value;
   listPer.hasta = document.getElementById('lp-hasta').value;
@@ -1868,10 +1889,20 @@ function _pintarEstudio(){
   c.innerHTML = `
     <div class="card">
       <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end">
-        <button class="act gh" style="padding:7px 11px" onclick="_listMes(-1)">‹</button>
+        <button class="act gh" style="padding:7px 11px" onclick="_listMes(-1)" title="Mes anterior">‹</button>
+        <div><label class="mini">Mes</label><br>
+          <select id="lp-mes" onchange="_listMesRapido()" style="padding:7px 9px">
+            ${MESES.map((m,i) => `<option value="${i+1}" ${(+listPer.desde.slice(5,7))===i+1 && _listEsMesEntero() ? 'selected' : ''}>${m}</option>`).join('')}
+            ${_listEsMesEntero() ? '' : '<option value="" selected>— rango a medida —</option>'}
+          </select></div>
+        <div><label class="mini">Año</label><br>
+          <select id="lp-anio" onchange="_listMesRapido()" style="padding:7px 9px">
+            ${_listAnios().map(a => `<option ${a===+listPer.desde.slice(0,4)?'selected':''}>${a}</option>`).join('')}
+          </select></div>
+        <button class="act gh" style="padding:7px 11px" onclick="_listMes(1)" title="Mes siguiente">›</button>
+        <span class="mini" style="align-self:center;margin:0 4px">o rango exacto:</span>
         <div><label class="mini">Desde</label><br><input type="date" id="lp-desde" value="${listPer.desde}" onchange="_listPerCambio()"></div>
         <div><label class="mini">Hasta</label><br><input type="date" id="lp-hasta" value="${listPer.hasta}" onchange="_listPerCambio()"></div>
-        <button class="act gh" style="padding:7px 11px" onclick="_listMes(1)">›</button>
         <div style="flex:1"></div>
         <button class="act gh" onclick="_bajarFormatoEstudio()" title="Mismas columnas que el Subdiario que le mandás hoy">⬇ Formato estudio</button>
         <button class="act" onclick="_bajarIvaCompras()">⬇ IVA Compras completo</button>
@@ -3318,6 +3349,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=24"></script>
+<script src="manual.js?v=25"></script>
 </body>
 </html>
