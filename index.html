@@ -262,6 +262,9 @@ async function arrancar(){
   document.getElementById('app').style.display = 'block';
   renderTabs();
   await cargarTodo();
+  // (22-sep) llegada desde Gastos: ?doc=ID abre directo el resumen del comprobante
+  const _docUrl = Number(new URLSearchParams(location.search).get('doc'));
+  if (_docUrl && typeof abrirResumenDoc === 'function'){ irA('facturas'); abrirResumenDoc(_docUrl); }
 }
 
 function renderTabs(){
@@ -286,7 +289,7 @@ async function cargarTodo(){
   let todos = [], desde = 0;
   while (true){
     let q = sb.from('compras_documentos')
-      .select('id,tipo,letra,punto_venta,numero,cuit_emisor,proveedor_nombre,fecha_emision,total,estado,estado_pago,tipo_gasto,archivo_path,archivo_alerta,confianza,origen,moneda,cotizacion,importe_moneda,cotizacion_fuente,es_prueba')
+      .select('id,tipo,letra,punto_venta,numero,cuit_emisor,proveedor_nombre,fecha_emision,total,estado,estado_pago,tipo_gasto,archivo_path,archivo_alerta,confianza,origen,moneda,cotizacion,importe_moneda,cotizacion_fuente,es_prueba,computa_gestion,gestion_periodo,gestion_unidad,gestion_categoria,gestion_importe')
       .eq('es_prueba', MODO_PRUEBA)
       // (2-sep, regla JP) Facturas = SOLO lo contabilizado (aprobada). Lo que
       // espera control vive en la Bandeja y recién pasa acá al darle el OK.
@@ -1274,6 +1277,32 @@ function cerrarModalP(){ document.getElementById('prov-modal')?.remove(); }
 //  reglas que mantener a mano, el sistema aprende de lo que se contabiliza.
 // ═══════════════════════════════════════════════════════════════════════
 let BANDEJA = [], CONCEPTOS = [], enControl = null, lineasControl = [];
+// Planilla de gastos (22-sep): catálogos de gastos_unidades / gastos_categorias
+let G_UNIDADES = [], G_CATEGORIAS = [];
+async function cargarCatalogosGastos(){
+  if (G_UNIDADES.length) return;
+  const [u, c] = await Promise.all([
+    sb.from('gastos_unidades').select('clave,nombre,orden').eq('activo', true).order('orden'),
+    sb.from('gastos_categorias').select('clave,nombre,orden').eq('activo', true).order('orden')]);
+  G_UNIDADES = u.data || []; G_CATEGORIAS = c.data || [];
+}
+const MESES_G = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+function _gPeriodoOpts(sel){
+  // 8 meses para atrás y 2 para adelante desde hoy, + el seleccionado si cae afuera
+  const hoy = new Date(); const out = []; const vistos = new Set();
+  for (let k = -8; k <= 2; k++){
+    const d = new Date(hoy.getFullYear(), hoy.getMonth()+k, 1);
+    const v = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-01';
+    vistos.add(v); out.push(v);
+  }
+  if (sel && !vistos.has(sel)) out.unshift(sel);
+  return out.sort().map(v => `<option value="${v}" ${v===sel?'selected':''}>${MESES_G[Number(v.slice(5,7))-1]} ${v.slice(0,4)}</option>`).join('');
+}
+function _gestionCambio(){
+  const on = document.getElementById('ctrl-gestion').checked;
+  const b = document.getElementById('ctrl-gestion-box'); if (b) b.style.display = on ? 'block' : 'none';
+}
+
 
 const CONF = {
   alta:  {ico:'🟢', tx:'Alta',  col:'#166534', bg:'#dcfce7'},
@@ -1422,6 +1451,7 @@ function vistaBandeja(){
 
 // ── Modal de control ────────────────────────────────────────────────────
 async function abrirControl(id){
+  await cargarCatalogosGastos();
   enControl = BANDEJA.find(d => d.id === id);
   if (!enControl) return;
   const neto = Number(enControl.neto_gravado||0) + Number(enControl.neto_no_gravado||0) + Number(enControl.exento||0);
@@ -1551,11 +1581,16 @@ function _pintarDescLinea(i, cod){
 
 function _tipoGastoCambio(tipo){
   const g = document.getElementById('ctrl-gestion'); if (!g) return;
-  g.checked = tipo !== 'no_actividad';
+  // la planilla es de GASTOS: mercadería, inversiones y Z no van (editable igual)
+  g.checked = !['no_actividad','mercaderia','inversiones'].includes(tipo);
+  _gestionCambio();
 }
 
 function pintarControl(){
   const d = enControl; if (!d) return;
+  // sugerencia de la planilla: la que trajo la bandeja, o lo que ya tiene guardado el doc (edición)
+  const gs = d.gestion_sug || {computa: d.computa_gestion, periodo: d.gestion_periodo, unidad: d.gestion_unidad,
+                               categoria: d.gestion_categoria, importe: d.gestion_importe, motivo: (d.gestion_sugerencia||{}).motivo};
   const cf = CONF[d.sug_confianza] || CONF.baja;
   const neto = Number(d.neto_gravado||0) + Number(d.neto_no_gravado||0) + Number(d.exento||0);
   const iva  = Number(d.total||0) - neto;
@@ -1656,8 +1691,28 @@ function pintarControl(){
           </select></label>
         <label class="c-chk"><input type="checkbox" id="ctrl-formal" ${d.computa_formal!==false?'checked':''}>
           Va al Libro IVA <span class="mini">(contabilidad formal)</span></label>
-        <label class="c-chk"><input type="checkbox" id="ctrl-gestion" ${d.computa_gestion!==false?'checked':''}>
-          Es gasto real del negocio <span class="mini">(gestión)</span></label>
+        <label class="c-chk"><input type="checkbox" id="ctrl-gestion" onchange="_gestionCambio()" ${gs.computa!==false?'checked':''}>
+          Va a la planilla de gastos <span class="mini">(gestión)</span></label>
+      </div>
+      <div id="ctrl-gestion-box" style="display:${gs.computa!==false?'block':'none'};margin-top:8px;padding:8px 10px;border:1px dashed var(--line);border-radius:8px">
+        <div class="mini" style="margin-bottom:6px">📒 <b>Planilla de gastos</b> — sugerido por las reglas, corregilo si no corresponde.
+          ${gs.motivo ? `<span title="${esc(gs.motivo)}" style="cursor:help">ⓘ</span>` : ''}</div>
+        <div class="c-fila">
+          <label>Período (mes de consumo)
+            <select id="ctrl-g-periodo">${_gPeriodoOpts(gs.periodo || d.gestion_periodo || null)}</select></label>
+          <label>Unidad
+            <select id="ctrl-g-unidad">
+              <option value="">— elegir —</option>
+              ${G_UNIDADES.map(u => `<option value="${u.clave}" ${(gs.unidad||'')===u.clave?'selected':''}>${esc(u.nombre)}</option>`).join('')}
+            </select></label>
+          <label>Categoría
+            <select id="ctrl-g-cat">
+              ${G_CATEGORIAS.map(c => `<option value="${c.clave}" ${(gs.categoria||'')===c.clave?'selected':''}>${esc(c.nombre)}</option>`).join('')}
+            </select></label>
+          <label>Importe a la planilla
+            <input id="ctrl-g-importe" type="number" step="0.01" value="${gs.importe ?? ''}"></label>
+        </div>
+        <div class="mini" style="color:var(--muted)">${esc(gs.motivo || '')}</div>
       </div>
     </div>
 
@@ -1737,6 +1792,12 @@ async function contabilizar(){
     p_computa_formal:  document.getElementById('ctrl-formal').checked,
     p_computa_gestion: document.getElementById('ctrl-gestion').checked,
     p_cotizacion: enControl._cotizNueva || null,
+    p_gestion: document.getElementById('ctrl-gestion').checked ? {
+      periodo:   document.getElementById('ctrl-g-periodo').value || null,
+      unidad:    document.getElementById('ctrl-g-unidad').value || null,
+      categoria: document.getElementById('ctrl-g-cat').value || null,
+      importe:   document.getElementById('ctrl-g-importe').value === '' ? null : Number(document.getElementById('ctrl-g-importe').value),
+    } : null,
   });
   if (error){ alert('No se pudo contabilizar: ' + error.message); return; }
   cerrarControl();
@@ -3259,7 +3320,7 @@ async function abrirResumenDoc(docId){
         </select>
         ${doc.corregida ? '<span class="chip" style="background:#fef3c7;color:#92400e">✏️ corregida</span>' : ''}
         ${doc.computa_formal ? '<span class="chip" style="background:#f1f5f9;color:#475569">Libro IVA</span>' : '<span class="chip" style="background:#fee2e2;color:#991b1b">Fuera del Libro IVA</span>'}
-        ${doc.computa_gestion ? '<span class="chip" style="background:#f1f5f9;color:#475569">Gasto real</span>' : '<span class="chip" style="background:#fee2e2;color:#991b1b">No es gasto real</span>'}
+        ${doc.computa_gestion ? `<span class="chip" style="background:#f1f5f9;color:#475569">📒 Planilla: ${esc(doc.gestion_unidad||'?')} · ${esc(doc.gestion_categoria||'?')} · ${doc.gestion_periodo ? MESES_G[Number(String(doc.gestion_periodo).slice(5,7))-1]+' '+String(doc.gestion_periodo).slice(0,4) : '?'}</span>` : '<span class="chip" style="background:#fee2e2;color:#991b1b">No va a la planilla</span>'}
       </div>
       <h4 style="font-size:14px;margin:4px 0 7px">Desglose fiscal</h4>
       <table style="margin-bottom:13px"><tbody>${fiscal.map(([lbl,v]) => `<tr>
@@ -3394,7 +3455,9 @@ async function editarContabilizacion(docId){
       !confirm('Esta contabilización vino del Dragonfish y es parte del historial del que aprende el sistema.\n\n¿Seguro que hay que corregirla?')) return;
   const r = document.getElementById('res-overlay');
   if (r) r.remove();
+  await cargarCatalogosGastos();
   enControl = {...doc, esEdicion: true};
+  if (!doc.gestion_periodo){ const {data: gsug} = await sb.rpc('compras_gestion_sugerir', {p_doc_id: docId}); enControl.gestion_sug = gsug; }
   lineasControl = (lin && lin.length)
     ? lin.map(l => ({concepto: l.concepto_codigo || '', monto: Number(l.monto_neto)||0}))
     : [{concepto:'', monto: Number(doc.neto_gravado||0)+Number(doc.neto_no_gravado||0)+Number(doc.exento||0)}];
@@ -3415,6 +3478,6 @@ async function editarContabilizacion(docId){
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
-<script src="manual.js?v=26"></script>
+<script src="manual.js?v=27"></script>
 </body>
 </html>

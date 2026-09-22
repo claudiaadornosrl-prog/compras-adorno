@@ -104,6 +104,7 @@ function _manualSecciones() {
         '"Dividir en otro concepto" sirve para las facturas que se reparten (por ejemplo, flete aparte, o gasto partido entre sucursales). El cartelito de abajo te avisa si los importes no suman el neto.',
         '"✳ Concepto nuevo" crea un concepto contable que no existe en el catálogo (código, descripción y alícuota de IVA) sin salir del control, y lo deja puesto en la línea.',
         'Las dos casillas del final son independientes: "Libro IVA" es la contabilidad formal y "gasto real" es la mirada de gestión. Hay gastos que van a una y no a la otra.',
+        '📒 "Va a la planilla de gastos": si está tildada aparecen Período (mes de CONSUMO, no de emisión), Unidad (Administración / Oficina / Alcorta / Unicenter / Libertador), Categoría (Sueldos · Alquiler · Expensas · Servicios · Tarjetas · IIBB · Varios) e Importe. El sistema los SUGIERE por reglas —desfase del proveedor (Niz, Diaz y Perez Forclaz facturan el mes siguiente), unidad del concepto contable, FC B en bruto— y muestra el motivo; quien controla los corrige si no corresponden. Mercadería, inversiones y Z vienen destildados: la planilla es de gastos.',
         'Rechazar saca la factura de la cola (duplicada, mal archivada, no corresponde) y te pide el motivo — sin motivo nadie entiende después por qué quedó afuera.',
       ],
     },

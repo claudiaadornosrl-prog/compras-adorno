@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v41-alta-regimen';
+const CACHE_VERSION = 'compras-v42-planilla-gastos';
 const ASSETS = ['./', './index.html', './manual.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
