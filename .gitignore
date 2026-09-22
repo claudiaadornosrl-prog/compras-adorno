@@ -16,3 +16,5 @@ backups/
 arca/
 _textos/
 _muestra_txt_fgr.txt
+*.pdf
+__pycache__/

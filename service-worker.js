@@ -1,5 +1,5 @@
-const CACHE_VERSION = 'compras-v42-planilla-gastos';
-const ASSETS = ['./', './index.html', './manual.js', './manifest.webmanifest',
+const CACHE_VERSION = 'compras-v45-8-ajustes-JP';
+const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE_VERSION).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
