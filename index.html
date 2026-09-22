@@ -127,6 +127,20 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
   padding-top:12px;border-top:1px solid var(--bd);font-size:13.5px;}
 #ctrl-overlay .c-fila label,#map-overlay .c-fila label,#res-overlay .c-fila label,#merc-overlay .c-fila label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mut);}
 #ctrl-overlay .c-chk,#map-overlay .c-chk,#res-overlay .c-chk,#merc-overlay .c-chk{flex-direction:row!important;align-items:center;gap:6px!important;font-size:13px!important;color:var(--tx)!important;}
+#ctrl-overlay .fx-box,#res-overlay .fx-box{max-width:860px;}
+.fx-cab{display:grid;grid-template-columns:1fr auto;gap:12px;padding-bottom:10px;margin-bottom:10px;border-bottom:2px solid var(--bd);font-size:13px;}
+.fx-cab .fx-prov{font-weight:700;font-size:16px;}
+.fx-cab .fx-num{font-weight:700;font-size:15px;font-variant-numeric:tabular-nums;}
+.fx-tbl{width:100%;font-size:12.5px;border-collapse:collapse;margin-bottom:4px;}
+.fx-tbl th{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.3px;padding:4px 6px;text-align:left;}
+.fx-tbl td{padding:5px 6px;border-top:1px solid var(--bd);vertical-align:top;}
+.fx-tbl tfoot td{border-top:2px solid var(--bd);}
+.fx-tbl .chip{font-size:11px;padding:2px 7px;white-space:nowrap;}
+.fx-pie{display:grid;grid-template-columns:1fr 280px;gap:16px;margin:10px 0 4px;padding-top:10px;border-top:2px solid var(--bd);}
+.fx-tot{width:100%;font-size:13px;}
+.fx-tot td{padding:2px 4px;}
+.fx-tot .fx-total td{border-top:2px solid var(--bd);font-weight:700;font-size:15px;padding-top:6px;color:var(--primary);}
+@media (max-width:640px){.fx-cab{grid-template-columns:1fr}.fx-cab>div:last-child{text-align:left}.fx-pie{grid-template-columns:1fr}}
 #ctrl-overlay .c-pie,#map-overlay .c-pie,#res-overlay .c-pie,#merc-overlay .c-pie,#sf-overlay .c-pie{display:flex;gap:8px;align-items:center;padding:12px 17px;border-top:1px solid var(--bd);
   background:#f8fafc;border-radius:0 0 14px 14px;position:sticky;bottom:0;}
 .op-tip{position:relative;cursor:help;border-bottom:1px dotted currentColor}
@@ -1488,8 +1502,13 @@ async function abrirControl(id){
   // Desglose impositivo (la RPC de la bandeja no lo trae): IVA por alícuota, percepciones y otros tributos
   try {
     const { data: imp } = await sb.from('compras_documentos')
-      .select('iva_21,iva_105,iva_27,iva_otros,percep_iva,percep_iibb_caba,percep_iibb_ba,otros_tributos').eq('id', id).single();
+      .select('iva_21,iva_105,iva_27,iva_otros,percep_iva,percep_iibb_caba,percep_iibb_ba,otros_tributos,fecha_vto,cae,cae_vto,extraido_json').eq('id', id).single();
     if (imp && enControl && enControl.id === id){ Object.assign(enControl, imp); enControl._impuestosOk = true; pintarControl(); }
+  } catch (_) {}
+  // Renglones de la factura (mercadería) con el control contra las listas COMPRA / COSTO del Dragonfish
+  try {
+    const { data: rg } = await sb.rpc('compras_doc_renglones', { p_doc: id });
+    if (enControl && enControl.id === id){ enControl._renglones = rg || []; pintarControl(); }
   } catch (_) {}
   const {data} = await sb.rpc('compras_conceptos_proveedor', {p_cuit: enControl.cuit_emisor});
   enControl._usados = data || [];
@@ -1544,6 +1563,142 @@ function _desgloseImpositivo(d, neto){
     </div>
     <div id="imp-edit"></div>
   </details>`;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+//  FORMATO "ESPEJO DE LA FACTURA" (decisión JP 22-sep: opción A)
+//  El modal de control y el resumen se arman con la misma anatomía que el
+//  papel: proveedor arriba a la izquierda, datos del comprobante a la derecha,
+//  renglones en el medio, pie con la pirámide subtotal → neto → IVA → total.
+//  Lo que agrega el módulo (concepto, control contra lista, planilla) va en
+//  bloques aparte para que lo de la izquierda sea solo lo que dice el papel.
+// ═══════════════════════════════════════════════════════════════════════
+const _FX_ESTADO = {
+  ok:         ['✓ lista', '#166534', 'Precio e importe coinciden con la lista COSTO (con descuento) vigente a la fecha'],
+  ok_precio:  ['✓ precio', '#166534', 'El precio unitario coincide con la lista COMPRA; el descuento difiere de la lista COSTO'],
+  difiere:    ['≠ lista', '#b45309', 'Difiere de la lista del Dragonfish'],
+  sin_lista:  ['sin lista', '#64748b', 'El SKU no tiene precio cargado en el Dragonfish a esa fecha'],
+  sin_sku:    ['sin SKU', '#b91c1c', 'No se pudo traducir el código del proveedor: resolverlo en 🔗 Equivalencias'],
+  sin_stock:  ['no es stock', '#64748b', 'Renglón que se paga pero no entra al stock (cajas, fletes)'],
+};
+const _fxPct = v => v == null ? '' : (v > 0 ? '+' : '') + Number(v).toLocaleString('es-AR', {maximumFractionDigits: 1}) + ' %';
+
+function _facturaCabecera(d, opts = {}){
+  const ej = d.extraido_json || {};
+  const num = `${esc(d.tipo || 'FC')} ${esc(d.letra || '')} ${String(d.punto_venta ?? '').padStart(4,'0')}-${String(d.numero ?? '').padStart(8,'0')}`;
+  const cae = d.cae || ej.cae, caeVto = d.cae_vto || ej.cae_vto, vto = d.fecha_vto || ej.fecha_vto;
+  const remito = ej.remito || (ej.remitos || []).join(', ');
+  const cond = ej.cond_venta || ej.condicion_venta || '';
+  return `<div class="fx-cab">
+    <div>
+      <div class="fx-prov">${esc(d.proveedor_nombre || d.cuit_emisor)}</div>
+      <div class="mini">CUIT ${esc(d.cuit_emisor)}${d.cond_iva ? ' · ' + esc(d.cond_iva) : ''}${d.es_exterior ? ' · exterior' : ''}</div>
+      ${cond ? `<div class="mini">Cond. venta: ${esc(cond)}</div>` : ''}
+      ${opts.chips || ''}
+    </div>
+    <div style="text-align:right">
+      <div class="fx-num">${num}</div>
+      <div class="mini">Emisión <b>${fechaCorta(d.fecha_emision)}</b>${vto ? ` · Vto <b>${fechaCorta(vto)}</b>` : ''}</div>
+      ${cae ? `<div class="mini">CAE ${esc(cae)}${caeVto ? ' · vto ' + fechaCorta(caeVto) : ''}</div>` : '<div class="mini" style="color:#b45309">sin CAE leído</div>'}
+      ${remito ? `<div class="mini">Remito ${esc(remito)}</div>` : ''}
+      ${d.archivo_path ? `<a class="act" target="_blank" rel="noopener" href="${_pdfUrl(d.archivo_path)}"
+           style="background:var(--primary);color:#fff;border-color:var(--primary);text-decoration:none;display:inline-block;padding:5px 11px;font-size:12.5px;margin-top:5px"
+           title="Abre el PDF en OneDrive, en otra pestaña">📄 Ver la factura</a>` : ''}
+    </div>
+  </div>`;
+}
+
+// Renglones del papel. Con renglones reales (mercadería): cant · descripción/SKU · p.unit · dto · neto · control.
+// Sin renglones reales pero con los que leyó el motor (descripción + monto): esos. Sin nada: vacío.
+function _facturaRenglones(d, reng){
+  const ej = d.extraido_json || {};
+  if (reng && reng.length){
+    const sub = reng.reduce((a,r) => a + Number(r.importe||0), 0);
+    return `<div style="overflow-x:auto"><table class="fx-tbl">
+      <thead><tr><th class="num">Cant</th><th>Descripción · SKU</th><th class="num">P. unit</th><th class="num">Dto</th><th class="num">Neto</th><th>Control</th></tr></thead>
+      <tbody>${reng.map(r => { const e = _FX_ESTADO[r.estado] || _FX_ESTADO.sin_lista;
+        const det = r.estado === 'difiere' ? [r.dif_precio_pct != null ? 'precio ' + _fxPct(r.dif_precio_pct) : '', r.dif_costo_pct != null ? 'vs costo ' + _fxPct(r.dif_costo_pct) : ''].filter(Boolean).join(' · ') : '';
+        return `<tr>
+        <td class="num">${Number(r.cantidad||0).toLocaleString('es-AR')}</td>
+        <td>${esc(r.descripcion || '')}<br><span class="mini">${r.sku ? `<code>${esc(r.sku)}</code>` : `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>`}${r.lista_compra != null ? ` · lista ${plata(r.lista_compra)}` : ''}${r.lista_costo != null ? ` · costo ${plata(r.lista_costo)}` : ''}</span></td>
+        <td class="num">${r.precio_unitario != null ? plata(r.precio_unitario) : '—'}</td>
+        <td class="num">${r.descuento_pct ? Number(r.descuento_pct) + ' %' : '—'}</td>
+        <td class="num"><b>${plata(r.importe)}</b></td>
+        <td><span class="chip" title="${esc(e[2])}" style="background:${e[1]}18;color:${e[1]}">${e[0]}</span>${det ? `<br><span class="mini" style="color:#b45309">${esc(det)}</span>` : ''}</td>
+      </tr>`; }).join('')}</tbody>
+      <tfoot><tr><td colspan="4" style="text-align:right;color:var(--mut)">Suma de renglones</td><td class="num"><b>${plata(sub)}</b></td><td></td></tr></tfoot>
+    </table></div>`;
+  }
+  const lr = ej.renglones || [];
+  if (lr.length){
+    return `<table class="fx-tbl"><thead><tr><th>Descripción (leída del PDF)</th><th class="num">Importe</th></tr></thead>
+      <tbody>${lr.map(r => `<tr><td>${esc(r.descripcion || r.desc || '')}</td><td class="num">${plata(r.monto ?? r.importe)}</td></tr>`).join('')}</tbody></table>`;
+  }
+  return '';
+}
+
+// Pie: la pirámide del papel. Devuelve las filas (label, valor, opciones).
+function _facturaPieFilas(d, reng){
+  const n = x => Number(x || 0);
+  const grav = n(d.neto_gravado), nograv = n(d.neto_no_gravado), ex = n(d.exento);
+  const neto = grav + nograv + ex;
+  const filas = [];
+  if (reng && reng.length){
+    const sub = reng.reduce((a,r) => a + n(r.importe), 0);
+    const dto = Math.round((sub - neto) * 100) / 100;
+    if (Math.abs(dto) > 0.02){ filas.push(['Suma de renglones', sub]); filas.push([dto > 0 ? 'Descuento' : 'Ajuste', -dto]); }
+  }
+  filas.push(['Neto gravado', grav, {b: true}]);
+  if (nograv) filas.push(['No gravado', nograv]);
+  if (ex) filas.push(['Exento', ex]);
+  const pct = (imp, base) => base > 0 ? imp / base * 100 : null;
+  [['IVA 21 %', n(d.iva_21), 21], ['IVA 10,5 %', n(d.iva_105), 10.5], ['IVA 27 %', n(d.iva_27), 27]].forEach(([nom, imp, al]) => {
+    if (!imp) return;
+    const ivas = [n(d.iva_21), n(d.iva_105), n(d.iva_27)].filter(Boolean).length;
+    const p = ivas === 1 ? pct(imp, grav) : al;
+    filas.push([nom, imp, {raro: p != null && Math.abs(p - al) > 0.6, p}]);
+  });
+  if (n(d.iva_otros)) filas.push(['IVA otras alícuotas', n(d.iva_otros), {raro: true, tip: 'IVA de ajuste: el histórico lo metió para que el comprobante cerrara'}]);
+  if (n(d.percep_iva)) filas.push(['Percepción IVA', n(d.percep_iva)]);
+  if (n(d.percep_iibb_caba)) filas.push(['Perc. IIBB CABA', n(d.percep_iibb_caba)]);
+  if (n(d.percep_iibb_ba)) filas.push(['Perc. IIBB Buenos Aires', n(d.percep_iibb_ba)]);
+  if (n(d.otros_tributos)) filas.push(['Otros tributos', n(d.otros_tributos)]);
+  const sumaImp = n(d.iva_21) + n(d.iva_105) + n(d.iva_27) + n(d.iva_otros) + n(d.percep_iva) + n(d.percep_iibb_caba) + n(d.percep_iibb_ba) + n(d.otros_tributos);
+  const dif = Math.round((n(d.total) - neto - sumaImp) * 100) / 100;
+  return {filas, neto, sumaImp, dif};
+}
+
+function _facturaPie(d, reng, opts = {}){
+  if (!d._impuestosOk && !opts.listo) return '<p class="mini">Cargando el pie de la factura…</p>';
+  const {filas, neto, dif} = _facturaPieFilas(d, reng);
+  const cargado = (d.cae || (d.extraido_json||{}).cae);
+  const checks = [];
+  const okDif = Math.abs(dif) <= 1;
+  checks.push([okDif, okDif ? 'Neto + IVA + percepciones = total' : `Neto + impuestos no llegan al total: faltan ${plata(dif)}`]);
+  if (reng && reng.length){
+    const conSku = reng.filter(r => r.sku && !r.sin_stock), sinSku = reng.filter(r => !r.sku && !r.sin_stock);
+    const okL = conSku.filter(r => r.estado === 'ok' || r.estado === 'ok_precio').length, difL = conSku.filter(r => r.estado === 'difiere').length, sinL = conSku.filter(r => r.estado === 'sin_lista').length;
+    checks.push([difL === 0, `Precio vs lista Dragonfish: ${okL} de ${conSku.length} coinciden${difL ? ` · ${difL} difieren` : ''}${sinL ? ` · ${sinL} sin lista` : ''}`]);
+    if (sinSku.length) checks.push([false, `${sinSku.length} renglón(es) sin SKU (🔗 Equivalencias)`]);
+    const sub = reng.reduce((a,r) => a + Number(r.importe||0), 0);
+    const okSub = Math.abs(sub - neto) <= 1 || sub > neto;   // sub > neto = descuento global, es normal
+    checks.push([okSub, okSub ? (Math.abs(sub - neto) <= 1 ? 'Los renglones suman el neto' : 'Renglones − descuento = neto') : `Los renglones suman ${plata(sub)} y el neto dice ${plata(neto)}`]);
+  }
+  if (opts.lineasOk != null) checks.push([opts.lineasOk, opts.lineasTxt]);
+  checks.push([!!cargado, cargado ? 'CAE leído' : 'Falta el CAE']);
+  return `<div class="fx-pie">
+    <div>
+      <div style="font-weight:700;font-size:12.5px;color:var(--mut);margin-bottom:4px">CONTROL</div>
+      ${checks.map(([ok, tx]) => `<div class="mini" style="color:${ok ? '#166534' : '#b45309'};margin:2px 0">${ok ? '✓' : '⚠'} ${esc(tx)}</div>`).join('')}
+      ${opts.extra || ''}
+    </div>
+    <table class="fx-tot"><tbody>
+      ${filas.map(([l, v, o = {}]) => `<tr><td style="color:var(--mut)">${esc(l)}${o.raro ? ` <span title="${esc(o.tip || ('La alícuota efectiva (' + (o.p != null ? o.p.toFixed(2) : '?') + ' %) no coincide con la nominal: revisar la base o el importe'))}" style="color:#b45309;cursor:help">⚠</span>` : ''}</td>
+        <td class="num" style="${o.b ? 'font-weight:600' : ''}">${plata(v)}</td></tr>`).join('')}
+      <tr class="fx-total"><td>TOTAL</td><td class="num">${plata(d.total)}</td></tr>
+    </tbody></table>
+  </div>`;
 }
 
 // Edición manual de los importes leídos (queda asentado en compras_eventos y el doc marcado como corregido)
@@ -1625,31 +1780,22 @@ function pintarControl(){
   const asignado = lineasControl.reduce((a,l) => a + (Number(l.monto)||0), 0);
   const dif = Math.round((neto - asignado) * 100) / 100;
 
-  const html = `<div class="c-box">
+  const reng = d._renglones || [];
+  const html = `<div class="c-box fx-box">
     <div class="c-head">
       <div style="flex:1">
-        <div style="font-weight:700;font-size:16px">${esc(d.proveedor_nombre || d.cuit_emisor)}</div>
-        <div style="font-size:12.5px;opacity:.9">${esc(d.tipo)} ${esc(d.letra)}
-          ${String(d.punto_venta).padStart(4,'0')}-${String(d.numero).padStart(8,'0')} ·
-          ${fechaCorta(d.fecha_emision)} · CUIT ${esc(d.cuit_emisor)}</div>
+        <div style="font-weight:700;font-size:15px">${d.esEdicion ? '✏️ Modificar contabilización' : 'Control del comprobante'}</div>
+        <div style="font-size:12.5px;opacity:.9">${esc(d.proveedor_nombre || d.cuit_emisor)} · ${esc(d.tipo)} ${esc(d.letra)} ${String(d.punto_venta).padStart(4,'0')}-${String(d.numero).padStart(8,'0')}</div>
       </div>
       <button class="m-x" onclick="cerrarControl()">✕</button>
     </div>
 
     <div class="c-body">
       ${d.archivo_alerta ? `<div class="alerta">📎 ${esc(d.archivo_alerta)}</div>` : ''}
-
-      <div class="c-nums">
-        <div><span class="lbl">Neto</span><span class="v">${plata(neto)}</span></div>
-        <div><span class="lbl">IVA + percepciones</span><span class="v">${plata(iva)}</span></div>
-        <div><span class="lbl">Total</span><span class="v" style="color:var(--primary)">${plata(d.total)}</span></div>
-      </div>
-      ${_desgloseImpositivo(d, neto)}
-      ${d.archivo_path ? `<p style="margin:6px 0 2px;">
-        <a class="act" target="_blank" rel="noopener" href="${_pdfUrl(d.archivo_path)}"
-           style="background:var(--primary);color:#fff;border-color:var(--primary);text-decoration:none;display:inline-block;padding:6px 12px;font-size:13px;"
-           title="Abre el PDF en OneDrive, en otra pestaña">📄 Ver la factura</a>
-        <span class="mini" style="margin-left:8px;">${esc(d.archivo_path.split('/').pop())}</span></p>` : ''}
+      ${_facturaCabecera(d)}
+      ${_facturaRenglones(d, reng)}
+      ${_facturaPie(d, reng, {lineasOk: Math.abs(dif) < 0.02, lineasTxt: Math.abs(dif) < 0.02 ? 'Los conceptos suman el neto' : `Faltan ${plata(dif)} por imputar a conceptos`,
+          extra: `<div style="margin-top:6px"><button class="act gh" type="button" style="font-size:12px;padding:4px 9px" onclick="_editarImportes()" title="Si el motor leyó mal algún importe, corregilo a mano">✏ Corregir importes</button></div><div id="imp-edit"></div>`})}
 
       ${(d.moneda && d.moneda !== 'ARS' && d.importe_moneda) ? `<div class="c-sug" style="background:#ecfeff;border-color:#0e7490">
         💵 <b>Factura en ${esc(d.moneda)}</b> · ${esc(d.moneda)} ${Number(d.importe_moneda).toLocaleString('es-AR',{minimumFractionDigits:2})}
@@ -1679,7 +1825,7 @@ function pintarControl(){
           <span class="mini">(${u.veces})</span></button>`).join('')}
       </div>` : ''}
 
-      <h4 style="font-size:14px;margin:12px 0 7px">Cómo se contabiliza</h4>
+      <h4 style="font-size:14px;margin:14px 0 7px">Imputación contable</h4>
       ${lineasControl.map((l,i) => { const cc = CONCEPTOS.find(c => c.codigo === l.concepto); return `<div class="c-linea" style="flex-wrap:wrap">
         <input list="dl-conceptos" value="${esc(l.concepto)}" placeholder="Código de concepto"
                oninput="lineasControl[${i}].concepto=this.value.split(' ')[0].trim(); _pintarDescLinea(${i}, this.value.split(' ')[0].trim())" style="flex:1;min-width:150px">
@@ -3338,45 +3484,30 @@ async function abrirResumenDoc(docId){
     document.body.appendChild(ov);
   }
   ov.innerHTML = `<div class="c-box"><div class="c-body"><div class="vacio">Cargando…</div></div></div>`;
-  const [full, lin] = await Promise.all([
+  const [full, lin, rg] = await Promise.all([
     sb.from('compras_documentos').select('*').eq('id', docId).single(),
     sb.from('compras_lineas').select('*').eq('documento_id', docId).order('nroitem'),
+    sb.rpc('compras_doc_renglones', { p_doc: docId }),
   ]);
-  const doc = full.data || d, lineas = lin.data || [];
+  const doc = full.data || d, lineas = lin.data || [], reng = rg.data || [];
+  doc._impuestosOk = true;
   const neto = Number(doc.neto_gravado||0)+Number(doc.neto_no_gravado||0)+Number(doc.exento||0);
   const iva = Number(doc.iva_21||0)+Number(doc.iva_105||0)+Number(doc.iva_27||0)+Number(doc.iva_otros||0);
   const cMap = Object.fromEntries(CONCEPTOS.map(c=>[c.codigo, c.descripcion]));
-  // Desglose fiscal completo: solo los renglones con importe. Las RETENCIONES
-  // no aparecen acá a propósito: se practican al PAGAR y van con la orden de
-  // pago (punto 4), no con la factura.
-  const fiscal = [
-    ['Neto gravado', doc.neto_gravado], ['Neto no gravado', doc.neto_no_gravado],
-    ['Exento', doc.exento],
-    ['IVA 21%', doc.iva_21], ['IVA 10,5%', doc.iva_105], ['IVA 27%', doc.iva_27],
-    ['IVA otros', doc.iva_otros],
-    ['Percepción IVA', doc.percep_iva],
-    ['Perc. IIBB Buenos Aires', doc.percep_iibb_ba],
-    ['Perc. IIBB CABA', doc.percep_iibb_caba],
-    ['Otros tributos', doc.otros_tributos],
-  ].filter(([,v]) => Math.abs(Number(v)||0) > 0.005);
-
-  ov.innerHTML = `<div class="c-box">
+  const lineasOk = Math.abs(lineas.reduce((a,l) => a + Number(l.monto_neto||0), 0) - neto) <= 1;
+  ov.innerHTML = `<div class="c-box fx-box">
     <div class="c-head">
       <div style="flex:1">
-        <div style="font-weight:700;font-size:16px">${esc(doc.proveedor_nombre || doc.cuit_emisor)}</div>
-        <div style="font-size:12.5px;opacity:.9">${esc(doc.tipo)} ${esc(doc.letra)}
-          ${String(doc.punto_venta).padStart(4,'0')}-${String(doc.numero).padStart(8,'0')} ·
-          ${fechaCorta(doc.fecha_emision)} · CUIT ${esc(doc.cuit_emisor)}</div>
+        <div style="font-weight:700;font-size:15px">Comprobante</div>
+        <div style="font-size:12.5px;opacity:.9">${esc(doc.proveedor_nombre || doc.cuit_emisor)} · ${esc(doc.tipo)} ${esc(doc.letra)} ${String(doc.punto_venta).padStart(4,'0')}-${String(doc.numero).padStart(8,'0')}</div>
       </div>
       <button class="hbtn" title="Modificar la contabilización" onclick="editarContabilizacion(${docId})">✏️</button>
       <button class="m-x" onclick="document.getElementById('res-overlay').remove()">✕</button>
     </div>
     <div class="c-body">
-      <div class="c-nums">
-        <div><span class="lbl">Neto</span><span class="v">${plata(neto)}</span></div>
-        <div><span class="lbl">IVA</span><span class="v">${plata(iva)}</span></div>
-        <div><span class="lbl">Total</span><span class="v" style="color:var(--primary)">${plata(doc.total)}</span></div>
-      </div>
+      ${_facturaCabecera(doc)}
+      ${_facturaRenglones(doc, reng)}
+      ${_facturaPie(doc, reng, {listo: true, lineasOk, lineasTxt: lineasOk ? 'La imputación suma el neto' : 'La imputación no coincide con el neto (descuento comercial o carga vieja)'})}
       ${(doc.moneda && doc.moneda !== 'ARS' && doc.importe_moneda)
         ? `<div class="mini" style="margin:-4px 0 10px;padding:7px 10px;background:#ecfeff;border-left:4px solid #0e7490;border-radius:6px;color:#0e7490">
             💵 Factura en ${esc(doc.moneda)}: ${esc(doc.moneda)} ${Number(doc.importe_moneda).toLocaleString('es-AR',{minimumFractionDigits:2})}
@@ -3400,17 +3531,8 @@ async function abrirResumenDoc(docId){
         ${doc.computa_formal ? '<span class="chip" style="background:#f1f5f9;color:#475569">Libro IVA</span>' : '<span class="chip" style="background:#fee2e2;color:#991b1b">Fuera del Libro IVA</span>'}
         ${doc.computa_gestion ? `<span class="chip" style="background:#f1f5f9;color:#475569">📒 Planilla: ${esc(doc.gestion_unidad||'?')} · ${esc(doc.gestion_categoria||'?')} · ${doc.gestion_periodo ? MESES_G[Number(String(doc.gestion_periodo).slice(5,7))-1]+' '+String(doc.gestion_periodo).slice(0,4) : '?'}</span>` : '<span class="chip" style="background:#fee2e2;color:#991b1b">No va a la planilla</span>'}
       </div>
-      <h4 style="font-size:14px;margin:4px 0 7px">Desglose fiscal</h4>
-      <table style="margin-bottom:13px"><tbody>${fiscal.map(([lbl,v]) => `<tr>
-        <td style="padding:4px 7px">${lbl}</td>
-        <td class="num" style="padding:4px 7px">${plata(v)}</td><td style="width:55%"></td>
-      </tr>`).join('')}
-        <tr style="border-top:2px solid var(--bd)"><td style="padding:5px 7px"><b>Total</b></td>
-        <td class="num" style="padding:5px 7px"><b>${plata(doc.total)}</b></td><td></td></tr>
-      </tbody></table>
-      <p class="mini" style="margin:-6px 0 12px">Las retenciones no van en la factura: se practican al pagar y las vas a ver en la orden de pago.</p>
-      ${(doc.cae || doc.cae_vto) ? `<p class="mini" style="margin:-6px 0 12px">CAE <b>${esc(doc.cae || '—')}</b>${doc.cae_vto ? ' · vence ' + _fecha(doc.cae_vto) : ''}</p>` : ''}
-      <h4 style="font-size:14px;margin:4px 0 7px">Cómo se contabilizó</h4>
+      <p class="mini" style="margin:4px 0 10px">Las retenciones no van en la factura: se practican al pagar y las vas a ver en la orden de pago.</p>
+      <h4 style="font-size:14px;margin:4px 0 7px">Imputación contable</h4>
       ${lineas.length ? `<table>
         <thead><tr><th>Concepto</th><th>Alíc.</th><th class="num">Neto</th></tr></thead>
         <tbody>${lineas.map(l => `<tr>
@@ -3559,6 +3681,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="manual.js?v=29"></script>
+<script src="manual.js?v=30"></script>
 </body>
 </html>

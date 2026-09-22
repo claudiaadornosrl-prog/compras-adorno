@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v45-8-ajustes-JP';
+const CACHE_VERSION = 'compras-v46-formato-factura';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
