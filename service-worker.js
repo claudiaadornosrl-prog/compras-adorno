@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v55-ingreso-numint';
+const CACHE_VERSION = 'compras-v56-libro-iva-por-ingreso';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
