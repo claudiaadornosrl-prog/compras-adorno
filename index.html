@@ -133,6 +133,7 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 .fx-cab.fx-head .mini{color:rgba(255,255,255,.85);}
 .fx-cab.fx-head .fx-falta{color:rgba(255,255,255,.55);}
 .fx-vto-in{font:inherit;font-size:12px;padding:1px 4px;border-radius:5px;border:1px solid rgba(255,255,255,.5);background:rgba(255,255,255,.15);color:#fff;color-scheme:dark;width:auto;margin:0}
+.fx-lin-hd span{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.3px}
 .fx-vto-falta{margin-left:5px;font-size:11px;background:#fee2e2;color:#991b1b;border-radius:5px;padding:1px 5px}
 .fx-falta{color:var(--mut);font-style:italic;}
 .fx-pdf{background:#fff;color:var(--primary);border-color:#fff;text-decoration:none;display:inline-block;padding:5px 11px;font-size:12.5px;margin-top:6px;font-weight:600;}
@@ -1871,7 +1872,7 @@ function pintarControl(){
       <h4 style="font-size:14px;margin:14px 0 4px">Imputación contable</h4>
       <details class="fx-sug" style="margin:0 0 8px;border:1px solid ${cf.col};border-left-width:4px;border-radius:8px;background:${cf.bg};font-size:12.5px">
         <summary style="cursor:pointer;padding:5px 10px;list-style:none;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <b style="color:${cf.col}">${cf.ico} Propuesta${d.esEdicion ? ' (modificando una contabilización existente)' : ''} · confianza ${cf.tx.toLowerCase()}</b>
+          <b style="color:${cf.col}" title="Confianza ${esc(cf.tx.toLowerCase())}: verde alta · amarillo media · rojo baja">${cf.ico} Propuesta${d.esEdicion ? ' (modificando una contabilización existente)' : ''}</b>
           ${d.sug_concepto ? `<span><b>${esc(d.sug_concepto)}</b> ${esc(d.sug_descripcion||'')}</span>` : '<span>sin propuesta</span>'}
           <span class="mini" style="margin-left:auto">${(d._usados && d._usados.length) ? d._usados.length + ' concepto(s) usados ▾' : '▾'}</span>
         </summary>
@@ -1883,6 +1884,7 @@ function pintarControl(){
               onclick="usarConcepto('${esc(u.codigo)}')">${esc(u.codigo)} · ${esc(u.descripcion||'')} <span class="mini">(${u.veces})</span></button>`).join('')}` : '<div class="mini">Este proveedor no tiene facturas anteriores contabilizadas.</div>'}
         </div>
       </details>
+      <div class="c-linea fx-lin-hd" style="margin-bottom:2px"><span style="flex:1;min-width:150px">Concepto</span><span style="width:140px;text-align:right">Importe neto</span><span style="width:72px;text-align:right">IVA %</span>${lineasControl.length > 1 ? '<span style="width:34px"></span>' : ''}</div>
       ${lineasControl.map((l,i) => { const cc = CONCEPTOS.find(c => c.codigo === l.concepto); return `<div class="c-linea" style="flex-wrap:wrap">
         <input list="dl-conceptos" value="${esc(l.concepto)}" placeholder="Código de concepto"
                oninput="lineasControl[${i}].concepto=this.value.split(' ')[0].trim(); _pintarDescLinea(${i}, this.value.split(' ')[0].trim())" style="flex:1;min-width:150px">
@@ -3744,6 +3746,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="manual.js?v=34"></script>
+<script src="manual.js?v=35"></script>
 </body>
 </html>
