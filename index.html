@@ -320,7 +320,7 @@ async function cargarTodo(){
   let todos = [], desde = 0;
   while (true){
     let q = sb.from('compras_documentos')
-      .select('id,tipo,letra,punto_venta,numero,cuit_emisor,proveedor_nombre,fecha_emision,total,estado,estado_pago,tipo_gasto,archivo_path,archivo_alerta,confianza,origen,moneda,cotizacion,importe_moneda,cotizacion_fuente,es_prueba,computa_gestion,gestion_periodo,gestion_unidad,gestion_categoria,gestion_importe')
+      .select('id,tipo,letra,punto_venta,numero,cuit_emisor,proveedor_nombre,fecha_emision,total,estado,estado_pago,tipo_gasto,archivo_path,archivo_alerta,confianza,origen,moneda,cotizacion,importe_moneda,cotizacion_fuente,es_prueba,computa_gestion,gestion_periodo,gestion_unidad,gestion_categoria,gestion_importe,numero_interno,fecha_ingreso')
       .eq('es_prueba', MODO_PRUEBA)
       // (2-sep, regla JP) Facturas = SOLO lo contabilizado (aprobada). Lo que
       // espera control vive en la Bandeja y recién pasa acá al darle el OK.
@@ -386,14 +386,14 @@ function filtrados(base){
     if (filtro.clase && filtro.clase !== 'RTO' && d.tipo !== filtro.clase) return false;
     if (filtro.mes && (d.fecha_emision||'').slice(5,7) !== filtro.mes) return false;
     if (t){
-      const bolsa = `${d.proveedor_nombre||''} ${d.numero} ${d.cuit_emisor||''} ${d.archivo_path||''}`.toLowerCase();
+      const bolsa = `${d.proveedor_nombre||''} ${d.numero} ${d.cuit_emisor||''} ${d.archivo_path||''} ${d.numero_interno ? '#' + d.numero_interno + ' ni' + d.numero_interno : ''}`.toLowerCase();
       if (!bolsa.includes(t)) return false;
     }
     return true;
   });
   r.sort((a,b) => {
     let x = a[orden.col], y = b[orden.col];
-    if (orden.col === 'total'){ x = Number(x)||0; y = Number(y)||0; }
+    if (orden.col === 'total' || orden.col === 'numero_interno'){ x = Number(x)||0; y = Number(y)||0; }
     else if (orden.col === 'remito'){ x = (REMITOS_DOC[a.id]||[]).length; y = (REMITOS_DOC[b.id]||[]).length; }
     else { x = String(x??'').toLowerCase(); y = String(y??'').toLowerCase(); }
     return (x<y?-1:x>y?1:0) * (orden.desc?-1:1);
@@ -1935,6 +1935,12 @@ function pintarControl(){
           extra: `<div style="margin-top:6px"><button class="act gh" type="button" style="font-size:12px;padding:4px 9px" onclick="_editarImportes()" title="Si el motor leyó mal algún importe, corregilo a mano">✏ Corregir importes</button></div><div id="imp-edit"></div>`})}
 
       <div class="c-fila">
+        <label title="Día en que se controló y contabilizó el comprobante. Por defecto hoy; se puede corregir.">Fecha de ingreso
+          <input id="ctrl-ingreso" type="date" value="${esc(d._ingreso ?? d.fecha_ingreso ?? _hoyAR())}" max="${_hoyAR()}" min="${esc(d.fecha_emision || '')}" oninput="enControl._ingreso=this.value"></label>
+        <label title="Correlativo propio del módulo. Si lo dejás vacío se asigna el siguiente al contabilizar. Más adelante se va a alinear con el número interno del Dragonfish.">Nº interno
+          <input id="ctrl-numint" type="number" min="1" step="1" inputmode="numeric" style="width:120px" value="${esc(d._numint ?? d.numero_interno ?? '')}" placeholder="automático" oninput="enControl._numint=this.value"></label>
+      </div>
+      <div class="c-fila">
         <label>CAE <input id="ctrl-cae" value="${esc(d.cae || d.extraido_json?.cae || '')}" placeholder="14 dígitos" inputmode="numeric" maxlength="20" style="width:170px"></label>
         <label>Vto. CAE <input id="ctrl-cae-vto" type="date" value="${esc(d.cae_vto || d.extraido_json?.cae_vto || '')}"></label>
       </div>
@@ -2038,6 +2044,9 @@ function cambioCotiz(v){
 function agregarLinea(){ lineasControl.push({concepto:'', monto:0}); pintarControl(); }
 function quitarLinea(i){ lineasControl.splice(i,1); pintarControl(); }
 
+// Hoy en hora argentina (toISOString da el día siguiente después de las 21 hs)
+function _hoyAR(){ return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Argentina/Buenos_Aires'}).format(new Date()); }
+
 async function contabilizar(){
   const lineas = lineasControl
     .filter(l => (l.concepto||'').trim())
@@ -2050,8 +2059,13 @@ async function contabilizar(){
   if (cae && !/^\d{14}$/.test(cae) && !confirm('El CAE suele tener 14 dígitos y este tiene ' + cae.length + '. ¿Guardar igual?')) return;
   const vtoIn = document.getElementById('ctrl-vto')?.value || '';
   if (!vtoIn && !confirm('La factura no tiene FECHA DE VENCIMIENTO cargada.\n\nSin vencimiento, la orden de pago no sabe cuándo pagarla (va a proponer la fecha del día). ¿Contabilizar igual?')) return;
+  const ingIn = document.getElementById('ctrl-ingreso')?.value || null;
+  if (ingIn && ingIn > _hoyAR()){ alert('La fecha de ingreso no puede ser futura.'); return; }
+  if (ingIn && enControl.fecha_emision && ingIn < enControl.fecha_emision){ alert('La fecha de ingreso no puede ser anterior a la emisión (' + fechaCorta(enControl.fecha_emision) + ').'); return; }
+  const niTxt = (document.getElementById('ctrl-numint')?.value || '').trim();
+  if (niTxt && !(/^\d+$/.test(niTxt) && Number(niTxt) > 0)){ alert('El número interno tiene que ser un entero mayor a cero (o dejalo vacío para que se asigne solo).'); return; }
   if (vtoIn && enControl.fecha_emision && vtoIn < enControl.fecha_emision){ alert('El vencimiento no puede ser anterior a la emisión (' + fechaCorta(enControl.fecha_emision) + ').'); return; }
-  const {error} = await sb.rpc('compras_contabilizar', {
+  const {data, error} = await sb.rpc('compras_contabilizar', {
     p_doc_id: enControl.id,
     p_lineas: lineas,
     p_tipo_gasto: document.getElementById('ctrl-tipo').value || null,
@@ -2060,6 +2074,8 @@ async function contabilizar(){
     p_cotizacion: enControl._cotizNueva || null,
     p_cae: cae || null, p_cae_vto: caeVto,
     p_fecha_vto: document.getElementById('ctrl-vto')?.value || null,
+    p_fecha_ingreso: ingIn,
+    p_numero_interno: niTxt ? Number(niTxt) : null,
     p_gestion: document.getElementById('ctrl-gestion').checked ? {
       periodo:   document.getElementById('ctrl-g-periodo').value || null,
       unidad:    document.getElementById('ctrl-g-unidad').value || null,
@@ -2136,14 +2152,16 @@ function vistaFacturas(){
 
 function tabla(lista, bandeja){
   if (!lista.length) return `<div class="vacio">No hay comprobantes con esos filtros.</div>`;
-  const cab = [['fecha_emision','Fecha'],['proveedor_nombre','Proveedor'],['numero','Comprobante'],
+  const cab = [['numero_interno','Nº int.'],['fecha_emision','Fecha'],['fecha_ingreso','Ingreso'],['proveedor_nombre','Proveedor'],['numero','Comprobante'],
                ['tipo_gasto','Tipo'],['total','Total'],['estado_pago','Estado'],['remito','Remito']];
   return `<div style="overflow-x:auto"><table>
     <thead><tr>${cab.map(([k,t]) =>
       `<th onclick="ordenar('${k}')" class="${k==='total'?'num':''}">${t}${orden.col===k?(orden.desc?' ▾':' ▴'):''}</th>`).join('')}
       <th></th></tr></thead>
     <tbody>${lista.slice(0,400).map(d => `<tr style="cursor:pointer" onclick="abrirResumenDoc(${d.id})">
+      <td class="mini"><b>${d.numero_interno ?? '—'}</b></td>
       <td>${fechaCorta(d.fecha_emision)}</td>
+      <td class="mini">${d.fecha_ingreso ? fechaCorta(d.fecha_ingreso) : '—'}</td>
       <td>${esc(d.proveedor_nombre || d.cuit_emisor || '—')}
           ${d.archivo_alerta ? '<br><span class="mini" style="color:#dc2626">📎 archivo a revisar</span>' : ''}</td>
       <td class="oculta-mov">${d.tipo==='INT' ? '<span class="mini">— sin factura —</span>'
@@ -3650,6 +3668,7 @@ async function abrirResumenDoc(docId){
       ${doc.aprobada_por ? `<p class="mini" style="margin-top:9px">Contabilizada por ${esc(doc.aprobada_por)}
         el ${doc.aprobada_at ? new Date(doc.aprobada_at).toLocaleDateString('es-AR') : '—'}</p>`
         : '<p class="mini" style="margin-top:9px">Contabilización migrada del Dragonfish.</p>'}
+      <p class="mini" style="margin-top:6px">Nº interno <b>${doc.numero_interno ?? '—'}</b> · Fecha de ingreso <b>${doc.fecha_ingreso ? fechaCorta(doc.fecha_ingreso) : '—'}</b></p>
       <p class="mini" style="margin-top:9px">CAE <b>${esc(doc.cae || (doc.extraido_json||{}).cae || '—')}</b> · vto ${(doc.cae_vto || (doc.extraido_json||{}).cae_vto) ? fechaCorta(doc.cae_vto || doc.extraido_json.cae_vto) : '—'}</p>
       ${doc.archivo_path ? `<p class="mini" style="word-break:break-all">📎 ${esc(doc.archivo_path)}</p>` : ''}
     </div>
@@ -3788,6 +3807,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="manual.js?v=37"></script>
+<script src="manual.js?v=38"></script>
 </body>
 </html>
