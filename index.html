@@ -111,6 +111,8 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 .mini{font-size:11.5px;color:var(--mut);}
 @media(max-width:640px){ td,th{padding:7px 5px;font-size:12.5px;} .oculta-mov{display:none;} }
 /* ── Modal de control de la Bandeja ── */
+#map-overlay{z-index:10000!important}
+.fx-eq-btn{font-size:11.5px!important;padding:2px 8px!important;margin-left:4px;vertical-align:middle}
 #ctrl-overlay,#map-overlay,#res-overlay,#merc-overlay,#sf-overlay,#rem-overlay,#suc-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9998;display:flex;
   align-items:flex-start;justify-content:center;padding:18px 12px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
 #ctrl-overlay .c-box,#map-overlay .c-box,#res-overlay .c-box,#merc-overlay .c-box,#sf-overlay .c-box,#rem-overlay,#suc-overlay .c-box{background:#fff;border-radius:14px;max-width:720px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);}
@@ -1688,7 +1690,7 @@ function _facturaRenglones(d, reng, opts = {}){
         const det = r.estado === 'difiere' ? [r.dif_precio_pct != null ? 'precio ' + _fxPct(r.dif_precio_pct) : '', r.dif_costo_pct != null ? 'vs costo ' + _fxPct(r.dif_costo_pct) : ''].filter(Boolean).join(' · ') : '';
         return `<tr>
         <td class="num">${Number(r.cantidad||0).toLocaleString('es-AR')}</td>
-        <td>${esc(r.descripcion || '')}<br><span class="mini">${r.sku ? `<code>${esc(r.sku)}</code>` : `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>`}${r.lista_compra != null ? ` · lista ${plata(r.lista_compra)}` : ''}${r.lista_costo != null ? ` · costo ${plata(r.lista_costo)}` : ''}</span></td>
+        <td>${esc(r.descripcion || '')}<br><span class="mini">${r.sku ? `<code>${esc(r.sku)}</code>` : `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>`}${(!r.sku && !r.sin_stock && opts.desde) ? ` <button class="act fx-eq-btn" title="Traducir el código del proveedor a un artículo nuestro. Se guarda como equivalencia y las próximas facturas de este proveedor lo reconocen solas." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${reng.indexOf(r)})">🔗 Asignar SKU</button>` : ''}${r.lista_compra != null ? ` · lista ${plata(r.lista_compra)}` : ''}${r.lista_costo != null ? ` · costo ${plata(r.lista_costo)}` : ''}</span></td>
         <td class="num">${r.precio_unitario != null ? plata(r.precio_unitario) : '—'}</td>
         <td class="num">${r.descuento_pct ? Number(r.descuento_pct) + ' %' : '—'}</td>
         <td class="num"><b>${plata(r.importe)}</b></td>
@@ -1878,7 +1880,7 @@ function pintarControl(){
 
     <div class="c-body">
       ${d.archivo_alerta ? `<div class="alerta">📎 ${esc(d.archivo_alerta)}</div>` : ''}
-      ${_facturaRenglones(d, reng, {conceptos: lineasControl.map(l => l.concepto)})}
+      ${_facturaRenglones(d, reng, {conceptos: lineasControl.map(l => l.concepto), desde: 'control'})}
       ${(d.moneda && d.moneda !== 'ARS' && d.importe_moneda) ? `<div class="c-sug" style="background:#ecfeff;border-color:#0e7490">
         💵 <b>Factura en ${esc(d.moneda)}</b> · ${esc(d.moneda)} ${Number(d.importe_moneda).toLocaleString('es-AR',{minimumFractionDigits:2})}
         × cotización $ <input type="number" step="0.01" value="${Number(d.cotizacion)||''}"
@@ -2805,6 +2807,27 @@ async function vistaEquivalencias(){
     </div>` : ''}`;
 }
 
+// Desde el renglón de una factura (modal de control o resumen): mismo modal de 🔗 Equivalencias.
+let _mapeoRengCache = {};
+async function abrirMapeoRenglon(docId, desde, idx){
+  const d = desde === 'control' ? enControl : (_mapeoRengCache.doc || null);
+  const reng = desde === 'control' ? (enControl && enControl._renglones) : _mapeoRengCache.reng;
+  const r = reng && reng[idx]; if (!d || !r) { alert('No encontré el renglón. Cerrá y volvé a abrir la factura.'); return; }
+  await _abrirMapeoCon({cuit: String(d.cuit_emisor), codigo_proveedor: r.codigo_proveedor || '',
+    descripcion: r.descripcion || '', prov: d.proveedor_nombre, veces: 1,
+    _docId: docId, _desde: desde});
+}
+async function _abrirMapeoCon(m){
+  enMapeo = m;
+  partesMapeo = []; candidatos = []; pintarMapeo(true);
+  const {data, error} = await sb.rpc('compras_resolver_articulo', {
+    p_cuit: enMapeo.cuit, p_codigo: enMapeo.codigo_proveedor,
+    p_descripcion: enMapeo.descripcion, p_limite: 8,
+  });
+  candidatos = error ? [] : (data || []);
+  if (candidatos.length) partesMapeo = [{sku: candidatos[0].sku, cantidad: 1, proporcion: 1}];
+  pintarMapeo();
+}
 async function abrirMapeo(i){
   enMapeo = PENDIENTES[i];
   partesMapeo = [];
@@ -2822,7 +2845,7 @@ async function abrirMapeo(i){
 function cerrarMapeo(){
   const o = document.getElementById('map-overlay');
   if (o) o.remove();
-  document.body.style.overflow = '';
+  if (!document.getElementById('ctrl-overlay') && !document.getElementById('res-overlay')) document.body.style.overflow = '';
   enMapeo = null;
 }
 
@@ -2837,7 +2860,7 @@ function pintarMapeo(cargando){
         <div style="font-weight:700;font-size:16px">${esc(m.descripcion || '')}</div>
         <div style="font-size:12.5px;opacity:.9">${esc(m.prov || m.cuit)} ·
           código <code>${esc(m.codigo_proveedor || '—')}</code> ·
-          aparece en ${m.veces} factura${m.veces === 1 ? '' : 's'}</div>
+          ${m._desde ? 'renglón de esta factura' : `aparece en ${m.veces} factura${m.veces === 1 ? '' : 's'}`}</div>
       </div>
       <button class="m-x" onclick="cerrarMapeo()">✕</button>
     </div>
@@ -2923,8 +2946,14 @@ async function guardarMapeo(){
     p_descripcion: enMapeo.descripcion, p_partes: partes,
   });
   if (error){ alert('No se pudo guardar: ' + error.message); return; }
+  const desde = enMapeo._desde, docId = enMapeo._docId;
   cerrarMapeo();
-  vistaEquivalencias();
+  if (desde === 'control' && enControl && enControl.id === docId){
+    const { data: rg } = await sb.rpc('compras_doc_renglones', { p_doc: docId });
+    enControl._renglones = rg || []; pintarControl();
+  } else if (desde === 'resumen'){
+    abrirResumenDoc(docId);
+  } else vistaEquivalencias();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -3569,6 +3598,7 @@ async function abrirResumenDoc(docId){
     sb.rpc('compras_doc_renglones', { p_doc: docId }),
   ]);
   const doc = full.data || d, lineas = lin.data || [], reng = rg.data || [];
+  _mapeoRengCache = {doc, reng};
   doc._impuestosOk = true;
   try { doc._arca = (await _arcaDe(doc.cuit_emisor)).data; } catch (_) {}
   const neto = Number(doc.neto_gravado||0)+Number(doc.neto_no_gravado||0)+Number(doc.exento||0);
@@ -3582,7 +3612,7 @@ async function abrirResumenDoc(docId){
       <button class="m-x" onclick="document.getElementById('res-overlay').remove()">✕</button>
     </div>
     <div class="c-body">
-      ${_facturaRenglones(doc, reng, {conceptos: lineas.map(l => l.concepto_codigo)})}
+      ${_facturaRenglones(doc, reng, {conceptos: lineas.map(l => l.concepto_codigo), desde: 'resumen'})}
       ${_facturaPie(doc, reng, {listo: true, lineasOk, lineasTxt: lineasOk ? 'La imputación suma el neto' : 'La imputación no coincide con el neto (descuento comercial o carga vieja)'})}
       ${(doc.moneda && doc.moneda !== 'ARS' && doc.importe_moneda)
         ? `<div class="mini" style="margin:-4px 0 10px;padding:7px 10px;background:#ecfeff;border-left:4px solid #0e7490;border-radius:6px;color:#0e7490">
@@ -3758,6 +3788,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="manual.js?v=36"></script>
+<script src="manual.js?v=37"></script>
 </body>
 </html>

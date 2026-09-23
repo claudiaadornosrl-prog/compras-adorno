@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v53-concepto-color';
+const CACHE_VERSION = 'compras-v54-asignar-sku';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
