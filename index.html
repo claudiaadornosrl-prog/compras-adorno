@@ -1824,6 +1824,26 @@ function _pdfUrl(path){
 }
 
 // Debajo de cada línea: código · descripción · IVA del concepto elegido (se actualiza al tipear, sin redibujar el modal)
+// El COLOR del concepto es la confianza de la propuesta (verde alta · amarillo media · rojo baja).
+// Solo tiñe la línea que coincide con lo propuesto; si la persona pone otro concepto, queda neutro.
+function _estiloConf(i, cod){
+  const d = enControl; if (!d || !d.sug_concepto || cod !== d.sug_concepto) return '';
+  const cf = CONF[d.sug_confianza] || CONF.baja;
+  return `border-color:${cf.col};border-width:2px;background:${cf.bg}`;
+}
+function _titleConf(i, cod){
+  const d = enControl; if (!d || !d.sug_concepto || cod !== d.sug_concepto) return '';
+  const cf = CONF[d.sug_confianza] || CONF.baja;
+  return esc(`Propuesta del sistema · confianza ${cf.tx.toLowerCase()}${d.sug_motivo ? ': ' + d.sug_motivo : ''}`);
+}
+function _pintarConfLinea(i){
+  const el = document.getElementById('ctrl-conc-' + i); if (!el) return;
+  const cod = (lineasControl[i] || {}).concepto || '';
+  el.style.borderColor = ''; el.style.borderWidth = ''; el.style.background = '';
+  const st = _estiloConf(i, cod);
+  if (st) el.style.cssText += ';' + st;
+  el.title = _titleConf(i, cod).replace(/&quot;/g,'"').replace(/&amp;/g,'&');
+}
 function _pintarDescLinea(i, cod){
   const el = document.getElementById('desc-linea-' + i); if (!el) return;
   const cc = CONCEPTOS.find(c => c.codigo === cod);
@@ -1870,24 +1890,15 @@ function pintarControl(){
       </div>` : ''}
 
       <h4 style="font-size:14px;margin:14px 0 4px">Imputación contable</h4>
-      <details class="fx-sug" style="margin:0 0 8px;border:1px solid ${cf.col};border-left-width:4px;border-radius:8px;background:${cf.bg};font-size:12.5px">
-        <summary style="cursor:pointer;padding:5px 10px;list-style:none;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <b style="color:${cf.col}" title="Confianza ${esc(cf.tx.toLowerCase())}: verde alta · amarillo media · rojo baja">${cf.ico} Propuesta${d.esEdicion ? ' (modificando una contabilización existente)' : ''}</b>
-          ${d.sug_concepto ? `<span><b>${esc(d.sug_concepto)}</b> ${esc(d.sug_descripcion||'')}</span>` : '<span>sin propuesta</span>'}
-          <span class="mini" style="margin-left:auto">${(d._usados && d._usados.length) ? d._usados.length + ' concepto(s) usados ▾' : '▾'}</span>
-        </summary>
-        <div style="padding:2px 10px 8px">
-          ${d.sug_motivo ? `<div class="mini" style="margin-bottom:5px">${esc(d.sug_motivo)}</div>` : ''}
-          ${d.esEdicion ? '<div class="mini" style="margin-bottom:5px;color:#5b21b6">Al guardar queda marcada como corregida y asentado quién la cambió.</div>' : ''}
-          ${(d._usados && d._usados.length) ? `<div class="mini" style="margin-bottom:4px">Conceptos que ya usó este proveedor (tocá uno para ponerlo en la primera línea):</div>
-            ${d._usados.map(u => `<button class="act gh" style="margin:0 5px 5px 0;font-size:12px;padding:4px 8px"
-              onclick="usarConcepto('${esc(u.codigo)}')">${esc(u.codigo)} · ${esc(u.descripcion||'')} <span class="mini">(${u.veces})</span></button>`).join('')}` : '<div class="mini">Este proveedor no tiene facturas anteriores contabilizadas.</div>'}
-        </div>
-      </details>
-      <div class="c-linea fx-lin-hd" style="margin-bottom:2px"><span style="flex:1;min-width:150px">Concepto</span><span style="width:140px;text-align:right">Importe neto</span><span style="width:72px;text-align:right">IVA %</span>${lineasControl.length > 1 ? '<span style="width:34px"></span>' : ''}</div>
+      ${(d._usados && d._usados.length) ? `<div id="ctrl-usados" style="display:none;margin:0 0 8px;padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background:#fafafa;font-size:12.5px">
+          <div class="mini" style="margin-bottom:4px">Conceptos que ya usó este proveedor (tocá uno para ponerlo en la primera línea):</div>
+          ${d._usados.map(u => `<button class="act gh" style="margin:0 5px 5px 0;font-size:12px;padding:4px 8px"
+            onclick="usarConcepto('${esc(u.codigo)}')">${esc(u.codigo)} · ${esc(u.descripcion||'')} <span class="mini">(${u.veces})</span></button>`).join('')}
+        </div>` : ''}
+      <div class="c-linea fx-lin-hd" style="margin-bottom:2px"><span style="flex:1;min-width:150px">Concepto${(d._usados && d._usados.length) ? ` <a href="#" onclick="event.preventDefault();toggleUsados()" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--primary);text-decoration:none">${d._usados.length} usados ▾</a>` : ''}</span><span style="width:140px;text-align:right">Importe neto</span><span style="width:72px;text-align:right">IVA %</span>${lineasControl.length > 1 ? '<span style="width:34px"></span>' : ''}</div>
       ${lineasControl.map((l,i) => { const cc = CONCEPTOS.find(c => c.codigo === l.concepto); return `<div class="c-linea" style="flex-wrap:wrap">
-        <input list="dl-conceptos" value="${esc(l.concepto)}" placeholder="Código de concepto"
-               oninput="lineasControl[${i}].concepto=this.value.split(' ')[0].trim(); _pintarDescLinea(${i}, this.value.split(' ')[0].trim())" style="flex:1;min-width:150px">
+        <input list="dl-conceptos" id="ctrl-conc-${i}" value="${esc(l.concepto)}" placeholder="Código de concepto"
+               oninput="lineasControl[${i}].concepto=this.value.split(' ')[0].trim(); _pintarDescLinea(${i}, this.value.split(' ')[0].trim()); _pintarConfLinea(${i})" style="flex:1;min-width:150px;${_estiloConf(i, l.concepto)}" title="${_titleConf(i, l.concepto)}">
         <input type="text" inputmode="decimal" value="${nmShow(l.monto)}" style="width:140px;text-align:right"
                onfocus="wireImporte(this)"
                oninput="lineasControl[${i}].monto=nmParse(this.value); pintarNums()">
@@ -1991,6 +2002,7 @@ function pintarNums(){
     ? `<span style="color:var(--ok)">✓ Los conceptos suman el neto de la factura.</span>`
     : `<span style="color:var(--warn)">⚠ Faltan ${plata(dif)} por asignar (neto ${plata(neto)}).</span>`;
 }
+function toggleUsados(){ const u=document.getElementById('ctrl-usados'); if(u) u.style.display = u.style.display==='none' ? 'block' : 'none'; }
 function usarConcepto(cod){ lineasControl[0].concepto = cod; pintarControl(); }
 function toggleNuevoConcepto(){
   const f = document.getElementById('nc-form');
@@ -3746,6 +3758,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="manual.js?v=35"></script>
+<script src="manual.js?v=36"></script>
 </body>
 </html>
