@@ -2184,6 +2184,8 @@ function tabla(lista, bandeja){
 //  Se separan porque responden preguntas distintas: la de gestión mira el
 //  total pagado, la del estudio mira el crédito fiscal.
 // ═══════════════════════════════════════════════════════════════════════
+// Qué fecha decide el período del Libro IVA: 'ingreso' (default) o 'emision'.
+let listPor = 'ingreso';
 let listSub = 'gestion', LIST_IVA = null, LIST_PERC = null, LIST_RET = null, LIST_PDET = null, LIST_FUERA = null;
 const _hoy = new Date();
 let listPer = { desde: `${_hoy.getFullYear()}-${String(_hoy.getMonth()+1).padStart(2,'0')}-01`,
@@ -2242,10 +2244,10 @@ async function cargarListadosEstudio(){
   const [iva, per, ret, pdet] = await Promise.all([
     // p_prueba = el AMBIENTE, no "sumar los de prueba": en modo 🧪 se listan
     // SOLO los de test y en definitivo SOLO los reales. Nunca se mezclan.
-    sb.rpc('compras_listado_iva',          {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA}),
-    sb.rpc('compras_listado_percepciones', {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA}),
+    sb.rpc('compras_listado_iva',          {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA, p_por: listPor}),
+    sb.rpc('compras_listado_percepciones', {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA, p_por: listPor}),
     sb.rpc('compras_listado_retenciones',  {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA}),
-    sb.rpc('compras_listado_percepciones_detalle', {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA}),
+    sb.rpc('compras_listado_percepciones_detalle', {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA, p_por: listPor}),
   ]);
   if (iva.error){ c.innerHTML = `<div class="alerta">${esc(iva.error.message)}</div>`; return; }
   LIST_IVA = iva.data || []; LIST_PERC = per.data || []; LIST_RET = ret.data || [];
@@ -2255,8 +2257,10 @@ async function cargarListadosEstudio(){
   const {data: fuera} = await sb.from('compras_documentos')
     .select('tipo,letra,punto_venta,numero,proveedor_nombre,fecha_emision,total,moneda')
     .eq('es_prueba', MODO_PRUEBA).eq('computa_formal', false)
-    // mismo criterio que el Libro IVA: manda la fecha de INGRESO; sin ella, la de emisión
-    .or(`and(fecha_ingreso.gte.${listPer.desde},fecha_ingreso.lte.${listPer.hasta}),and(fecha_ingreso.is.null,fecha_emision.gte.${listPer.desde},fecha_emision.lte.${listPer.hasta})`)
+    // mismo criterio que el Libro IVA: por INGRESO (sin ella, emisión) o por EMISIÓN
+    .or(listPor === 'emision'
+      ? `and(fecha_emision.gte.${listPer.desde},fecha_emision.lte.${listPer.hasta})`
+      : `and(fecha_ingreso.gte.${listPer.desde},fecha_ingreso.lte.${listPer.hasta}),and(fecha_ingreso.is.null,fecha_emision.gte.${listPer.desde},fecha_emision.lte.${listPer.hasta})`)
     .order('fecha_emision');
   LIST_FUERA = fuera || [];
   _pintarEstudio();
@@ -2289,12 +2293,18 @@ function _pintarEstudio(){
         <span class="mini" style="align-self:center;margin:0 4px">o rango exacto:</span>
         <div><label class="mini">Desde</label><br><input type="date" id="lp-desde" value="${listPer.desde}" onchange="_listPerCambio()"></div>
         <div><label class="mini">Hasta</label><br><input type="date" id="lp-hasta" value="${listPer.hasta}" onchange="_listPerCambio()"></div>
+        <div><label class="mini">Filtrar por fecha de</label><br>
+          <select id="lp-por" onchange="listPor=this.value; LIST_IVA=null; cargarListadosEstudio()" style="padding:7px 9px"
+                  title="Ingreso: el mes en que se contabilizó (si no tiene, usa la emisión). Emisión: la fecha impresa en el comprobante.">
+            <option value="ingreso" ${listPor==='ingreso'?'selected':''}>Ingreso</option>
+            <option value="emision" ${listPor==='emision'?'selected':''}>Emisión</option>
+          </select></div>
         <div style="flex:1"></div>
         <button class="act gh" onclick="_bajarFormatoEstudio()" title="Mismas columnas que el Subdiario que le mandás hoy">⬇ Formato estudio</button>
         <button class="act" onclick="_bajarIvaCompras()">⬇ IVA Compras completo</button>
       </div>
       <p class="mini" style="margin-top:9px">Entran solo los comprobantes marcados <b>“computa en el Libro IVA”</b>.
-        Las notas de crédito restan. ${MODO_PRUEBA
+        Las notas de crédito restan. Período por fecha de <b>${listPor==='emision' ? 'emisión' : 'ingreso'}</b>${listPor==='emision' ? '' : ' (si no tiene, la de emisión)'}. ${MODO_PRUEBA
           ? '<b style="color:#92400e">🧪 Ambiente de prueba: se listan SOLO los comprobantes de test.</b>'
           : ''}</p>
     </div>
@@ -3809,6 +3819,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="manual.js?v=39"></script>
+<script src="manual.js?v=40"></script>
 </body>
 </html>
