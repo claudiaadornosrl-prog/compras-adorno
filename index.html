@@ -1606,6 +1606,25 @@ async function _arcaDe(cuit){
   const r = await sb.from('compras_arca_consultas').select('cuit,vigente,estado_clave,cond_iva,consultado_at').eq('cuit', String(cuit)).maybeSingle();
   return {data: r.data || null};
 }
+// Consulta a ARCA desde el modal de control / resumen (misma cola que la ficha del proveedor)
+async function _arcaConsultarDoc(cuit){
+  const d = enControl; if (!d || String(d.cuit_emisor) !== String(cuit)) return;
+  d._arcaBuscando = true; pintarControl();
+  try {
+    const { data, error } = await sb.rpc('compras_arca_pedir', { p_cuit: String(cuit).replace(/\D/g,''), p_forzar: false });
+    if (error || !data?.ok) throw new Error(error?.message || data?.motivo || 'No se pudo pedir la consulta');
+    let c = data.consulta;
+    for (let i = 0; i < 45 && !c; i++){
+      await new Promise(r => setTimeout(r, 2000));
+      const { data: e } = await sb.rpc('compras_arca_estado', { p_cola_id: data.cola_id });
+      if (e?.estado === 'listo' && e.consulta) c = e.consulta;
+      if (e?.estado === 'error') throw new Error('El consultor de ARCA no respondió. ¿Está corriendo arca_padron.py en la PC de JP?');
+    }
+    if (!c) throw new Error('ARCA no respondió en 90 segundos. Probá de nuevo en un rato.');
+    if (enControl && enControl.id === d.id) enControl._arca = c;
+  } catch (e) { alert(e.message); }
+  if (enControl && enControl.id === d.id){ enControl._arcaBuscando = false; pintarControl(); }
+}
 function _facturaCabecera(d, opts = {}){
   const ej = d.extraido_json || {};
   const num = `${esc(d.tipo || 'FC')} ${esc(d.letra || '')} ${String(d.punto_venta ?? '').padStart(4,'0')}-${String(d.numero ?? '').padStart(8,'0')}`;
@@ -1617,7 +1636,9 @@ function _facturaCabecera(d, opts = {}){
   const arca = a ? (a.vigente
       ? `<span class="chip fx-chip-ok" title="Consultado en ARCA el ${a.consultado_at ? new Date(a.consultado_at).toLocaleDateString('es-AR') : '—'}">ARCA ✓ vigente${a.cond_iva ? ' · ' + esc(a.cond_iva) : ''}</span>`
       : `<span class="chip fx-chip-bad" title="${esc(a.estado_clave || '')}">ARCA ⚠ ${esc(a.estado_clave || 'no vigente')}</span>`)
-    : (d.es_exterior ? '' : '<span class="chip fx-chip-off" title="Este CUIT nunca se validó contra ARCA (se hace desde la ficha del proveedor)">ARCA sin consultar</span>');
+    : (d.es_exterior ? '' : (d._arcaBuscando
+        ? '<span class="chip fx-chip-off">⏳ consultando ARCA…</span>'
+        : `<span class="chip fx-chip-off" style="cursor:pointer" title="Este CUIT nunca se validó contra ARCA. Tocá para consultarlo ahora (tarda unos segundos: lo resuelve arca_padron.py en la PC de JP)" onclick="_arcaConsultarDoc('${esc(d.cuit_emisor)}')">ARCA sin consultar · 🔍 consultar</span>`));
   return `<div class="fx-cab ${opts.enHead ? 'fx-head' : ''}">
     <div>
       <div class="fx-prov">${esc(d.proveedor_nombre || d.cuit_emisor)}</div>
@@ -1628,7 +1649,6 @@ function _facturaCabecera(d, opts = {}){
     <div style="text-align:right">
       <div class="fx-num">${num}</div>
       <div class="mini">Emisión <b>${fechaCorta(d.fecha_emision)}</b> · Vto <b>${vto ? fechaCorta(vto) : falta}</b></div>
-      <div class="mini">CAE ${cae ? esc(cae) : falta} · vto CAE ${caeVto ? fechaCorta(caeVto) : falta}</div>
       <div class="mini">Remito ${remito ? esc(remito) : falta}</div>
       ${d.archivo_path ? `<a class="act fx-pdf" target="_blank" rel="noopener" href="${_pdfUrl(d.archivo_path)}" title="Abre el PDF en OneDrive, en otra pestaña">📄 Ver la factura</a>` : ''}
     </div>
@@ -1703,7 +1723,7 @@ function _facturaPieFilas(d, reng){
 function _facturaPie(d, reng, opts = {}){
   if (!d._impuestosOk && !opts.listo) return '<p class="mini">Cargando el pie de la factura…</p>';
   const {filas, neto, dif} = _facturaPieFilas(d, reng);
-  const cargado = (d.cae || (d.extraido_json||{}).cae);
+  const cargado = (d.cae || (d.extraido_json||{}).cae), caeVto = d.cae_vto || (d.extraido_json||{}).cae_vto;
   const checks = [];
   const okDif = Math.abs(dif) <= 1;
   checks.push([okDif, okDif ? 'Neto + IVA + percepciones = total' : `Neto + impuestos no llegan al total: faltan ${plata(dif)}`]);
@@ -1717,7 +1737,7 @@ function _facturaPie(d, reng, opts = {}){
     checks.push([okSub, okSub ? (Math.abs(sub - neto) <= 1 ? 'Los renglones suman el neto' : 'Renglones − descuento = neto') : `Los renglones suman ${plata(sub)} y el neto dice ${plata(neto)}`]);
   }
   if (opts.lineasOk != null) checks.push([opts.lineasOk, opts.lineasTxt]);
-  checks.push([!!cargado, cargado ? 'CAE leído' : 'Falta el CAE']);
+  checks.push([!!cargado && !!caeVto, cargado ? (caeVto ? 'CAE y vencimiento leídos' : 'CAE leído · falta el vencimiento') : 'Falta el CAE']);
   return `<div class="fx-pie">
     <div>
       <div style="font-weight:700;font-size:12.5px;color:var(--mut);margin-bottom:4px">CONTROL</div>
@@ -3569,6 +3589,7 @@ async function abrirResumenDoc(docId){
       ${doc.aprobada_por ? `<p class="mini" style="margin-top:9px">Contabilizada por ${esc(doc.aprobada_por)}
         el ${doc.aprobada_at ? new Date(doc.aprobada_at).toLocaleDateString('es-AR') : '—'}</p>`
         : '<p class="mini" style="margin-top:9px">Contabilización migrada del Dragonfish.</p>'}
+      <p class="mini" style="margin-top:9px">CAE <b>${esc(doc.cae || (doc.extraido_json||{}).cae || '—')}</b> · vto ${(doc.cae_vto || (doc.extraido_json||{}).cae_vto) ? fechaCorta(doc.cae_vto || doc.extraido_json.cae_vto) : '—'}</p>
       ${doc.archivo_path ? `<p class="mini" style="word-break:break-all">📎 ${esc(doc.archivo_path)}</p>` : ''}
     </div>
   </div>`;
@@ -3706,6 +3727,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="manual.js?v=31"></script>
+<script src="manual.js?v=32"></script>
 </body>
 </html>

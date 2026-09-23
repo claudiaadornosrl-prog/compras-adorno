@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v47-cabecera-unificada';
+const CACHE_VERSION = 'compras-v49-cae-abajo';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
