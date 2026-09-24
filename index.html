@@ -1372,6 +1372,7 @@ function _gPeriodoOpts(sel){
 function _gestionCambio(){
   const on = document.getElementById('ctrl-gestion').checked;
   const b = document.getElementById('ctrl-gestion-box'); if (b) b.style.display = on ? 'block' : 'none';
+  _avisoUnidadConcepto();
 }
 
 
@@ -1385,7 +1386,7 @@ async function cargarBandeja(){
   const [b, c, m] = await Promise.all([
     sb.rpc('compras_bandeja', {p_anio: null}),   // (30-ago) la bandeja no filtra por año: pendiente es pendiente
     CONCEPTOS.length ? Promise.resolve({data:null})
-      : sb.from('compras_conceptos').select('codigo,descripcion,alicuota').eq('activo',true).limit(2000),
+      : sb.from('compras_conceptos').select('codigo,descripcion,alicuota,gestion_unidad').eq('activo',true).limit(2000),
     sb.from('compras_eventos').select('at,detalle').eq('accion','motor_corrida')
       .order('at',{ascending:false}).limit(1),
   ]);
@@ -1527,6 +1528,14 @@ async function abrirControl(id){
   if (!enControl) return;
   const neto = Number(enControl.neto_gravado||0) + Number(enControl.neto_no_gravado||0) + Number(enControl.exento||0);
   lineasControl = [{concepto: enControl.sug_concepto || '', monto: Math.round((neto || Number(enControl.total)) * 100)/100}];
+  // (23-sep) Factura con parte gravada Y parte no gravada (Edenor: tasas y contribuciones): se propone
+  // partida en dos, como en el Dragonfish — el concepto gravado y su hermano "no gravado".
+  const _ng = Number(enControl.neto_no_gravado||0) + Number(enControl.exento||0), _gr = Number(enControl.neto_gravado||0);
+  const _herm = _conceptoNoGravado(enControl.sug_concepto);
+  if (_ng > 0 && _gr > 0 && _herm){
+    lineasControl = [{concepto: enControl.sug_concepto, monto: Math.round(_gr*100)/100},
+                     {concepto: _herm, monto: Math.round(_ng*100)/100}];
+  }
   pintarControl();
   // Desglose impositivo (la RPC de la bandeja no lo trae): IVA por alícuota, percepciones y otros tributos
   try {
@@ -1838,6 +1847,25 @@ function _titleConf(i, cod){
   const cf = CONF[d.sug_confianza] || CONF.baja;
   return esc(`Propuesta del sistema · confianza ${cf.tx.toLowerCase()}${d.sug_motivo ? ': ' + d.sug_motivo : ''}`);
 }
+// Concepto "no gravado" hermano: mismo código base (sin .N / -N) con alícuota 0 (71401004-2 → 71401004-1)
+function _conceptoNoGravado(cod){
+  if (!cod) return null;
+  const c0 = CONCEPTOS.find(c => c.codigo === cod); if (!c0 || Number(c0.alicuota) === 0) return null;
+  const base = String(cod).replace(/[-.]\d+$/, '');
+  const h = CONCEPTOS.find(c => c.codigo !== cod && String(c.codigo).replace(/[-.]\d+$/, '') === base && Number(c.alicuota) === 0);
+  return h ? h.codigo : null;
+}
+// (23-sep) El concepto contable y la unidad de la planilla tienen que decir el mismo local.
+// Caso Metrotel: concepto de Unicenter con la unidad en Alcorta → uno de los dos está mal.
+function _avisoUnidadConcepto(){
+  const el = document.getElementById('ctrl-g-aviso'); if (!el) return;
+  const u = (document.getElementById('ctrl-g-unidad') || {}).value || '';
+  const on = (document.getElementById('ctrl-gestion') || {}).checked;
+  const locs = [...new Set(lineasControl.map(l => (CONCEPTOS.find(c => c.codigo === l.concepto) || {}).gestion_unidad).filter(Boolean))];
+  const choca = on && u && locs.length && !locs.includes(u);
+  el.style.display = choca ? 'block' : 'none';
+  el.innerHTML = choca ? `⚠ El concepto contable es de <b>${esc(locs.join(' / '))}</b> y la planilla dice <b>${esc(u)}</b>. Revisá cuál de los dos está mal.` : '';
+}
 function _pintarConfLinea(i){
   const el = document.getElementById('ctrl-conc-' + i); if (!el) return;
   const cod = (lineasControl[i] || {}).concepto || '';
@@ -1900,7 +1928,7 @@ function pintarControl(){
       <div class="c-linea fx-lin-hd" style="margin-bottom:2px"><span style="flex:1;min-width:150px">Concepto${(d._usados && d._usados.length) ? ` <a href="#" onclick="event.preventDefault();toggleUsados()" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--primary);text-decoration:none">${d._usados.length} usados ▾</a>` : ''}</span><span style="width:140px;text-align:right">Importe neto</span><span style="width:72px;text-align:right">IVA %</span>${lineasControl.length > 1 ? '<span style="width:34px"></span>' : ''}</div>
       ${lineasControl.map((l,i) => { const cc = CONCEPTOS.find(c => c.codigo === l.concepto); return `<div class="c-linea" style="flex-wrap:wrap">
         <input list="dl-conceptos" id="ctrl-conc-${i}" value="${esc(l.concepto)}" placeholder="Código de concepto"
-               oninput="lineasControl[${i}].concepto=this.value.split(' ')[0].trim(); _pintarDescLinea(${i}, this.value.split(' ')[0].trim()); _pintarConfLinea(${i})" style="flex:1;min-width:150px;${_estiloConf(i, l.concepto)}" title="${_titleConf(i, l.concepto)}">
+               oninput="lineasControl[${i}].concepto=this.value.split(' ')[0].trim(); _pintarDescLinea(${i}, this.value.split(' ')[0].trim()); _pintarConfLinea(${i}); _avisoUnidadConcepto()" style="flex:1;min-width:150px;${_estiloConf(i, l.concepto)}" title="${_titleConf(i, l.concepto)}">
         <input type="text" inputmode="decimal" value="${nmShow(l.monto)}" style="width:140px;text-align:right"
                onfocus="wireImporte(this)"
                oninput="lineasControl[${i}].monto=nmParse(this.value); pintarNums()">
@@ -1963,7 +1991,7 @@ function pintarControl(){
           <label>Período (mes de consumo)
             <select id="ctrl-g-periodo">${_gPeriodoOpts(gs.periodo || d.gestion_periodo || null)}</select></label>
           <label>Unidad
-            <select id="ctrl-g-unidad">
+            <select id="ctrl-g-unidad" onchange="_avisoUnidadConcepto()">
               <option value="">— elegir —</option>
               ${G_UNIDADES.map(u => `<option value="${u.clave}" ${(gs.unidad||'')===u.clave?'selected':''}>${esc(u.nombre)}</option>`).join('')}
             </select></label>
@@ -1974,6 +2002,7 @@ function pintarControl(){
           <label>Importe a la planilla
             <input id="ctrl-g-importe" type="number" step="0.01" value="${gs.importe ?? ''}"></label>
         </div>
+        <div id="ctrl-g-aviso" class="mini" style="display:none;margin-top:6px;padding:6px 8px;border-radius:6px;background:#fef3c7;color:#92400e"></div>
         <div class="mini" style="color:var(--muted)">${esc(gs.motivo || '')}</div>
       </div>
     </div>
@@ -1998,6 +2027,7 @@ function pintarControl(){
     document.body.style.overflow = 'hidden';
   }
   ov.innerHTML = html;
+  _avisoUnidadConcepto();
 }
 
 function pintarNums(){
@@ -3819,6 +3849,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="manual.js?v=40"></script>
+<script src="manual.js?v=41"></script>
 </body>
 </html>
