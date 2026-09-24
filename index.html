@@ -61,6 +61,11 @@ window.ADORNO_SSO = (function () {
 <link rel="apple-touch-icon" href="./icon-192-v2.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🛒%3C/text%3E%3C/svg%3E">
 <style>
+.fecha-mala{border-color:#dc2626 !important;background:#fef2f2 !important;}
+.lp-rangos{display:flex;gap:10px 22px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px dashed #e5e7eb}
+.lp-rango{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
+.lp-rango label{display:flex;gap:5px;align-items:center}
+
 @font-face{font-family:'URW Gothic';src:url('fonts/URWGothic-Book.ttf') format('truetype');font-weight:300 700;font-display:swap;}
 :root{--primary:#ea580c;--primary-dark:#c2410c;--bg:#f8fafc;--card:#fff;--bd:#e2e8f0;--tx:#0f172a;--mut:#64748b;
       --ok:#16a34a;--warn:#d97706;--bad:#dc2626;--info:#2563eb;}
@@ -1964,7 +1969,7 @@ function pintarControl(){
 
       <div class="c-fila">
         <label title="Define en qué mes entra al Libro IVA Compras. Por defecto hoy; si una factura se contabiliza tarde o hay que imputarla a otro mes, se cambia acá.">Fecha de ingreso <span class="mini">(mes del Libro IVA)</span>
-          <input id="ctrl-ingreso" type="date" value="${esc(d._ingreso ?? d.fecha_ingreso ?? _hoyAR())}" min="${esc(d.fecha_emision || '')}" oninput="enControl._ingreso=this.value"></label>
+          <input id="ctrl-ingreso" type="date" value="${esc(d._ingreso ?? d.fecha_ingreso ?? _hoyAR())}" min="${esc(d.fecha_emision || '')}" max="${d.fecha_emision ? _sumarMeses(d.fecha_emision, 12) : '2100-12-31'}" oninput="enControl._ingreso=this.value"></label>
         <label title="Correlativo propio del módulo. Si lo dejás vacío se asigna el siguiente al contabilizar. Más adelante se va a alinear con el número interno del Dragonfish.">Nº interno
           <input id="ctrl-numint" type="number" min="1" step="1" inputmode="numeric" style="width:120px" value="${esc(d._numint ?? d.numero_interno ?? '')}" placeholder="automático" oninput="enControl._numint=this.value"></label>
       </div>
@@ -2089,7 +2094,17 @@ async function contabilizar(){
   if (cae && !/^\d{14}$/.test(cae) && !confirm('El CAE suele tener 14 dígitos y este tiene ' + cae.length + '. ¿Guardar igual?')) return;
   const vtoIn = document.getElementById('ctrl-vto')?.value || '';
   if (!vtoIn && !confirm('La factura no tiene FECHA DE VENCIMIENTO cargada.\n\nSin vencimiento, la orden de pago no sabe cuándo pagarla (va a proponer la fecha del día). ¿Contabilizar igual?')) return;
+  for (const [id, t] of [['ctrl-ingreso','de ingreso'],['ctrl-vto','de vencimiento'],['ctrl-cae-vto','de vencimiento del CAE']]){
+    const el = document.getElementById(id);
+    if (_fechaInvalida(el)){ alert('⚠ La fecha ' + t + ' no es válida. Revisá día, mes y año.'); el.focus(); return; }
+  }
   const ingIn = document.getElementById('ctrl-ingreso')?.value || null;
+  // (24-sep, JP) Tope de 12 meses entre emisión e ingreso (la base también lo frena).
+  if (ingIn && enControl.fecha_emision && ingIn > _sumarMeses(enControl.fecha_emision, 12)){
+    alert('La fecha de ingreso (' + _fecha(ingIn) + ') supera el tope de 12 meses desde la emisión (' + _fecha(enControl.fecha_emision)
+      + ').\n\nÚltimo día permitido: ' + _fecha(_sumarMeses(enControl.fecha_emision, 12)) + '.');
+    return;
+  }
   if (ingIn && ingIn.slice(0,7) !== _hoyAR().slice(0,7)
       && !confirm('La fecha de ingreso (' + fechaCorta(ingIn) + ') es de otro mes que hoy.\n\nEsta factura va a entrar en el Libro IVA Compras de ' + MESES[+ingIn.slice(5,7)-1] + ' ' + ingIn.slice(0,4) + '. ¿Seguro?')) return;
   if (ingIn && enControl.fecha_emision && ingIn < enControl.fecha_emision){ alert('La fecha de ingreso no puede ser anterior a la emisión (' + fechaCorta(enControl.fecha_emision) + ').'); return; }
@@ -2214,12 +2229,40 @@ function tabla(lista, bandeja){
 //  Se separan porque responden preguntas distintas: la de gestión mira el
 //  total pagado, la del estudio mira el crédito fiscal.
 // ═══════════════════════════════════════════════════════════════════════
-// Qué fecha decide el período del Libro IVA: 'ingreso' (default) o 'emision'.
+// (24-sep, JP) Los listados del estudio filtran por fecha de INGRESO y de EMISIÓN a la vez.
+// Cada rango es opcional: "Desde" vacío = desde el principio · "Hasta" vacío = sin tope.
+// listPor = a qué fila aplica el selector rápido de mes (‹ Mes Año ›).
 let listPor = 'ingreso';
 let listSub = 'gestion', LIST_IVA = null, LIST_PERC = null, LIST_RET = null, LIST_PDET = null, LIST_FUERA = null;
-const _hoy = new Date();
-let listPer = { desde: `${_hoy.getFullYear()}-${String(_hoy.getMonth()+1).padStart(2,'0')}-01`,
-                hasta: new Date(_hoy.getFullYear(), _hoy.getMonth()+1, 0).toISOString().slice(0,10) };
+const _ymd = (y, m, d) => `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+const _finMes = (y, m) => new Date(y, m, 0).getDate();          // m = 1..12
+function _rangoMes(y, m){ return { desde: _ymd(y, m, 1), hasta: _ymd(y, m, _finMes(y, m)) }; }
+const _hoyIso = _hoyAR();
+let listPer = { ing: _rangoMes(+_hoyIso.slice(0,4), +_hoyIso.slice(5,7)), emi: { desde: '', hasta: '' } };
+const _listFila = () => listPor === 'emision' ? 'emi' : 'ing';
+
+// Suma n meses a una fecha ISO igual que Postgres (31/01 + 1 mes = 28 o 29/02).
+function _sumarMeses(iso, n){
+  const y = +iso.slice(0,4), m0 = +iso.slice(5,7) - 1 + n, d = +iso.slice(8,10);
+  const yy = y + Math.floor(m0 / 12), mm = ((m0 % 12) + 12) % 12 + 1;
+  return _ymd(yy, mm, Math.min(d, _finMes(yy, mm)));
+}
+// Una fecha que el navegador no pudo interpretar (31/02, 32/01) o con un año absurdo.
+function _fechaInvalida(el){
+  if (!el || el.type !== 'date') return false;
+  if (el.validity && el.validity.badInput) return true;
+  const v = el.value; if (!v) return false;
+  const y = +v.slice(0,4); return !(y >= 2000 && y <= 2100);
+}
+// Aviso para TODOS los campos de fecha del módulo, apenas se sale del campo.
+document.addEventListener('change', e => {
+  const el = e.target; if (!el || el.type !== 'date') return;
+  if (_fechaInvalida(el)){
+    el.classList.add('fecha-mala');
+    alert('⚠ Fecha inválida' + (el.validity && el.validity.badInput ? ': esa fecha no existe' : ' (' + _fecha(el.value) + ')')
+      + '.\n\nRevisá día, mes y año — por ejemplo, el 32/01 o el 31/02 no existen.');
+  } else el.classList.remove('fecha-mala');
+}, true);
 
 function vistaListados(){
   const subs = [['gestion','📈 Gestión'],['estudio','🧾 Para el estudio']];
@@ -2234,65 +2277,107 @@ function vistaListados(){
 }
 
 function _listMes(delta){
-  const d = new Date(listPer.desde + 'T12:00:00');
-  d.setMonth(d.getMonth() + delta);
-  listPer.desde = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
-  listPer.hasta = new Date(d.getFullYear(), d.getMonth()+1, 0).toISOString().slice(0,10);
+  const f = _listFila(), r = listPer[f];
+  const base = r.desde || r.hasta || _hoyAR();
+  const d = new Date(+base.slice(0,4), +base.slice(5,7) - 1 + delta, 1);
+  listPer[f] = _rangoMes(d.getFullYear(), d.getMonth() + 1);
   LIST_IVA = null; cargarListadosEstudio();
 }
-// ¿el rango actual es exactamente un mes calendario? (para que el selector rápido lo refleje)
+// ¿la fila del selector rápido tiene exactamente un mes calendario?
 function _listEsMesEntero(){
-  const d = listPer.desde, h = listPer.hasta;
+  const { desde: d, hasta: h } = listPer[_listFila()];
   if (!d || !h || d.slice(0,7) !== h.slice(0,7) || d.slice(8) !== '01') return false;
-  const fin = new Date(+d.slice(0,4), +d.slice(5,7), 0).getDate();
-  return +h.slice(8) === fin;
+  return +h.slice(8) === _finMes(+d.slice(0,4), +d.slice(5,7));
 }
 function _listAnios(){
   const hoy = new Date().getFullYear(), arr = [];
   for (let a = hoy + 1; a >= 2019; a--) arr.push(a);
   return arr;
 }
-// Mes + año → el rango se arma solo (1 al último día). Es lo habitual: los
-// listados del estudio son mensuales. El rango exacto queda para casos raros.
+// Mes + año → el rango se arma solo (1 al último día), en la fila elegida.
 function _listMesRapido(){
   const m = +document.getElementById('lp-mes').value, a = +document.getElementById('lp-anio').value;
   if (!m || !a) return;
-  listPer.desde = `${a}-${String(m).padStart(2,'0')}-01`;
-  listPer.hasta = `${a}-${String(m).padStart(2,'0')}-${String(new Date(a, m, 0).getDate()).padStart(2,'0')}`;
+  listPer[_listFila()] = _rangoMes(a, m);
+  LIST_IVA = null; cargarListadosEstudio();
+}
+// Cambiar a qué fecha aplica el mes: el rango se muda de fila (como el filtro de antes).
+function _listPorCambio(v){
+  const de = _listFila(); listPor = v; const a = _listFila();
+  if (de !== a){ listPer[a] = { ...listPer[de] }; listPer[de] = { desde: '', hasta: '' }; }
+  LIST_IVA = null; cargarListadosEstudio();
+}
+function _listLimpiar(f){
+  listPer[f] = { desde: '', hasta: '' };
+  if (!listPer.ing.desde && !listPer.ing.hasta && !listPer.emi.desde && !listPer.emi.hasta){
+    const h = _hoyAR(); listPer.ing = _rangoMes(+h.slice(0,4), +h.slice(5,7));
+  }
   LIST_IVA = null; cargarListadosEstudio();
 }
 function _listPerCambio(){
-  listPer.desde = document.getElementById('lp-desde').value;
-  listPer.hasta = document.getElementById('lp-hasta').value;
-  LIST_IVA = null; cargarListadosEstudio();
+  const ids = ['lp-ing-desde','lp-ing-hasta','lp-emi-desde','lp-emi-hasta'];
+  for (const id of ids){ const el = document.getElementById(id); if (_fechaInvalida(el)){ el.focus(); return; } }
+  const g = id => document.getElementById(id).value || '';
+  const n = { ing: { desde: g('lp-ing-desde'), hasta: g('lp-ing-hasta') },
+              emi: { desde: g('lp-emi-desde'), hasta: g('lp-emi-hasta') } };
+  for (const [k, t] of [['ing','ingreso'],['emi','emisión']])
+    if (n[k].desde && n[k].hasta && n[k].desde > n[k].hasta){
+      alert('En la fecha de ' + t + ', "Desde" (' + _fecha(n[k].desde) + ') es posterior a "Hasta" (' + _fecha(n[k].hasta) + ').');
+      return;
+    }
+  if (!n.ing.desde && !n.ing.hasta && !n.emi.desde && !n.emi.hasta){
+    alert('Poné al menos una fecha, de ingreso o de emisión.\n\n(Un "Desde" vacío es "desde el principio"; un "Hasta" vacío, "sin tope".)');
+    return;
+  }
+  listPer = n; LIST_IVA = null; cargarListadosEstudio();
+}
+// Rótulo del período, para el título y los nombres de archivo.
+function _listRotulo(archivo){
+  const { ing, emi } = listPer;
+  const soloMesIng = _listEsMesEntero() && listPor === 'ingreso' && !emi.desde && !emi.hasta;
+  if (soloMesIng && !archivo) return new Date(ing.desde + 'T12:00:00').toLocaleDateString('es-AR', {month:'long', year:'numeric'});
+  const f = x => archivo ? x : _fecha(x);
+  const parte = (r, t) => (r.desde || r.hasta)
+    ? `${t} ${r.desde ? f(r.desde) : (archivo ? 'inicio' : 'el principio')} a ${r.hasta ? f(r.hasta) : (archivo ? 'hoy' : 'sin tope')}` : '';
+  return [parte(ing, 'ingreso'), parte(emi, 'emisión')].filter(Boolean).join(archivo ? ' + ' : ' · ');
 }
 
 async function cargarListadosEstudio(){
   const c = document.getElementById('list-estudio');
   if (!c) return;
   if (!LIST_IVA) c.innerHTML = '<div class="vacio">Armando los listados…</div>';
+  // p_prueba = el AMBIENTE, no "sumar los de prueba": en modo 🧪 se listan
+  // SOLO los de test y en definitivo SOLO los reales. Nunca se mezclan.
+  const P = { p_ing_desde: listPer.ing.desde || null, p_ing_hasta: listPer.ing.hasta || null,
+              p_emi_desde: listPer.emi.desde || null, p_emi_hasta: listPer.emi.hasta || null, p_prueba: MODO_PRUEBA };
+  // Las retenciones cuelgan de la ORDEN DE PAGO: van por su fecha, con el rango
+  // que esté cargado (ingreso primero, si no emisión).
+  const R = (listPer.ing.desde || listPer.ing.hasta) ? listPer.ing : listPer.emi;
   const [iva, per, ret, pdet] = await Promise.all([
-    // p_prueba = el AMBIENTE, no "sumar los de prueba": en modo 🧪 se listan
-    // SOLO los de test y en definitivo SOLO los reales. Nunca se mezclan.
-    sb.rpc('compras_listado_iva',          {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA, p_por: listPor}),
-    sb.rpc('compras_listado_percepciones', {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA, p_por: listPor}),
-    sb.rpc('compras_listado_retenciones',  {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA}),
-    sb.rpc('compras_listado_percepciones_detalle', {p_desde: listPer.desde, p_hasta: listPer.hasta, p_prueba: MODO_PRUEBA, p_por: listPor}),
+    sb.rpc('compras_listado_iva', P),
+    sb.rpc('compras_listado_percepciones', P),
+    sb.rpc('compras_listado_retenciones', {p_desde: R.desde || '2000-01-01', p_hasta: R.hasta || '2999-12-31', p_prueba: MODO_PRUEBA}),
+    sb.rpc('compras_listado_percepciones_detalle', P),
   ]);
   if (iva.error){ c.innerHTML = `<div class="alerta">${esc(iva.error.message)}</div>`; return; }
-  LIST_IVA = iva.data || []; LIST_PERC = per.data || []; LIST_RET = ret.data || [];
-  LIST_PDET = pdet.data || [];
+  // Siempre por fecha de emisión, de la más vieja a la más nueva (sort estable:
+  // dentro del mismo día respeta el orden que ya trae la base).
+  const porEmision = (x, y) => String(x.fecha_emision || '').localeCompare(String(y.fecha_emision || ''));
+  LIST_IVA = (iva.data || []).sort(porEmision); LIST_PERC = per.data || []; LIST_RET = ret.data || [];
+  LIST_PDET = (pdet.data || []).sort(porEmision);
   // Los que NO van al Libro IVA se muestran aparte: si un comprobante del
   // período no está en el listado, tiene que verse POR QUÉ, no desaparecer.
-  const {data: fuera} = await sb.from('compras_documentos')
-    .select('tipo,letra,punto_venta,numero,proveedor_nombre,fecha_emision,total,moneda')
-    .eq('es_prueba', MODO_PRUEBA).eq('computa_formal', false)
-    // mismo criterio que el Libro IVA: por INGRESO (sin ella, emisión) o por EMISIÓN
-    .or(listPor === 'emision'
-      ? `and(fecha_emision.gte.${listPer.desde},fecha_emision.lte.${listPer.hasta})`
-      : `and(fecha_ingreso.gte.${listPer.desde},fecha_ingreso.lte.${listPer.hasta}),and(fecha_ingreso.is.null,fecha_emision.gte.${listPer.desde},fecha_emision.lte.${listPer.hasta})`)
-    .order('fecha_emision');
-  LIST_FUERA = fuera || [];
+  let q = sb.from('compras_documentos')
+    .select('tipo,letra,punto_venta,numero,proveedor_nombre,fecha_emision,fecha_ingreso,total,moneda')
+    .eq('es_prueba', MODO_PRUEBA).eq('computa_formal', false);
+  if (listPer.emi.desde) q = q.gte('fecha_emision', listPer.emi.desde);
+  if (listPer.emi.hasta) q = q.lte('fecha_emision', listPer.emi.hasta);
+  const {data: fuera} = await q.order('fecha_emision').order('numero').limit(3000);
+  // mismo criterio que el Libro IVA para el ingreso: si no tiene, cuenta la emisión
+  LIST_FUERA = (fuera || []).filter(d => {
+    const fi = d.fecha_ingreso || d.fecha_emision || '';
+    return (!listPer.ing.desde || fi >= listPer.ing.desde) && (!listPer.ing.hasta || fi <= listPer.ing.hasta);
+  });
   _pintarEstudio();
 }
 
@@ -2304,7 +2389,8 @@ function _pintarEstudio(){
   const perc = s('percep_iva') + s('percep_iibb_caba') + s('percep_iibb_ba') + s('otros_tributos');
   const malos = R.filter(x => Math.abs(Number(x.descuadre)||0) > 1);
   const avisos = R.filter(x => x.alerta);
-  const mesTxt = new Date(listPer.desde + 'T12:00:00').toLocaleDateString('es-AR', {month:'long', year:'numeric'});
+  const mesTxt = _listRotulo();
+  const fila = listPer[_listFila()];
 
   c.innerHTML = `
     <div class="card">
@@ -2312,20 +2398,17 @@ function _pintarEstudio(){
         <button class="act gh" style="padding:7px 11px" onclick="_listMes(-1)" title="Mes anterior">‹</button>
         <div><label class="mini">Mes</label><br>
           <select id="lp-mes" onchange="_listMesRapido()" style="padding:7px 9px">
-            ${MESES.map((m,i) => `<option value="${i+1}" ${(+listPer.desde.slice(5,7))===i+1 && _listEsMesEntero() ? 'selected' : ''}>${m}</option>`).join('')}
+            ${MESES.map((m,i) => `<option value="${i+1}" ${(+(fila.desde||'').slice(5,7))===i+1 && _listEsMesEntero() ? 'selected' : ''}>${m}</option>`).join('')}
             ${_listEsMesEntero() ? '' : '<option value="" selected>— rango a medida —</option>'}
           </select></div>
         <div><label class="mini">Año</label><br>
           <select id="lp-anio" onchange="_listMesRapido()" style="padding:7px 9px">
-            ${_listAnios().map(a => `<option ${a===+listPer.desde.slice(0,4)?'selected':''}>${a}</option>`).join('')}
+            ${_listAnios().map(a => `<option ${a===+((fila.desde||fila.hasta||_hoyAR()).slice(0,4))?'selected':''}>${a}</option>`).join('')}
           </select></div>
         <button class="act gh" style="padding:7px 11px" onclick="_listMes(1)" title="Mes siguiente">›</button>
-        <span class="mini" style="align-self:center;margin:0 4px">o rango exacto:</span>
-        <div><label class="mini">Desde</label><br><input type="date" id="lp-desde" value="${listPer.desde}" onchange="_listPerCambio()"></div>
-        <div><label class="mini">Hasta</label><br><input type="date" id="lp-hasta" value="${listPer.hasta}" onchange="_listPerCambio()"></div>
-        <div><label class="mini">Filtrar por fecha de</label><br>
-          <select id="lp-por" onchange="listPor=this.value; LIST_IVA=null; cargarListadosEstudio()" style="padding:7px 9px"
-                  title="Ingreso: el mes en que se contabilizó (si no tiene, usa la emisión). Emisión: la fecha impresa en el comprobante.">
+        <div><label class="mini">El mes elige por fecha de</label><br>
+          <select id="lp-por" onchange="_listPorCambio(this.value)" style="padding:7px 9px"
+                  title="A qué fecha se aplica el selector de mes y las flechas ‹ ›. Ingreso: el mes en que se contabilizó (si no tiene, la emisión). Emisión: la fecha impresa en el comprobante.">
             <option value="ingreso" ${listPor==='ingreso'?'selected':''}>Ingreso</option>
             <option value="emision" ${listPor==='emision'?'selected':''}>Emisión</option>
           </select></div>
@@ -2333,8 +2416,18 @@ function _pintarEstudio(){
         <button class="act gh" onclick="_bajarFormatoEstudio()" title="Mismas columnas que el Subdiario que le mandás hoy">⬇ Formato estudio</button>
         <button class="act" onclick="_bajarIvaCompras()">⬇ IVA Compras completo</button>
       </div>
+      <div class="lp-rangos">
+        ${[['ing','Fecha de ingreso','Mes en que se contabilizó (si el comprobante no la tiene, cuenta la emisión)'],
+           ['emi','Fecha de emisión','Fecha impresa en el comprobante']].map(([k,t,ti]) => `
+          <div class="lp-rango" title="${ti}"><b>${t}</b>
+            <label class="mini">Desde <input type="date" id="lp-${k}-desde" value="${listPer[k].desde}" max="2100-12-31" onchange="_listPerCambio()"></label>
+            <label class="mini">Hasta <input type="date" id="lp-${k}-hasta" value="${listPer[k].hasta}" max="2100-12-31" onchange="_listPerCambio()"></label>
+            ${listPer[k].desde || listPer[k].hasta ? `<button class="act gh" style="padding:3px 8px;font-size:12px" onclick="_listLimpiar('${k}')" title="Sacar este filtro">✕</button>` : '<span class="mini">sin filtro</span>'}
+          </div>`).join('')}
+      </div>
       <p class="mini" style="margin-top:9px">Entran solo los comprobantes marcados <b>“computa en el Libro IVA”</b>.
-        Las notas de crédito restan. Período por fecha de <b>${listPor==='emision' ? 'emisión' : 'ingreso'}</b>${listPor==='emision' ? '' : ' (si no tiene, la de emisión)'}. ${MODO_PRUEBA
+        Las notas de crédito restan. Los dos filtros se combinan (se tienen que cumplir ambos); un “Desde” vacío es
+        <b>desde el principio</b> y un “Hasta” vacío, sin tope. Siempre ordenado por <b>fecha de emisión</b>, de la más vieja a la más nueva. ${MODO_PRUEBA
           ? '<b style="color:#92400e">🧪 Ambiente de prueba: se listan SOLO los comprobantes de test.</b>'
           : ''}</p>
     </div>
@@ -2514,7 +2607,7 @@ function _bajarFormatoEstudio(){
       _csvNum(x.total),
     ].join(';');
   }));
-  _csvBajar(`Subdiario IVA compras ${listPer.desde} a ${listPer.hasta}.csv`, filas);
+  _csvBajar(`Subdiario IVA compras ${_listRotulo(true)}.csv`, filas);
 }
 
 function _bajarPercepciones(){
@@ -2524,7 +2617,7 @@ function _bajarPercepciones(){
     _fecha(p.fecha_emision), _csvTxt(p.comprobante), _csvTxt(_cuitFmt(p.cuit)),
     _csvTxt(p.proveedor), _csvTxt(p.impuesto), _csvTxt(p.jurisdiccion), _csvNum(p.importe),
   ].join(';')));
-  _csvBajar(`Percepciones de compras ${listPer.desde} a ${listPer.hasta}.csv`, filas);
+  _csvBajar(`Percepciones de compras ${_listRotulo(true)}.csv`, filas);
 }
 
 const _cuitFmt = c => (c && /^\d{11}$/.test(c)) ? `${c.slice(0,2)}-${c.slice(2,10)}-${c.slice(10)}` : (c || '');
@@ -2544,7 +2637,7 @@ function _bajarRetenciones(){
     _csvNum(r.base_calculo), _csvNum(r.alicuota), _csvNum(r.importe),
     _csvTxt(r.certificado_nro), r.editado ? 'SÍ' : '', _csvTxt(r.motivo_edicion),
   ].join(';')));
-  _csvBajar(`Retenciones practicadas ${listPer.desde} a ${listPer.hasta}.csv`, filas);
+  _csvBajar(`Retenciones practicadas ${_listRotulo(true)}.csv`, filas);
 }
 
 function _bajarIvaCompras(){
@@ -2571,7 +2664,7 @@ function _bajarIvaCompras(){
   };
   const filas = [cols.map(c => c[0]).join(';')]
     .concat(LIST_IVA.map(x => cols.map(c => celda(x, c[1])).join(';')));
-  _csvBajar(`IVA Compras ${listPer.desde} a ${listPer.hasta}.csv`, filas);
+  _csvBajar(`IVA Compras ${_listRotulo(true)}.csv`, filas);
 }
 
 function _listGestion(){
@@ -3849,6 +3942,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="manual.js?v=41"></script>
+<script src="manual.js?v=42"></script>
 </body>
 </html>
