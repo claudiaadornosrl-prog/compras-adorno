@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v64-traba-reparto-desc-fijo';
+const CACHE_VERSION = 'compras-v65-venta-online';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

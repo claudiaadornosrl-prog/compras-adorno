@@ -3455,7 +3455,7 @@ async function vistaMercaderia(){
           <td><select style="font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:${r.local_destino?'#fff':'#fffbeb'}"
                 onchange="cambiarDestinoRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero},this.value)">
                 <option value="" ${!r.local_destino?'selected':''}>a definir…</option>
-                ${(SUCS.length?SUCS:[{clave:'alcorta',nombre:'Alcorta'},{clave:'unicenter',nombre:'Unicenter'},{clave:'oficina',nombre:'Oficina'}]).filter(x=>x.activo!==false)
+                ${(SUCS.length?SUCS:[{clave:'alcorta',nombre:'Alcorta'},{clave:'unicenter',nombre:'Unicenter'},{clave:'oficina',nombre:'Venta Online'}]).filter(x=>x.activo!==false)
                   .map(x=>`<option value="${esc(x.clave)}" ${r.local_destino===x.clave?'selected':''}>${esc(x.nombre||x.clave)}${x.codigo_txt?' · '+esc(x.codigo_txt):''}</option>`).join('')}
               </select></td>
           <td class="num">${r.renglones||0}${r.sin_sku?` <span class="chip" style="background:#fee2e2;color:#991b1b" title="renglones sin SKU">${r.sin_sku} sin SKU</span>`:''}</td>
@@ -4223,6 +4223,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="manual.js?v=47"></script>
+<script src="manual.js?v=48"></script>
 </body>
 </html>
