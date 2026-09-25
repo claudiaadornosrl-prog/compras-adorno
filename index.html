@@ -321,7 +321,7 @@ function renderTabs(){
     document.body.prepend(b);
   }
   const tabs = [['bandeja','📥 Bandeja'],['facturas','📄 Comprobantes'],['ordenes','💸 Órdenes de pago'],
-                ['mercaderia','🚚 Mercadería'],
+                ['pedidos','📝 Pedidos'],['mercaderia','🚚 Mercadería'],
                 ['conceptos','📇 Conceptos'],['proveedores','🏢 Proveedores'],
                 ['equivalencias','🔗 Equivalencias'],['listados','📊 Listados'],['config','⚙️ Retenciones']];
   document.getElementById('tabs').innerHTML = tabs.map(([k,t]) =>
@@ -448,6 +448,7 @@ function render(){
   if (tabActual === 'conceptos') vistaConceptos();
   if (tabActual === 'proveedores') vistaProveedores();
   if (tabActual === 'ordenes') vistaOrdenes();
+  if (tabActual === 'pedidos') vistaPedidos();   // pedidos.js
 }
 
 
@@ -4242,6 +4243,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="manual.js?v=51"></script>
+<script src="pedidos.js?v=1"></script>
+<script src="manual.js?v=52"></script>
 </body>
 </html>

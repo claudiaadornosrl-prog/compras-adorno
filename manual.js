@@ -119,6 +119,20 @@ function _manualSecciones() {
       ],
     },
     {
+      icon: '📝', titulo: 'Pedidos a proveedores',
+      desc: 'La orden de pedido y el listado de lo que falta entregar. Todo lo pedido va al depósito (Oficina).',
+      pasos: [
+        '➕ Nuevo pedido: elegís el proveedor y aparece su catálogo (los artículos que Dragonfish tiene a su nombre y los que ya vinieron en sus remitos o facturas). Muestra el stock de Alcorta · Unicenter · Oficina, el precio de la lista COMPRA y cuánto de ese artículo ya está pedido y sin entregar en otros pedidos, para no pedirlo dos veces.',
+        'Con ＋ se suma al pedido; la cantidad y el precio se corrigen en la tabla de abajo. Si el artículo no está en el catálogo, tildá "todo el catálogo" o cargá un renglón sin SKU.',
+        'Se guarda como BORRADOR: mientras está así no descuenta nada. Cuando lo mandás al proveedor, 📤 Guardar y enviar (o Marcar como enviado) y bajá el PDF o el Excel para mandárselo por mail o WhatsApp.',
+        'Lo que entrega el proveedor se descuenta SOLO cuando entra al módulo su remito con el mismo SKU (FGR por el sync del Dragonfish, Espalma por sus remitos), primero contra el pedido más viejo y solo con remitos de fecha igual o posterior al pedido.',
+        'Para los proveedores que no mandan remito con detalle, dentro del pedido está 📥 Recibir a mano: cargás cuánto llegó de cada artículo. Si el proveedor sí manda remito, no lo recibas a mano: se contaría dos veces. Para corregir una recepción mal cargada se pone la cantidad en negativo, con una nota.',
+        'Lo que falta queda pendiente hasta que alguien lo cierre: 🔒 Cerrar saldo da por cancelado lo que no llegó (con motivo) y lo saca del listado. ↩ Reabrir lo vuelve a dejar pendiente. ✖ Anular solo se puede si todavía no llegó nada.',
+        '⏳ Pendiente de entrega: todo lo pedido y no recibido, filtrable por proveedor, con días de espera y la entrega estimada en rojo si ya pasó. Se baja en Excel o PDF (sirve para reclamarle al proveedor).',
+        'Un pedido ya enviado se puede editar (sumar artículos, cambiar cantidades), pero no se puede bajar una cantidad por debajo de lo ya recibido ni sacar un renglón que ya recibió mercadería.',
+      ],
+    },
+    {
       icon: '🚚', titulo: 'Mercadería · control de precios y descuentos',
       desc: 'Cada factura de Familia García Regueira controlada renglón por renglón, sin leer el PDF.',
       pasos: [
