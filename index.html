@@ -61,6 +61,11 @@ window.ADORNO_SSO = (function () {
 <link rel="apple-touch-icon" href="./icon-192-v2.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🛒%3C/text%3E%3C/svg%3E">
 <style>
+.fx-in{font:inherit;font-size:12.5px;padding:2px 5px;border:1px solid var(--bd);border-radius:5px;text-align:right;background:#fff;}
+.fx-in:focus{border-color:var(--primary);outline:none;}
+.fx-dg{margin:4px 0 8px;padding:8px 10px;border:1px dashed var(--bd);border-radius:8px;background:#fafafa;}
+.fx-dg-fila{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0;}
+
 .fecha-mala{border-color:#dc2626 !important;background:#fef2f2 !important;}
 .lp-rangos{display:flex;gap:10px 22px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px dashed #e5e7eb}
 .lp-rango{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
@@ -1549,7 +1554,7 @@ async function abrirControl(id){
   // Desglose impositivo (la RPC de la bandeja no lo trae): IVA por alícuota, percepciones y otros tributos
   try {
     const { data: imp } = await sb.from('compras_documentos')
-      .select('iva_21,iva_105,iva_27,iva_otros,percep_iva,percep_iibb_caba,percep_iibb_ba,otros_tributos,fecha_vto,cae,cae_vto,extraido_json').eq('id', id).single();
+      .select('iva_21,iva_105,iva_27,iva_otros,percep_iva,percep_iibb_caba,percep_iibb_ba,otros_tributos,fecha_vto,cae,cae_vto,extraido_json,descuentos_extra,numero_interno,fecha_ingreso').eq('id', id).single();
     if (imp && enControl && enControl.id === id){ Object.assign(enControl, imp); enControl._impuestosOk = true; pintarControl(); }
   } catch (_) {}
   // Renglones de la factura (mercadería) con el control contra las listas COMPRA / COSTO del Dragonfish
@@ -1634,6 +1639,30 @@ const _FX_ESTADO = {
   sin_stock:  ['no es stock', '#64748b', 'Renglón que se paga pero no entra al stock (cajas, fletes)'],
 };
 const _fxPct = v => v == null ? '' : (v > 0 ? '+' : '') + Number(v).toLocaleString('es-AR', {maximumFractionDigits: 1}) + ' %';
+// (24-sep, JP) Un renglón = cant × p.unit × (1 − dto). Mismas cuentas que compras_doc_renglones / compras_renglones_guardar.
+const _r2 = x => Math.round((Number(x) || 0) * 100) / 100;
+function _rengPun(r){ return r.precio_unitario == null ? null : Number(r.precio_unitario) * (1 - Number(r.descuento_pct || 0) / 100); }
+function _rengNeto(r){ const pu = _rengPun(r); return pu == null ? Number(r.importe || 0) : _r2(Number(r.cantidad || 0) * pu); }
+// El control contra lista se recalcula en el navegador cuando se edita un renglón (misma regla que la RPC)
+function _rengEstado(r){
+  const lc = r.lista_compra != null ? Number(r.lista_compra) : null, lk = r.lista_costo != null ? Number(r.lista_costo) : null;
+  const pu = r.precio_unitario != null ? Number(r.precio_unitario) : null, pun = _rengPun(r);
+  const dp = lc > 0 && pu != null ? Math.round((pu / lc - 1) * 10000) / 100 : null;
+  const dk = lk > 0 && pun != null ? Math.round((pun / lk - 1) * 10000) / 100 : null;
+  let e;
+  if (r.sin_stock) e = 'sin_stock';
+  else if (!r.sku) e = 'sin_sku';
+  else if (lc == null && lk == null) e = 'sin_lista';
+  else if (lk > 0 && pun != null && Math.abs(pun / lk - 1) <= 0.005) e = 'ok';
+  else if (lc > 0 && pu != null && Math.abs(pu / lc - 1) <= 0.005) e = 'ok_precio';
+  else e = 'difiere';
+  return {estado: e, dif_precio_pct: dp, dif_costo_pct: dk};
+}
+// Descuentos generales (no por producto: pago contado, bonificación, etc.). Con % se calcula sobre la suma de renglones.
+function _descExtras(d, sub){
+  const arr = d._descExtra ?? d.descuentos_extra ?? [];
+  return arr.map(x => ({...x, monto: (x.pct !== null && x.pct !== undefined && x.pct !== '') ? _r2(sub * Number(x.pct) / 100) : _r2(x.importe)}));
+}
 
 // Última consulta al padrón de ARCA para ese CUIT (null si nunca se validó)
 async function _arcaDe(cuit){
@@ -1687,8 +1716,9 @@ function _facturaCabecera(d, opts = {}){
         ? `<input type="date" id="ctrl-vto" class="fx-vto-in" value="${esc(vto || '')}" min="${esc(d.fecha_emision || '')}" title="Vencimiento de la factura. Si el papel no lo trae, cargalo acá: es la fecha de pago que después toma la orden de pago y el pendiente de Tesorería.">${vto ? '' : '<span class="fx-vto-falta">falta · cargalo</span>'}`
         : `<b>${vto ? fechaCorta(vto) : falta}</b>`}</div>
       ${opts.editable
-        ? `<div class="mini fx-ing">Ingreso <input type="date" id="ctrl-ingreso" class="fx-vto-in" value="${esc(d._ingreso ?? d.fecha_ingreso ?? _hoyAR())}" min="${esc(d.fecha_emision || '')}" max="${d.fecha_emision ? _sumarMeses(d.fecha_emision, 12) : '2100-12-31'}" oninput="enControl._ingreso=this.value" title="Fecha de ingreso = mes del Libro IVA Compras. Por defecto hoy; tope 12 meses después de la emisión."> <span style="opacity:.8">(mes del Libro IVA)</span></div>`
-        : (d.fecha_ingreso ? `<div class="mini">Ingreso <b>${fechaCorta(d.fecha_ingreso)}</b>${d.numero_interno ? ' · Nº int. <b>' + d.numero_interno + '</b>' : ''}</div>` : '')}
+        ? `<div class="mini fx-ing">Ingreso <input type="date" id="ctrl-ingreso" class="fx-vto-in" value="${esc(d._ingreso ?? d.fecha_ingreso ?? _hoyAR())}" min="${esc(d.fecha_emision || '')}" max="${d.fecha_emision ? _sumarMeses(d.fecha_emision, 12) : '2100-12-31'}" oninput="enControl._ingreso=this.value" title="Fecha de ingreso = mes del Libro IVA Compras. Por defecto hoy; tope 12 meses después de la emisión.">
+            · Nº int. <input id="ctrl-numint" type="number" min="1" step="1" inputmode="numeric" class="fx-vto-in" style="width:86px" value="${esc(d._numint ?? d.numero_interno ?? '')}" placeholder="auto" oninput="enControl._numint=this.value" title="Número interno: correlativo propio del módulo. Vacío = se asigna el siguiente al contabilizar."></div>`
+        : ((d.fecha_ingreso || d.numero_interno) ? `<div class="mini">Ingreso <b>${d.fecha_ingreso ? fechaCorta(d.fecha_ingreso) : '—'}</b> · Nº int. <b>${d.numero_interno ?? '—'}</b></div>` : '')}
       <div class="mini">Remito ${remito ? esc(remito) : falta}</div>
       ${d.archivo_path ? `<a class="act fx-pdf" target="_blank" rel="noopener" href="${_pdfUrl(d.archivo_path)}" title="Abre el PDF en OneDrive, en otra pestaña">📄 Ver la factura</a>` : ''}
     </div>
@@ -1700,26 +1730,28 @@ function _facturaCabecera(d, opts = {}){
 function _facturaRenglones(d, reng, opts = {}){
   const ej = d.extraido_json || {};
   if (reng && reng.length){
-    const sub = reng.reduce((a,r) => a + Number(r.importe||0), 0);
     const concs = (opts.conceptos || []).filter(c => (c||'').trim());
     const conc = concs.length === 0 ? '<span class="fx-falta">sin concepto</span>'
       : concs.length === 1 ? `<span class="chip fx-chip-conc">${esc(concs[0])}</span>`
       : `<span class="chip fx-chip-conc" title="${esc(concs.join(' · '))}">${concs.length} conceptos</span>`;
+    const ed = !!opts.editable;
+    const inp = (i, campo, v, w) => `<input type="text" inputmode="decimal" class="fx-in" style="width:${w}px" value="${v == null ? '' : String(v).replace('.', ',')}" oninput="_rengEdit(${i}, '${campo}', this.value)">`;
     return `<div style="overflow-x:auto"><table class="fx-tbl">
-      <thead><tr><th class="num">Cant</th><th>Descripción · SKU</th><th class="num">P. unit</th><th class="num">Dto</th><th class="num">Neto</th><th>Control</th><th>Concepto</th></tr></thead>
-      <tbody>${reng.map(r => { const e = _FX_ESTADO[r.estado] || _FX_ESTADO.sin_lista;
-        const det = r.estado === 'difiere' ? [r.dif_precio_pct != null ? 'precio ' + _fxPct(r.dif_precio_pct) : '', r.dif_costo_pct != null ? 'vs costo ' + _fxPct(r.dif_costo_pct) : ''].filter(Boolean).join(' · ') : '';
+      <thead><tr><th class="num">Cant</th><th>Descripción · SKU</th><th class="num">P. unit</th><th class="num">Dto</th><th class="num">P. unit c/desc</th><th class="num">Neto</th><th>Control</th><th>Concepto</th></tr></thead>
+      <tbody>${reng.map((r, i) => { const est = _rengEstado(r), pun = _rengPun(r);
         return `<tr>
-        <td class="num">${Number(r.cantidad||0).toLocaleString('es-AR')}</td>
-        <td>${esc(r.descripcion || '')}<br><span class="mini">${r.sku ? `<code>${esc(r.sku)}</code>` : `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>`}${(!r.sku && !r.sin_stock && opts.desde) ? ` <button class="act fx-eq-btn" title="Traducir el código del proveedor a un artículo nuestro. Se guarda como equivalencia y las próximas facturas de este proveedor lo reconocen solas." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${reng.indexOf(r)})">🔗 Asignar SKU</button>` : ''}${r.lista_compra != null ? ` · lista ${plata(r.lista_compra)}` : ''}${r.lista_costo != null ? ` · costo ${plata(r.lista_costo)}` : ''}</span></td>
-        <td class="num">${r.precio_unitario != null ? plata(r.precio_unitario) : '—'}</td>
-        <td class="num">${r.descuento_pct ? Number(r.descuento_pct) + ' %' : '—'}</td>
-        <td class="num"><b>${plata(r.importe)}</b></td>
-        <td><span class="chip" title="${esc(e[2])}" style="background:${e[1]}18;color:${e[1]}">${e[0]}</span>${det ? `<br><span class="mini" style="color:#b45309">${esc(det)}</span>` : ''}</td>
+        <td class="num">${ed ? inp(i, 'cantidad', r.cantidad, 54) : Number(r.cantidad||0).toLocaleString('es-AR')}</td>
+        <td>${esc(r.descripcion || '')}<br><span class="mini">${r.sku ? `<code>${esc(r.sku)}</code>` : `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>`}${(!r.sku && !r.sin_stock && opts.desde) ? ` <button class="act fx-eq-btn" title="Traducir el código del proveedor a un artículo nuestro. Se guarda como equivalencia y las próximas facturas de este proveedor lo reconocen solas." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${i})">🔗 Asignar SKU</button>` : ''}${r.lista_compra != null ? ` · lista ${plata(r.lista_compra)}` : ''}${r.lista_costo != null ? ` · costo ${plata(r.lista_costo)}` : ''}</span></td>
+        <td class="num">${ed ? inp(i, 'precio_unitario', r.precio_unitario, 96) : (r.precio_unitario != null ? plata(r.precio_unitario) : '—')}</td>
+        <td class="num">${ed ? inp(i, 'descuento_pct', r.descuento_pct, 46) + ' %' : (Number(r.descuento_pct) ? Number(r.descuento_pct).toLocaleString('es-AR') + ' %' : '—')}</td>
+        <td class="num" id="fx-pun-${i}">${pun != null ? plata(pun) : '—'}</td>
+        <td class="num" id="fx-net-${i}"><b>${plata(_rengNeto(r))}</b></td>
+        <td id="fx-ctl-${i}">${_fxChip(est)}</td>
         <td>${conc}</td>
       </tr>`; }).join('')}</tbody>
-      <tfoot><tr><td colspan="4" style="text-align:right;color:var(--mut)">Suma de renglones</td><td class="num"><b>${plata(sub)}</b></td><td colspan="2"></td></tr></tfoot>
-    </table></div>`;
+      <tfoot><tr><td colspan="5" style="text-align:right;color:var(--mut)">Suma de renglones</td><td class="num" id="fx-sub"><b>${plata(reng.reduce((a,r) => a + _rengNeto(r), 0))}</b></td><td colspan="2"></td></tr></tfoot>
+    </table></div>
+    ${ed ? `<div id="fx-dg">${_descGeneralesHTML(d, reng)}</div>` : _descGeneralesLectura(d, reng)}`;
   }
   const lr = ej.renglones || [];
   if (lr.length){
@@ -1729,6 +1761,89 @@ function _facturaRenglones(d, reng, opts = {}){
   return '';
 }
 
+function _fxChip(est){
+  const e = _FX_ESTADO[est.estado] || _FX_ESTADO.sin_lista;
+  const det = est.estado === 'difiere' ? [est.dif_precio_pct != null ? 'precio ' + _fxPct(est.dif_precio_pct) : '', est.dif_costo_pct != null ? 'vs costo ' + _fxPct(est.dif_costo_pct) : ''].filter(Boolean).join(' · ') : '';
+  return `<span class="chip" title="${esc(e[2])}" style="background:${e[1]}18;color:${e[1]}">${e[0]}</span>${det ? `<br><span class="mini" style="color:#b45309">${esc(det)}</span>` : ''}`;
+}
+// ── Descuentos generales (editable en el control) ──
+function _descGeneralesHTML(d, reng){
+  const sub = reng.reduce((a,r) => a + _rengNeto(r), 0);
+  const ex = _descExtras(d, sub);
+  return `<div class="fx-dg">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+      <b style="font-size:12.5px">Descuentos generales</b><span class="mini">(no por producto: pago contado, bonificación…)</span>
+      <span style="flex:1"></span>
+      <span class="mini">Dto a todos los renglones <input type="text" inputmode="decimal" id="fx-dto-todos" class="fx-in" style="width:46px" placeholder="%"> %
+        <button class="act gh" type="button" style="font-size:12px;padding:3px 8px" onclick="_dtoATodos()">Aplicar</button></span>
+    </div>
+    ${ex.map((x, i) => `<div class="fx-dg-fila">
+      <input type="text" class="fx-in" style="flex:1;min-width:150px;text-align:left" value="${esc(x.descripcion || '')}" placeholder="Ej: Pago contado" oninput="_descEdit(${i}, 'descripcion', this.value)">
+      <input type="text" inputmode="decimal" class="fx-in" style="width:54px" value="${x.pct ?? ''}" placeholder="%" title="Porcentaje sobre la suma de renglones. Si lo dejás vacío, se usa el importe fijo." oninput="_descEdit(${i}, 'pct', this.value)"> %
+      <span class="mini">o importe</span>
+      <input type="text" inputmode="decimal" class="fx-in" id="fx-dg-imp-${i}" style="width:110px" value="${nmShow(x.monto)}" ${x.pct !== null && x.pct !== undefined && x.pct !== '' ? 'disabled' : ''} oninput="_descEdit(${i}, 'importe', this.value)">
+      <button class="act gh" type="button" style="padding:3px 8px" title="Quitar" onclick="_descQuitar(${i})">✕</button>
+    </div>`).join('')}
+    <button class="act gh" type="button" style="font-size:12px;padding:4px 9px" onclick="_descAgregar()">+ Agregar descuento general</button>
+  </div>`;
+}
+function _descGeneralesLectura(d, reng){
+  const sub = reng.reduce((a,r) => a + _rengNeto(r), 0);
+  const ex = _descExtras(d, sub);
+  return ex.length ? `<div class="mini" style="margin:2px 0 6px">Descuentos generales: ${ex.map(x => `<b>${esc(x.descripcion)}</b>${x.pct != null && x.pct !== '' ? ' ' + x.pct + ' %' : ''} (${plata(x.monto)})`).join(' · ')}</div>` : '';
+}
+function _rengEdit(i, campo, v){
+  const d = enControl, r = d && d._renglones && d._renglones[i]; if (!r) return;
+  const t = String(v).trim();
+  r[campo] = t === '' ? (campo === 'descuento_pct' ? 0 : null) : nmParse(t);
+  r.importe = _rengNeto(r);
+  d._rengDirty = true;
+  const pun = _rengPun(r);
+  const set = (id, h) => { const el = document.getElementById(id); if (el) el.innerHTML = h; };
+  set('fx-pun-' + i, pun != null ? plata(pun) : '—');
+  set('fx-net-' + i, `<b>${plata(_rengNeto(r))}</b>`);
+  set('fx-ctl-' + i, _fxChip(_rengEstado(r)));
+  set('fx-sub', `<b>${plata(d._renglones.reduce((a,x) => a + _rengNeto(x), 0))}</b>`);
+  _refrescarDescMontos(); _repintarPie();
+}
+function _dtoATodos(){
+  const d = enControl; if (!d || !d._renglones) return;
+  const v = (document.getElementById('fx-dto-todos') || {}).value || '';
+  const p = nmParse(v); if (v.trim() === '' || p < 0 || p > 100){ alert('Poné un porcentaje entre 0 y 100.'); return; }
+  d._renglones.forEach(r => { if (!r.sin_stock && r.precio_unitario != null){ r.descuento_pct = p; r.importe = _rengNeto(r); } });
+  d._rengDirty = true; _repintarRenglones();
+}
+function _descLista(){ const d = enControl; if (!d._descExtra) d._descExtra = JSON.parse(JSON.stringify(d.descuentos_extra || [])); return d._descExtra; }
+function _descAgregar(){ _descLista().push({descripcion: 'Pago contado', pct: 5, importe: 0}); enControl._descDirty = true; _repintarRenglones(); }
+function _descQuitar(i){ _descLista().splice(i, 1); enControl._descDirty = true; _repintarRenglones(); }
+function _descEdit(i, campo, v){
+  const l = _descLista(), x = l[i]; if (!x) return;
+  if (campo === 'descripcion') x.descripcion = v;
+  else if (campo === 'pct'){ x.pct = String(v).trim() === '' ? null : nmParse(v); const el = document.getElementById('fx-dg-imp-' + i); if (el) el.disabled = x.pct !== null; }
+  else x.importe = nmParse(v);
+  enControl._descDirty = true;
+  if (campo !== 'descripcion'){ _refrescarDescMontos(); _repintarPie(); }
+}
+function _refrescarDescMontos(){
+  const d = enControl; if (!d) return;
+  const sub = (d._renglones || []).reduce((a,r) => a + _rengNeto(r), 0);
+  _descExtras(d, sub).forEach((x, i) => { const el = document.getElementById('fx-dg-imp-' + i); if (el && el.disabled) el.value = nmShow(x.monto); });
+}
+function _repintarRenglones(){
+  const d = enControl, el = document.getElementById('fx-reng'); if (!d || !el) return;
+  el.innerHTML = _facturaRenglones(d, d._renglones || [], {conceptos: lineasControl.map(l => l.concepto), desde: 'control', editable: true});
+  _repintarPie();
+}
+function _pieControlHTML(){
+  const d = enControl; if (!d) return '';
+  const neto = Number(d.neto_gravado||0) + Number(d.neto_no_gravado||0) + Number(d.exento||0);
+  const asignado = lineasControl.reduce((a,l) => a + (Number(l.monto)||0), 0);
+  const dif = Math.round((neto - asignado) * 100) / 100;
+  return _facturaPie(d, d._renglones || [], {lineasOk: Math.abs(dif) < 0.02, lineasTxt: Math.abs(dif) < 0.02 ? 'Los conceptos suman el neto' : `Faltan ${plata(dif)} por imputar a conceptos`,
+    extra: `<div style="margin-top:6px"><button class="act gh" type="button" style="font-size:12px;padding:4px 9px" onclick="_editarImportes()" title="Si el motor leyó mal algún importe, corregilo a mano">✏ Corregir importes</button></div>`});
+}
+function _repintarPie(){ const el = document.getElementById('fx-pie-wrap'); if (el) el.innerHTML = _pieControlHTML(); }
+
 // Pie: la pirámide del papel. Devuelve las filas (label, valor, opciones).
 function _facturaPieFilas(d, reng){
   const n = x => Number(x || 0);
@@ -1736,9 +1851,15 @@ function _facturaPieFilas(d, reng){
   const neto = grav + nograv + ex;
   const filas = [];
   if (reng && reng.length){
-    const sub = reng.reduce((a,r) => a + n(r.importe), 0);
-    const dto = Math.round((sub - neto) * 100) / 100;
-    if (Math.abs(dto) > 0.02){ filas.push(['Suma de renglones', sub]); filas.push([dto > 0 ? 'Descuento' : 'Ajuste', -dto]); }
+    const sub = reng.reduce((a,r) => a + _rengNeto(r), 0);
+    const ex = _descExtras(d, sub);
+    const calc = sub - ex.reduce((a,x) => a + x.monto, 0);
+    const resid = Math.round((calc - neto) * 100) / 100;
+    if (ex.length || Math.abs(resid) > 0.02){
+      filas.push(['Suma de renglones', sub]);
+      ex.forEach(x => filas.push([`Dto. ${x.descripcion || 'general'}${x.pct !== null && x.pct !== undefined && x.pct !== '' ? ' ' + Number(x.pct).toLocaleString('es-AR') + ' %' : ''}`, -x.monto]));
+      if (Math.abs(resid) > 0.02) filas.push([resid > 0 ? 'Descuento sin explicar' : 'Ajuste sin explicar', -resid, {raro: true, tip: 'La suma de renglones menos los descuentos no llega al neto de la factura: revisá precios, descuentos por renglón o agregá un descuento general.'}]);
+    }
   }
   filas.push(['Neto gravado', grav, {b: true}]);
   if (nograv) filas.push(['No gravado', nograv]);
@@ -1769,12 +1890,15 @@ function _facturaPie(d, reng, opts = {}){
   checks.push([okDif, okDif ? 'Neto + IVA + percepciones = total' : `Neto + impuestos no llegan al total: faltan ${plata(dif)}`]);
   if (reng && reng.length){
     const conSku = reng.filter(r => r.sku && !r.sin_stock), sinSku = reng.filter(r => !r.sku && !r.sin_stock);
-    const okL = conSku.filter(r => r.estado === 'ok' || r.estado === 'ok_precio').length, difL = conSku.filter(r => r.estado === 'difiere').length, sinL = conSku.filter(r => r.estado === 'sin_lista').length;
+    const _e = r => _rengEstado(r).estado;
+    const okL = conSku.filter(r => _e(r) === 'ok' || _e(r) === 'ok_precio').length, difL = conSku.filter(r => _e(r) === 'difiere').length, sinL = conSku.filter(r => _e(r) === 'sin_lista').length;
     checks.push([difL === 0, `Precio vs lista Dragonfish: ${okL} de ${conSku.length} coinciden${difL ? ` · ${difL} difieren` : ''}${sinL ? ` · ${sinL} sin lista` : ''}`]);
     if (sinSku.length) checks.push([false, `${sinSku.length} renglón(es) sin SKU (🔗 Equivalencias)`]);
-    const sub = reng.reduce((a,r) => a + Number(r.importe||0), 0);
-    const okSub = Math.abs(sub - neto) <= 1 || sub > neto;   // sub > neto = descuento global, es normal
-    checks.push([okSub, okSub ? (Math.abs(sub - neto) <= 1 ? 'Los renglones suman el neto' : 'Renglones − descuento = neto') : `Los renglones suman ${plata(sub)} y el neto dice ${plata(neto)}`]);
+    const sub = reng.reduce((a,r) => a + _rengNeto(r), 0);
+    const ex = _descExtras(d, sub), calc = sub - ex.reduce((a,x) => a + x.monto, 0);
+    const okSub = Math.abs(calc - neto) <= 1;
+    checks.push([okSub, okSub ? (ex.length ? 'Renglones − descuentos generales = neto' : 'Los renglones suman el neto')
+      : `Renglones${ex.length ? ' − descuentos' : ''} dan ${plata(calc)} y el neto de la factura dice ${plata(neto)} (dif ${plata(calc - neto)})`]);
   }
   if (opts.lineasOk != null) checks.push([opts.lineasOk, opts.lineasTxt]);
   checks.push([!!cargado && !!caeVto, cargado ? (caeVto ? 'CAE y vencimiento leídos' : 'CAE leído · falta el vencimiento') : 'Falta el CAE']);
@@ -1920,7 +2044,7 @@ function pintarControl(){
 
     <div class="c-body">
       ${d.archivo_alerta ? `<div class="alerta">📎 ${esc(d.archivo_alerta)}</div>` : ''}
-      ${_facturaRenglones(d, reng, {conceptos: lineasControl.map(l => l.concepto), desde: 'control'})}
+      <div id="fx-reng">${_facturaRenglones(d, reng, {conceptos: lineasControl.map(l => l.concepto), desde: 'control', editable: true})}</div>
       ${(d.moneda && d.moneda !== 'ARS' && d.importe_moneda) ? `<div class="c-sug" style="background:#ecfeff;border-color:#0e7490">
         💵 <b>Factura en ${esc(d.moneda)}</b> · ${esc(d.moneda)} ${Number(d.importe_moneda).toLocaleString('es-AR',{minimumFractionDigits:2})}
         × cotización $ <input type="number" step="0.01" value="${Number(d.cotizacion)||''}"
@@ -1971,13 +2095,8 @@ function pintarControl(){
           : `<span style="color:var(--warn)">⚠ Faltan ${plata(dif)} por asignar (neto ${plata(neto)}).</span>`}</div>
 
 
-      ${_facturaPie(d, reng, {lineasOk: Math.abs(dif) < 0.02, lineasTxt: Math.abs(dif) < 0.02 ? 'Los conceptos suman el neto' : `Faltan ${plata(dif)} por imputar a conceptos`,
-          extra: `<div style="margin-top:6px"><button class="act gh" type="button" style="font-size:12px;padding:4px 9px" onclick="_editarImportes()" title="Si el motor leyó mal algún importe, corregilo a mano">✏ Corregir importes</button></div><div id="imp-edit"></div>`})}
+      <div id="fx-pie-wrap">${_pieControlHTML()}</div><div id="imp-edit"></div>
 
-      <div class="c-fila">
-        <label title="Correlativo propio del módulo. Si lo dejás vacío se asigna el siguiente al contabilizar. Más adelante se va a alinear con el número interno del Dragonfish.">Nº interno
-          <input id="ctrl-numint" type="number" min="1" step="1" inputmode="numeric" style="width:120px" value="${esc(d._numint ?? d.numero_interno ?? '')}" placeholder="automático" oninput="enControl._numint=this.value"></label>
-      </div>
       <div class="c-fila">
         <label>CAE <input id="ctrl-cae" value="${esc(d.cae || d.extraido_json?.cae || '')}" placeholder="14 dígitos" inputmode="numeric" maxlength="20" style="width:170px"></label>
         <label>Vto. CAE <input id="ctrl-cae-vto" type="date" value="${esc(d.cae_vto || d.extraido_json?.cae_vto || '')}"></label>
@@ -2049,6 +2168,7 @@ function pintarNums(){
   if (el) el.innerHTML = Math.abs(dif) < 0.02
     ? `<span style="color:var(--ok)">✓ Los conceptos suman el neto de la factura.</span>`
     : `<span style="color:var(--warn)">⚠ Faltan ${plata(dif)} por asignar (neto ${plata(neto)}).</span>`;
+  _repintarPie();
 }
 function toggleUsados(){ const u=document.getElementById('ctrl-usados'); if(u) u.style.display = u.style.display==='none' ? 'block' : 'none'; }
 function usarConcepto(cod){ lineasControl[0].concepto = cod; pintarControl(); }
@@ -2116,6 +2236,19 @@ async function contabilizar(){
   const niTxt = (document.getElementById('ctrl-numint')?.value || '').trim();
   if (niTxt && !(/^\d+$/.test(niTxt) && Number(niTxt) > 0)){ alert('El número interno tiene que ser un entero mayor a cero (o dejalo vacío para que se asigne solo).'); return; }
   if (vtoIn && enControl.fecha_emision && vtoIn < enControl.fecha_emision){ alert('El vencimiento no puede ser anterior a la emisión (' + fechaCorta(enControl.fecha_emision) + ').'); return; }
+  // (24-sep) Renglones editados / descuentos generales: se guardan primero (queda el antes/después en eventos)
+  if (enControl._rengDirty || enControl._descDirty){
+    const dl = enControl._descExtra || [];
+    if (dl.some(x => !String(x.descripcion || '').trim())){ alert('Cada descuento general necesita una descripción (ej. "Pago contado").'); return; }
+    const sub = (enControl._renglones || []).reduce((a,r) => a + _rengNeto(r), 0);
+    const {error: eR} = await sb.rpc('compras_renglones_guardar', {
+      p_doc: enControl.id,
+      p_renglones: enControl._rengDirty ? (enControl._renglones || []).map(r => ({nroitem: r.nroitem, cantidad: r.cantidad, precio_unitario: r.precio_unitario, descuento_pct: r.descuento_pct ?? 0})) : null,
+      p_descuentos: enControl._descDirty ? _descExtras(enControl, sub).map(x => ({descripcion: x.descripcion, pct: (x.pct === '' ? null : x.pct), importe: x.monto})) : null,
+    });
+    if (eR){ alert('No se pudieron guardar los renglones: ' + eR.message); return; }
+    enControl._rengDirty = false; enControl._descDirty = false;
+  }
   const {data, error} = await sb.rpc('compras_contabilizar', {
     p_doc_id: enControl.id,
     p_lineas: lineas,
@@ -3971,9 +4104,13 @@ async function editarContabilizacion(docId){
   lineasControl = (lin && lin.length)
     ? lin.map(l => ({concepto: l.concepto_codigo || '', monto: Number(l.monto_neto)||0, alicuota: l.alicuota ?? ''}))
     : [{concepto:'', monto: Number(doc.neto_gravado||0)+Number(doc.neto_no_gravado||0)+Number(doc.exento||0)}];
+  enControl._impuestosOk = true;
   pintarControl();
-  const {data} = await sb.rpc('compras_conceptos_proveedor', {p_cuit: doc.cuit_emisor});
+  const [{data}, {data: rg}] = await Promise.all([
+    sb.rpc('compras_conceptos_proveedor', {p_cuit: doc.cuit_emisor}),
+    sb.rpc('compras_doc_renglones', {p_doc: docId})]);
   enControl._usados = data || [];
+  enControl._renglones = rg || [];
   pintarControl();
 }
 
@@ -3990,6 +4127,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="manual.js?v=43"></script>
+<script src="manual.js?v=44"></script>
 </body>
 </html>

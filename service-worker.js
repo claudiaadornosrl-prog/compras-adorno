@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v60-equiv-editar-fechas';
+const CACHE_VERSION = 'compras-v61-renglones-editables';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
