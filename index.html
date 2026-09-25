@@ -1388,6 +1388,82 @@ function _gestionCambio(){
   const b = document.getElementById('ctrl-gestion-box'); if (b) b.style.display = on ? 'block' : 'none';
   _avisoUnidadConcepto();
 }
+// ── (24-sep, JP) Reparto del gasto: parte a un local y parte a otro, y/o en distintos períodos ──
+// enControl._reparto = [{periodo, unidad, categoria, pct, importe}] · enControl._gBase = total a repartir
+const _r2g = x => Math.round((Number(x) || 0) * 100) / 100;
+function _gMesMas(per, k){ const y = +per.slice(0,4), m = +per.slice(5,7) - 1 + k; const d = new Date(y, m, 1);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-01'; }
+function _gRepartoInit(d, gs){
+  if (d._reparto) return;
+  if (Array.isArray(d.gestion_reparto) && d.gestion_reparto.length > 1){
+    d._reparto = d.gestion_reparto.map(x => ({periodo: String(x.periodo).slice(0,10), unidad: x.unidad, categoria: x.categoria,
+                                              pct: x.pct, importe: Number(x.importe)}));
+    d._gBase = _r2g(d._reparto.reduce((a,x) => a + x.importe, 0));
+  } else {
+    const imp = gs.importe != null ? Number(gs.importe) : null;
+    d._gBase = imp;
+    d._reparto = [{periodo: gs.periodo || d.gestion_periodo || _gMesMas(_hoyAR().slice(0,7) + '-01', 0),
+                   unidad: gs.unidad || '', categoria: gs.categoria || 'varios', pct: 100, importe: imp}];
+  }
+}
+function _gRepartoHTML(){
+  const d = enControl; if (!d || !d._reparto) return '';
+  const P = d._reparto, varias = P.length > 1, base = Number(d._gBase || 0);
+  const suma = _r2g(P.reduce((a,x) => a + (Number(x.importe) || 0), 0)), dif = _r2g(base - suma);
+  const fila = (x, i) => `<tr>
+      <td><select onchange="_gPartSet(${i},'periodo',this.value)">${_gPeriodoOpts(x.periodo)}</select></td>
+      <td><select onchange="_gPartSet(${i},'unidad',this.value)"><option value="">— elegir —</option>
+        ${G_UNIDADES.map(u => `<option value="${u.clave}" ${x.unidad===u.clave?'selected':''}>${esc(u.nombre)}</option>`).join('')}</select></td>
+      <td><select onchange="_gPartSet(${i},'categoria',this.value)">
+        ${G_CATEGORIAS.map(c => `<option value="${c.clave}" ${x.categoria===c.clave?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select></td>
+      <td class="num"><input type="text" inputmode="decimal" id="g-imp-${i}" class="fx-in" style="width:130px" value="${x.importe == null ? '' : nmShow(x.importe)}" oninput="_gPartImp(${i}, this.value)"></td>
+      <td>${varias ? `<button class="act gh" type="button" style="padding:2px 8px" title="Quitar este renglón" onclick="_gPartQuitar(${i})">✕</button>` : ''}</td>
+    </tr>`;
+  return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:2px 0 6px">
+      <label class="mini">Total a la planilla <input type="text" inputmode="decimal" id="g-base" class="fx-in" style="width:130px" value="${nmShow(base)}" oninput="_gBaseSet(this.value)"></label>
+      <span class="mini" style="color:var(--mut)">Si el gasto va a más de un local o a más de un mes, agregá un renglón por cada parte y poné el importe de cada una.</span>
+    </div>
+    <div style="overflow-x:auto"><table class="fx-tbl">
+      <thead><tr><th>Período (mes de consumo)</th><th>Unidad</th><th>Categoría</th><th class="num">Importe</th><th></th></tr></thead>
+      <tbody>${P.map(fila).join('')}</tbody>
+      ${varias ? `<tfoot><tr><td colspan="3" style="text-align:right;color:var(--mut)">Suma de los renglones</td><td class="num" id="g-suma"><b>${plata(suma)}</b></td><td></td></tr></tfoot>` : ''}
+    </table></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px">
+      <button class="act gh" type="button" style="font-size:12px;padding:3px 9px" onclick="_gPartAgregar()" title="Otro renglón: otro local, otro mes o las dos cosas. Arranca con lo que falta repartir.">+ Agregar renglón</button>
+      <span class="mini" id="g-dif" style="${Math.abs(dif) > 0.01 && varias ? 'color:#b45309' : 'color:var(--mut)'}">${varias ? (Math.abs(dif) > 0.01 ? `⚠ Los renglones suman ${plata(suma)} y el total es ${plata(base)}: ${dif > 0 ? 'faltan' : 'sobran'} ${plata(Math.abs(dif))}.` : '✓ Los renglones suman el total.') : ''}</span>
+    </div>`;
+}
+function _gRepintar(){ const el = document.getElementById('ctrl-g-rep'); if (el) el.innerHTML = _gRepartoHTML(); _avisoUnidadConcepto(); }
+function _gRefrescarSuma(){
+  const d = enControl, P = d._reparto, base = Number(d._gBase || 0);
+  const suma = _r2g(P.reduce((a,x) => a + (Number(x.importe) || 0), 0)), dif = _r2g(base - suma);
+  const s = document.getElementById('g-suma'); if (s) s.innerHTML = `<b>${plata(suma)}</b>`;
+  const e = document.getElementById('g-dif');
+  if (e && P.length > 1){ e.style.color = Math.abs(dif) > 0.01 ? '#b45309' : 'var(--mut)';
+    e.innerHTML = Math.abs(dif) > 0.01 ? `⚠ Los renglones suman ${plata(suma)} y el total es ${plata(base)}: ${dif > 0 ? 'faltan' : 'sobran'} ${plata(Math.abs(dif))}.` : '✓ Los renglones suman el total.'; }
+}
+function _gPartSet(i, campo, v){ enControl._reparto[i][campo] = v; if (campo === 'unidad') _avisoUnidadConcepto(); }
+function _gPartImp(i, v){
+  const d = enControl, x = d._reparto[i]; x.importe = String(v).trim() === '' ? null : nmParse(v);
+  if (d._reparto.length === 1){ d._gBase = x.importe; const b = document.getElementById('g-base'); if (b) b.value = nmShow(d._gBase); }
+  _gRefrescarSuma();
+}
+function _gBaseSet(v){
+  const d = enControl; d._gBase = String(v).trim() === '' ? null : nmParse(v);
+  if (d._reparto.length === 1){ d._reparto[0].importe = d._gBase; const el = document.getElementById('g-imp-0'); if (el) el.value = nmShow(d._gBase); }
+  _gRefrescarSuma();
+}
+function _gPartAgregar(){
+  const d = enControl, P = d._reparto, ult = P[P.length-1];
+  const resto = d._gBase != null ? _r2g(Number(d._gBase) - P.reduce((a,x) => a + (Number(x.importe)||0), 0)) : 0;
+  P.push({periodo: ult.periodo, unidad: '', categoria: ult.categoria, pct: null, importe: resto > 0 ? resto : 0});
+  _gRepintar();
+}
+function _gPartQuitar(i){
+  const d = enControl; d._reparto.splice(i, 1);
+  if (d._reparto.length === 1) d._reparto[0].importe = d._gBase;
+  _gRepintar();
+}
 
 
 const CONF = {
@@ -1540,6 +1616,7 @@ async function abrirControl(id){
   await cargarCatalogosGastos();
   enControl = BANDEJA.find(d => d.id === id);
   if (!enControl) return;
+  delete enControl._reparto; delete enControl._gBase;   // cada apertura arranca de la sugerencia
   const neto = Number(enControl.neto_gravado||0) + Number(enControl.neto_no_gravado||0) + Number(enControl.exento||0);
   lineasControl = [{concepto: enControl.sug_concepto || '', monto: Math.round((neto || Number(enControl.total)) * 100)/100}];
   // (23-sep) Factura con parte gravada Y parte no gravada (Edenor: tasas y contribuciones): se propone
@@ -1995,10 +2072,11 @@ function _conceptoNoGravado(cod){
 // Caso Metrotel: concepto de Unicenter con la unidad en Alcorta → uno de los dos está mal.
 function _avisoUnidadConcepto(){
   const el = document.getElementById('ctrl-g-aviso'); if (!el) return;
-  const u = (document.getElementById('ctrl-g-unidad') || {}).value || '';
+  const us = [...new Set(((enControl && enControl._reparto) || []).map(x => x.unidad).filter(Boolean))];
+  const u = us.join(' / ');
   const on = (document.getElementById('ctrl-gestion') || {}).checked;
   const locs = [...new Set(lineasControl.map(l => (CONCEPTOS.find(c => c.codigo === l.concepto) || {}).gestion_unidad).filter(Boolean))];
-  const choca = on && u && locs.length && !locs.includes(u);
+  const choca = on && us.length && locs.length && !us.some(x => locs.includes(x));
   el.style.display = choca ? 'block' : 'none';
   el.innerHTML = choca ? `⚠ El concepto contable es de <b>${esc(locs.join(' / '))}</b> y la planilla dice <b>${esc(u)}</b>. Revisá cuál de los dos está mal.` : '';
 }
@@ -2029,6 +2107,7 @@ function pintarControl(){
   // sugerencia de la planilla: la que trajo la bandeja, o lo que ya tiene guardado el doc (edición)
   const gs = d.gestion_sug || {computa: d.computa_gestion, periodo: d.gestion_periodo, unidad: d.gestion_unidad,
                                categoria: d.gestion_categoria, importe: d.gestion_importe, motivo: (d.gestion_sugerencia||{}).motivo};
+  _gRepartoInit(d, gs);
   const cf = CONF[d.sug_confianza] || CONF.baja;
   const neto = Number(d.neto_gravado||0) + Number(d.neto_no_gravado||0) + Number(d.exento||0);
   const iva  = Number(d.total||0) - neto;
@@ -2116,21 +2195,7 @@ function pintarControl(){
       <div id="ctrl-gestion-box" style="display:${gs.computa!==false?'block':'none'};margin-top:8px;padding:8px 10px;border:1px dashed var(--line);border-radius:8px">
         <div class="mini" style="margin-bottom:6px">📒 <b>Planilla de gastos</b> — sugerido por las reglas, corregilo si no corresponde.
           ${gs.motivo ? `<span title="${esc(gs.motivo)}" style="cursor:help">ⓘ</span>` : ''}</div>
-        <div class="c-fila">
-          <label>Período (mes de consumo)
-            <select id="ctrl-g-periodo">${_gPeriodoOpts(gs.periodo || d.gestion_periodo || null)}</select></label>
-          <label>Unidad
-            <select id="ctrl-g-unidad" onchange="_avisoUnidadConcepto()">
-              <option value="">— elegir —</option>
-              ${G_UNIDADES.map(u => `<option value="${u.clave}" ${(gs.unidad||'')===u.clave?'selected':''}>${esc(u.nombre)}</option>`).join('')}
-            </select></label>
-          <label>Categoría
-            <select id="ctrl-g-cat">
-              ${G_CATEGORIAS.map(c => `<option value="${c.clave}" ${(gs.categoria||'')===c.clave?'selected':''}>${esc(c.nombre)}</option>`).join('')}
-            </select></label>
-          <label>Importe a la planilla
-            <input id="ctrl-g-importe" type="number" step="0.01" value="${gs.importe ?? ''}"></label>
-        </div>
+        <div id="ctrl-g-rep">${_gRepartoHTML()}</div>
         <div id="ctrl-g-aviso" class="mini" style="display:none;margin-top:6px;padding:6px 8px;border-radius:6px;background:#fef3c7;color:#92400e"></div>
         <div class="mini" style="color:var(--muted)">${esc(gs.motivo || '')}</div>
       </div>
@@ -2249,6 +2314,22 @@ async function contabilizar(){
     if (eR){ alert('No se pudieron guardar los renglones: ' + eR.message); return; }
     enControl._rengDirty = false; enControl._descDirty = false;
   }
+  // (24-sep) Planilla de gastos: una parte = como siempre · varias partes = reparto por unidad y/o período
+  let gestionPayload = null;
+  if (document.getElementById('ctrl-gestion').checked){
+    const P = enControl._reparto || [];
+    if (P.length > 1){
+      const falta = P.findIndex(x => !x.periodo || !x.unidad || !x.categoria || x.importe == null || x.importe === '');
+      if (falta >= 0){ alert('La parte ' + (falta+1) + ' del reparto está incompleta: necesita período, unidad, categoría e importe.'); return; }
+      const suma = _r2g(P.reduce((a,x) => a + Number(x.importe), 0)), base = Number(enControl._gBase || 0);
+      if (Math.abs(suma - base) > 0.01 && !confirm('Las partes suman ' + plata(suma) + ' y el total a la planilla es ' + plata(base) + '.\n\nSe va a cargar lo que suman las partes (' + plata(suma) + '). ¿Seguir?')) return;
+      gestionPayload = {reparto: P.map(x => ({periodo: x.periodo, unidad: x.unidad, categoria: x.categoria, pct: null, importe: Number(x.importe)}))};
+    } else if (P.length === 1){
+      const x = P[0];
+      gestionPayload = {periodo: x.periodo || null, unidad: x.unidad || null, categoria: x.categoria || null,
+                        importe: x.importe == null || x.importe === '' ? null : Number(x.importe)};
+    }
+  }
   const {data, error} = await sb.rpc('compras_contabilizar', {
     p_doc_id: enControl.id,
     p_lineas: lineas,
@@ -2260,12 +2341,7 @@ async function contabilizar(){
     p_fecha_vto: document.getElementById('ctrl-vto')?.value || null,
     p_fecha_ingreso: ingIn,
     p_numero_interno: niTxt ? Number(niTxt) : null,
-    p_gestion: document.getElementById('ctrl-gestion').checked ? {
-      periodo:   document.getElementById('ctrl-g-periodo').value || null,
-      unidad:    document.getElementById('ctrl-g-unidad').value || null,
-      categoria: document.getElementById('ctrl-g-cat').value || null,
-      importe:   document.getElementById('ctrl-g-importe').value === '' ? null : Number(document.getElementById('ctrl-g-importe').value),
-    } : null,
+    p_gestion: gestionPayload,
   });
   if (error){ alert('No se pudo contabilizar: ' + error.message); return; }
   cerrarControl();
@@ -3969,7 +4045,9 @@ async function abrirResumenDoc(docId){
         </select>
         ${doc.corregida ? '<span class="chip" style="background:#fef3c7;color:#92400e">✏️ corregida</span>' : ''}
         ${doc.computa_formal ? '<span class="chip" style="background:#f1f5f9;color:#475569">Libro IVA</span>' : '<span class="chip" style="background:#fee2e2;color:#991b1b">Fuera del Libro IVA</span>'}
-        ${doc.computa_gestion ? `<span class="chip" style="background:#f1f5f9;color:#475569">📒 Planilla: ${esc(doc.gestion_unidad||'?')} · ${esc(doc.gestion_categoria||'?')} · ${doc.gestion_periodo ? MESES_G[Number(String(doc.gestion_periodo).slice(5,7))-1]+' '+String(doc.gestion_periodo).slice(0,4) : '?'}</span>` : '<span class="chip" style="background:#fee2e2;color:#991b1b">No va a la planilla</span>'}
+        ${doc.computa_gestion ? (Array.isArray(doc.gestion_reparto) && doc.gestion_reparto.length > 1
+          ? `<span class="chip" style="background:#f1f5f9;color:#475569" title="${esc(doc.gestion_reparto.map(x => MESES_G[Number(String(x.periodo).slice(5,7))-1]+' '+String(x.periodo).slice(0,4)+' · '+x.unidad+' · '+x.categoria+' · '+plata(x.importe)).join('\n'))}">📒 Planilla: ✂ repartido en ${doc.gestion_reparto.length} partes · ${plata(doc.gestion_importe)}</span>`
+          : `<span class="chip" style="background:#f1f5f9;color:#475569">📒 Planilla: ${esc(doc.gestion_unidad||'?')} · ${esc(doc.gestion_categoria||'?')} · ${doc.gestion_periodo ? MESES_G[Number(String(doc.gestion_periodo).slice(5,7))-1]+' '+String(doc.gestion_periodo).slice(0,4) : '?'}</span>`) : '<span class="chip" style="background:#fee2e2;color:#991b1b">No va a la planilla</span>'}
       </div>
       <p class="mini" style="margin:4px 0 10px">Las retenciones no van en la factura: se practican al pagar y las vas a ver en la orden de pago.</p>
       <h4 style="font-size:14px;margin:4px 0 7px">Imputación contable</h4>
@@ -4127,6 +4205,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="manual.js?v=44"></script>
+<script src="manual.js?v=46"></script>
 </body>
 </html>
