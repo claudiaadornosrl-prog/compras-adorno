@@ -265,7 +265,11 @@ function wireImporte(el) {
     el.value = n ? String(n).replace('.', ',') : ''; el.select?.(); });
   el.addEventListener('blur',  () => { el.value = nmShow(nmParse(el.value)); });
 }
-const fechaCorta = f => f ? f.slice(8,10)+'/'+f.slice(5,7)+'/'+f.slice(2,4) : '—';
+// (24-sep, JP) TODAS las fechas del módulo en dd/mm/aaaa.
+const fechaCorta = f => f ? String(f).slice(8,10)+'/'+String(f).slice(5,7)+'/'+String(f).slice(0,4) : '—';
+// Para timestamps (Date o ISO con hora): el día en hora argentina, dd/mm/aaaa.
+const _fechaTs = t => { if (!t) return '—'; const d = t instanceof Date ? t : new Date(t); if (isNaN(d)) return '—';
+  return new Intl.DateTimeFormat('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',year:'numeric'}).format(d); };
 // archivo_path es relativo a la raíz del OneDrive → URL de SharePoint
 const pdfUrl = p => p
   ? 'https://claudiaadorno-my.sharepoint.com/personal/office_claudiaadorno_onmicrosoft_com/Documents/'
@@ -377,7 +381,7 @@ function celdaRemitos(d){
     let chip, tit;
     if (r.origen === 'fgr_txt' || r.estado === 'recibido'){ chip = '<span class="chip" style="background:#dcfce7;color:#166534">en stock</span>'; tit = 'Ya ingresó al Dragonfish'; }
     else if (r.txt_proveedor){ chip = '<span class="chip" style="background:#e0e7ff;color:#3730a3">📨 TXT prov.</span>'; tit = 'El TXT lo manda el proveedor'; }
-    else if (r.txt_generado_at){ chip = '<span class="chip" style="background:#dcfce7;color:#166534">TXT ✓</span>'; tit = 'TXT generado ' + fechaCorta(String(r.txt_generado_at).slice(0,10)); }
+    else if (r.txt_generado_at){ chip = '<span class="chip" style="background:#dcfce7;color:#166534">TXT ✓</span>'; tit = 'TXT generado ' + _fechaTs(String(r.txt_generado_at).slice(0,10)); }
     else { chip = '<span class="chip" style="background:#fef3c7;color:#92400e">TXT pend.</span>'; tit = 'Falta generar el TXT para el Dragonfish'; }
     return `<span title="${esc(tit)}${r.local_destino ? ' · destino ' + esc(r.local_destino) : ''}${r.asociado_por ? ' · vinculado: ' + esc(r.asociado_por) : ''}">R ${num} ${chip}</span>`;
   }).join('<br>');
@@ -1265,7 +1269,7 @@ async function confirmarAltaProveedor(){
   const { data, error } = await sb.rpc('compras_proveedor_alta',
     { p_nombre: nombre, p_cuit: cuit || null, p_es_exterior: ext,
       p_datos: { pais, moneda_habitual: ext ? 'USD' : 'ARS', cond_iva: ext ? 'EXT' : (arca?.cond_iva || ''), domicilio: domArca,
-                 notas: arca ? `ARCA ${arca.estado_clave} · ${arca.razon_social || ''} · validado ${new Date().toLocaleDateString('es-AR')}` : '' } });
+                 notas: arca ? `ARCA ${arca.estado_clave} · ${arca.razon_social || ''} · validado ${_fechaTs(new Date())}` : '' } });
   if (error) return alert('No se pudo crear: ' + error.message);
   if (data && data.ya_existe){
     alert(`Ese proveedor ya existe: "${data.nombre}" (código ${data.codigo}).\n\nNo lo dupliqué. Buscalo en el listado y completá su ficha.`);
@@ -1477,7 +1481,7 @@ function vistaBandeja(){
     const ign = det.ignoradas_nombres || [];
     const leidas = (det.a_revisar||0) + (det.sin_regla||0) + (det.auto||0);
     h += `<div class="card" style="padding:10px 14px;font-size:13px">
-      🤖 <b>Motor del circuito</b> · última pasada ${dt.toLocaleDateString('es-AR')} ${dt.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})} hs
+      🤖 <b>Motor del circuito</b> · última pasada ${_fechaTs(dt)} ${dt.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})} hs
       · nuevas leídas: <b>${leidas}</b> · ya procesadas: ${det.ya_procesadas||0}
       · fuera de norma: <b style="color:${ign.length?'#dc2626':'inherit'}">${det.ignoradas||0}</b>
       ${ign.length ? `<div class="mini" style="margin-top:6px;color:#991b1b">⏭ Ignorados — renombrar como "G/M/I/Z PROVEEDOR FC nro.pdf": ${ign.map(esc).join(' · ')}</div>` : ''}
@@ -1665,7 +1669,7 @@ function _facturaCabecera(d, opts = {}){
   const falta = '<span class="fx-falta">—</span>';
   const a = d._arca;
   const arca = a ? (a.vigente
-      ? `<span class="chip fx-chip-ok" title="Consultado en ARCA el ${a.consultado_at ? new Date(a.consultado_at).toLocaleDateString('es-AR') : '—'}">ARCA ✓ vigente${a.cond_iva ? ' · ' + esc(a.cond_iva) : ''}</span>`
+      ? `<span class="chip fx-chip-ok" title="Consultado en ARCA el ${_fechaTs(a.consultado_at)}">ARCA ✓ vigente${a.cond_iva ? ' · ' + esc(a.cond_iva) : ''}</span>`
       : `<span class="chip fx-chip-bad" title="${esc(a.estado_clave || '')}">ARCA ⚠ ${esc(a.estado_clave || 'no vigente')}</span>`)
     : (d.es_exterior ? '' : (d._arcaBuscando
         ? '<span class="chip fx-chip-off">⏳ consultando ARCA…</span>'
@@ -1682,6 +1686,9 @@ function _facturaCabecera(d, opts = {}){
       <div class="mini">Emisión <b>${fechaCorta(d.fecha_emision)}</b> · Vto ${opts.editable
         ? `<input type="date" id="ctrl-vto" class="fx-vto-in" value="${esc(vto || '')}" min="${esc(d.fecha_emision || '')}" title="Vencimiento de la factura. Si el papel no lo trae, cargalo acá: es la fecha de pago que después toma la orden de pago y el pendiente de Tesorería.">${vto ? '' : '<span class="fx-vto-falta">falta · cargalo</span>'}`
         : `<b>${vto ? fechaCorta(vto) : falta}</b>`}</div>
+      ${opts.editable
+        ? `<div class="mini fx-ing">Ingreso <input type="date" id="ctrl-ingreso" class="fx-vto-in" value="${esc(d._ingreso ?? d.fecha_ingreso ?? _hoyAR())}" min="${esc(d.fecha_emision || '')}" max="${d.fecha_emision ? _sumarMeses(d.fecha_emision, 12) : '2100-12-31'}" oninput="enControl._ingreso=this.value" title="Fecha de ingreso = mes del Libro IVA Compras. Por defecto hoy; tope 12 meses después de la emisión."> <span style="opacity:.8">(mes del Libro IVA)</span></div>`
+        : (d.fecha_ingreso ? `<div class="mini">Ingreso <b>${fechaCorta(d.fecha_ingreso)}</b>${d.numero_interno ? ' · Nº int. <b>' + d.numero_interno + '</b>' : ''}</div>` : '')}
       <div class="mini">Remito ${remito ? esc(remito) : falta}</div>
       ${d.archivo_path ? `<a class="act fx-pdf" target="_blank" rel="noopener" href="${_pdfUrl(d.archivo_path)}" title="Abre el PDF en OneDrive, en otra pestaña">📄 Ver la factura</a>` : ''}
     </div>
@@ -1968,8 +1975,6 @@ function pintarControl(){
           extra: `<div style="margin-top:6px"><button class="act gh" type="button" style="font-size:12px;padding:4px 9px" onclick="_editarImportes()" title="Si el motor leyó mal algún importe, corregilo a mano">✏ Corregir importes</button></div><div id="imp-edit"></div>`})}
 
       <div class="c-fila">
-        <label title="Define en qué mes entra al Libro IVA Compras. Por defecto hoy; si una factura se contabiliza tarde o hay que imputarla a otro mes, se cambia acá.">Fecha de ingreso <span class="mini">(mes del Libro IVA)</span>
-          <input id="ctrl-ingreso" type="date" value="${esc(d._ingreso ?? d.fecha_ingreso ?? _hoyAR())}" min="${esc(d.fecha_emision || '')}" max="${d.fecha_emision ? _sumarMeses(d.fecha_emision, 12) : '2100-12-31'}" oninput="enControl._ingreso=this.value"></label>
         <label title="Correlativo propio del módulo. Si lo dejás vacío se asigna el siguiente al contabilizar. Más adelante se va a alinear con el número interno del Dragonfish.">Nº interno
           <input id="ctrl-numint" type="number" min="1" step="1" inputmode="numeric" style="width:120px" value="${esc(d._numint ?? d.numero_interno ?? '')}" placeholder="automático" oninput="enControl._numint=this.value"></label>
       </div>
@@ -2891,7 +2896,7 @@ async function guardarRegimenNuevo(){
 //  sets que después se fraccionan. Por eso se puede partir en varias filas,
 //  cada una con su parte del costo, y las partes tienen que sumar 100 %.
 // ═══════════════════════════════════════════════════════════════════════
-let PENDIENTES = [], enMapeo = null, partesMapeo = [], candidatos = [];
+let PENDIENTES = [], enMapeo = null, partesMapeo = [], candidatos = [], EQUIV_HECHAS = [];
 
 async function vistaEquivalencias(){
   const c = document.getElementById('cont');
@@ -2902,8 +2907,8 @@ async function vistaEquivalencias(){
       .select('codigo_proveedor,descripcion,cantidad,importe,documento_id,compras_documentos(cuit_emisor,proveedor_nombre)')
       .is('sku', null).limit(500),
     sb.from('compras_equivalencias')
-      .select('cuit_proveedor,codigo_proveedor,descripcion_proveedor,sku,proporcion_costo,veces_usada')
-      .order('creada_at', {ascending:false}).limit(300),
+      .select('id,cuit_proveedor,codigo_proveedor,descripcion_proveedor,sku,cantidad_por_unidad,proporcion_costo,veces_usada,creada_por,creada_at')
+      .order('creada_at', {ascending:false}).limit(600),
   ]);
   if (pend.error){ c.innerHTML = `<div class="alerta">${esc(pend.error.message)}</div>`; return; }
 
@@ -2916,7 +2921,21 @@ async function vistaEquivalencias(){
     porCodigo[k].veces++;
   });
   PENDIENTES = Object.values(porCodigo).sort((a,b) => b.veces - a.veces);
-  const HECHAS = hechas.data || [];
+  // Una equivalencia = un código del proveedor (puede tener varias partes si se fracciona)
+  const grupos = {};
+  (hechas.data || []).forEach(h => {
+    const k = h.cuit_proveedor + '|' + (h.codigo_proveedor || '') + '|' + (h.codigo_proveedor ? '' : (h.descripcion_proveedor || '').toUpperCase().trim());
+    (grupos[k] = grupos[k] || {cuit: h.cuit_proveedor, codigo_proveedor: h.codigo_proveedor || '',
+      descripcion: h.descripcion_proveedor || '', creada_at: h.creada_at, creada_por: h.creada_por, partes: []}).partes.push(h);
+  });
+  EQUIV_HECHAS = Object.values(grupos);
+  const cuits = [...new Set(EQUIV_HECHAS.map(g => g.cuit))];
+  if (cuits.length){
+    const {data: pv} = await sb.from('tesoreria_proveedores').select('cuit,nombre').in('cuit', cuits);
+    const nom = {}; (pv || []).forEach(x => { if (!nom[x.cuit]) nom[x.cuit] = x.nombre; });
+    EQUIV_HECHAS.forEach(g => g.prov = nom[g.cuit] || '');
+  }
+  const HECHAS = EQUIV_HECHAS;
 
   c.innerHTML = `<div class="kpis">
       <div class="kpi" style="border-left-color:var(--warn)"><div class="lbl">Códigos sin traducir</div>
@@ -2947,15 +2966,21 @@ async function vistaEquivalencias(){
     </div>
 
     ${HECHAS.length ? `<div class="card">
-      <h3 style="font-size:15px;margin-bottom:11px">Equivalencias ya cargadas</h3>
+      <h3 style="font-size:15px;margin-bottom:4px">Equivalencias ya cargadas</h3>
+      <p class="mini" style="margin-bottom:11px">Con ✏️ se corrige una traducción mal hecha: los renglones de facturas y
+        los remitos que todavía no se importaron pasan solos al SKU nuevo. Lo que ya se importó al Dragonfish no se toca.</p>
       <div style="overflow-x:auto"><table>
-        <thead><tr><th>Su código</th><th>Cómo lo llama él</th><th>Nuestro SKU</th>
-          <th class="num">Parte del costo</th></tr></thead>
-        <tbody>${HECHAS.map(h => `<tr>
-          <td><code>${esc(h.codigo_proveedor || '—')}</code></td>
-          <td>${esc(h.descripcion_proveedor || '')}</td>
-          <td><b>${esc(h.sku)}</b></td>
-          <td class="num">${Math.round((h.proporcion_costo || 1) * 100)} %</td>
+        <thead><tr><th>Proveedor</th><th>Su código</th><th>Cómo lo llama él</th><th>Nuestro SKU</th>
+          <th>Cargada</th><th></th></tr></thead>
+        <tbody>${HECHAS.map((g,i) => `<tr>
+          <td>${esc(g.prov || g.cuit)}</td>
+          <td><code>${esc(g.codigo_proveedor || '—')}</code></td>
+          <td>${esc(g.descripcion || '')}</td>
+          <td>${g.partes.map(h => `<b>${esc(h.sku)}</b>${g.partes.length > 1 ? ' <span class="mini">' + Math.round((h.proporcion_costo || 1) * 100) + ' %</span>' : ''}`).join('<br>')}</td>
+          <td class="mini" title="${esc(g.creada_por || '')}">${_fechaTs(g.creada_at)}</td>
+          <td class="num" style="white-space:nowrap">
+            <button class="act gh" style="padding:4px 9px;font-size:12.5px" onclick="editarEquivalencia(${i})">✏️ Editar</button>
+            <button class="act gh" style="padding:4px 9px;font-size:12.5px" onclick="borrarEquivalencia(${i})" title="Borrar esta equivalencia">🗑</button></td>
         </tr>`).join('')}</tbody></table></div>
     </div>` : ''}`;
 }
@@ -2995,6 +3020,27 @@ async function abrirMapeo(i){
   pintarMapeo();
 }
 
+// (24-sep, JP) Editar una equivalencia ya cargada: mismo modal, con las partes actuales puestas.
+async function editarEquivalencia(i){
+  const g = EQUIV_HECHAS[i]; if (!g) return;
+  enMapeo = {cuit: g.cuit, codigo_proveedor: g.codigo_proveedor, descripcion: g.descripcion, prov: g.prov,
+             veces: 0, _editar: true, _skusViejos: g.partes.map(p => p.sku)};
+  partesMapeo = g.partes.map(p => ({sku: p.sku, cantidad: Number(p.cantidad_por_unidad) || 1, proporcion: Number(p.proporcion_costo) || 1}));
+  candidatos = []; pintarMapeo(true);
+  const {data, error} = await sb.rpc('compras_resolver_articulo', {
+    p_cuit: g.cuit, p_codigo: g.codigo_proveedor, p_descripcion: g.descripcion, p_limite: 8 });
+  candidatos = error ? [] : (data || []);
+  pintarMapeo();
+}
+async function borrarEquivalencia(i){
+  const g = EQUIV_HECHAS[i]; if (!g) return;
+  if (!confirm(`¿Borrar la equivalencia ${g.codigo_proveedor || g.descripcion} → ${g.partes.map(p => p.sku).join(' + ')}?\n\n`
+    + 'Las facturas ya traducidas no cambian. Las próximas que traigan este código van a volver a aparecer como "sin traducir".')) return;
+  const {error} = await sb.from('compras_equivalencias').delete().in('id', g.partes.map(p => p.id));
+  if (error){ alert('No se pudo borrar: ' + error.message); return; }
+  vistaEquivalencias();
+}
+
 function cerrarMapeo(){
   const o = document.getElementById('map-overlay');
   if (o) o.remove();
@@ -3013,7 +3059,8 @@ function pintarMapeo(cargando){
         <div style="font-weight:700;font-size:16px">${esc(m.descripcion || '')}</div>
         <div style="font-size:12.5px;opacity:.9">${esc(m.prov || m.cuit)} ·
           código <code>${esc(m.codigo_proveedor || '—')}</code> ·
-          ${m._desde ? 'renglón de esta factura' : `aparece en ${m.veces} factura${m.veces === 1 ? '' : 's'}`}</div>
+          ${m._editar ? '✏️ editando una equivalencia ya cargada (hoy: ' + esc((m._skusViejos || []).join(' + ')) + ')'
+            : m._desde ? 'renglón de esta factura' : `aparece en ${m.veces} factura${m.veces === 1 ? '' : 's'}`}</div>
       </div>
       <button class="m-x" onclick="cerrarMapeo()">✕</button>
     </div>
@@ -3094,11 +3141,12 @@ async function guardarMapeo(){
   const partes = partesMapeo.filter(p => (p.sku||'').trim())
     .map(p => ({sku: p.sku.trim(), cantidad: Number(p.cantidad)||1, proporcion: Number(p.proporcion)||0}));
   if (!partes.length){ alert('Elegí al menos un artículo nuestro.'); return; }
-  const {error} = await sb.rpc('compras_guardar_equivalencia', {
+  const {data: res, error} = await sb.rpc('compras_guardar_equivalencia', {
     p_cuit: enMapeo.cuit, p_codigo: enMapeo.codigo_proveedor,
     p_descripcion: enMapeo.descripcion, p_partes: partes,
   });
   if (error){ alert('No se pudo guardar: ' + error.message); return; }
+  if (enMapeo._editar && res && res.retraducidos) alert(`✓ Equivalencia corregida. ${res.retraducidos} renglón(es) de facturas y remitos pasaron al SKU nuevo.`);
   const desde = enMapeo._desde, docId = enMapeo._docId;
   cerrarMapeo();
   if (desde === 'control' && enControl && enControl.id === docId){
@@ -3190,7 +3238,7 @@ async function vistaMercaderia(){
             ${r.txt_proveedor
               ? `<span class="chip" style="background:#e0e7ff;color:#3730a3;white-space:normal" title="El proveedor manda su propio TXT para este destino: se importa ESE en el Dragonfish. Generar otro duplicaría el ingreso.">📨 TXT lo manda el proveedor</span>`
               : `<button class="act" style="font-size:12px;padding:4px 9px" ${(!r.renglones||r.sin_sku)?'disabled title="Faltan renglones o SKUs"':''}
-              title="${r.txt_generado_at?'TXT ya generado el '+fechaCorta(r.txt_generado_at)+' — volver a bajar':'Generar el TXT para el importador'}"
+              title="${r.txt_generado_at?'TXT ya generado el '+_fechaTs(r.txt_generado_at)+' — volver a bajar':'Generar el TXT para el importador'}"
               onclick="txtRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero},'${esc(r.local_destino||'')}')">${r.txt_generado_at?'⬇ TXT ✓':'⬇ TXT'}</button>`}</td>
         </tr>`).join('')}</tbody></table></div>
     </div>` : ''}
@@ -3801,7 +3849,7 @@ async function abrirResumenDoc(docId){
         </tr>`).join('')}</tbody></table>`
         : '<div class="vacio">Sin líneas de contabilización.</div>'}
       ${doc.aprobada_por ? `<p class="mini" style="margin-top:9px">Contabilizada por ${esc(doc.aprobada_por)}
-        el ${doc.aprobada_at ? new Date(doc.aprobada_at).toLocaleDateString('es-AR') : '—'}</p>`
+        el ${_fechaTs(doc.aprobada_at)}</p>`
         : '<p class="mini" style="margin-top:9px">Contabilización migrada del Dragonfish.</p>'}
       <p class="mini" style="margin-top:6px">Nº interno <b>${doc.numero_interno ?? '—'}</b> · Fecha de ingreso <b>${doc.fecha_ingreso ? fechaCorta(doc.fecha_ingreso) : '—'}</b></p>
       <p class="mini" style="margin-top:9px">CAE <b>${esc(doc.cae || (doc.extraido_json||{}).cae || '—')}</b> · vto ${(doc.cae_vto || (doc.extraido_json||{}).cae_vto) ? fechaCorta(doc.cae_vto || doc.extraido_json.cae_vto) : '—'}</p>
@@ -3942,6 +3990,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="manual.js?v=42"></script>
+<script src="manual.js?v=43"></script>
 </body>
 </html>
