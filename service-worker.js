@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v66-rechazados';
+const CACHE_VERSION = 'compras-v68-remito-en-op';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

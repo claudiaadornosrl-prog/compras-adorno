@@ -364,7 +364,7 @@ async function cargarRemitosDeDocs(){
   let desde = 0;
   while (true){
     let q = sb.from('compras_remitos')
-      .select('documento_id,proveedor_cuit,fecha,punto_venta,numero,numero_proveedor,estado,origen,local_destino,txt_generado_at,txt_proveedor,asociado_por,archivo_path')
+      .select('documento_id,proveedor_cuit,fecha,punto_venta,numero,numero_proveedor,estado,origen,local_destino,txt_generado_at,txt_proveedor,asociado_por,archivo_path,doc:compras_documentos(id,tipo,letra,punto_venta,numero,proveedor_nombre,estado)')
       .eq('es_prueba', MODO_PRUEBA)
       .order('numero').range(desde, desde+999);
     if (!MODO_PRUEBA) q = q.gte('fecha', (filtro.anio - 1) + '-10-01');
@@ -378,8 +378,8 @@ async function cargarRemitosDeDocs(){
 // cómo se ve el remito en la grilla: número + en qué estado está su stock
 function celdaRemitos(d){
   const rs = REMITOS_DOC[d.id] || [];
-  if (!rs.length) return d.tipo_gasto === 'M'
-    ? '<span class="mini" style="color:#b45309" title="Factura de mercadería sin remito asociado">sin remito</span>'
+  if (!rs.length) return (d.tipo_gasto === 'mercaderia' || d.tipo_gasto === 'M')
+    ? '<span class="chip" style="background:#fee2e2;color:#991b1b" title="Factura de mercadería sin remito asociado: la mercadería todavía no tiene cómo entrar al stock">⚠ sin remito</span>'
     : '<span class="mini">—</span>';
   return rs.map(r => {
     const num = `${String(r.punto_venta||0).padStart(4,'0')}-${String(r.numero).padStart(8,'0')}`;
@@ -551,6 +551,16 @@ async function abrirOP(cuit){
   const {data, error} = await sb.rpc('compras_op_candidatos', {p_cuit: cuit, p_prueba: MODO_PRUEBA});
   if (error){ alert(error.message); return; }
   opDocs = (data||[]).map(d => d.documento_id);   // por defecto, todas
+  // (25-sep, JP) remito asociado de cada factura, para ver antes de pagar si la mercadería ya tiene remito
+  if (opDocs.length){
+    const rr = await sb.from('compras_remitos')
+      .select('documento_id,proveedor_cuit,fecha,punto_venta,numero,numero_proveedor,estado,origen,local_destino,txt_generado_at,txt_proveedor,asociado_por')
+      .in('documento_id', opDocs);
+    if (!rr.error){
+      opDocs.forEach(id => { delete REMITOS_DOC[id]; });
+      (rr.data||[]).forEach(r => (REMITOS_DOC[r.documento_id] ||= []).push(r));
+    }
+  }
   _pintarModalOP(data || []);
 }
 
@@ -562,7 +572,7 @@ function _pintarModalOP(cands){
 
     <div style="max-height:230px;overflow:auto;border:1px solid var(--bd);border-radius:9px;margin-bottom:12px">
       <table style="font-size:13px"><thead><tr>
-        <th style="width:34px"></th><th>Fecha</th><th>Vence</th><th>Comprobante</th><th>Tipo</th><th class="num">Total</th></tr></thead>
+        <th style="width:34px"></th><th>Fecha</th><th>Vence</th><th>Comprobante</th><th>Tipo</th><th title="Remito asociado a la factura y en qué estado está su stock">Remito</th><th class="num">Total</th></tr></thead>
       <tbody>${cands.map(d => `<tr${d.es_nc ? ' style="background:#fef2f2"' : ''}>
         <td style="text-align:center"><input type="checkbox" data-doc="${d.documento_id}" checked
              onchange="_opToggle(${d.documento_id}, this.checked)"></td>
@@ -570,10 +580,13 @@ function _pintarModalOP(cands){
         <td class="mini">${d.fecha_vto ? _fecha(d.fecha_vto) : '<span style="color:var(--bad)" title="La factura no tiene vencimiento cargado: se carga en el control del comprobante">sin vto</span>'}</td>
         <td>${esc(d.comprobante)}</td>
         <td class="mini">${esc(d.tipo_gasto||'')}${d.moneda!=='ARS' ? ' · '+esc(d.moneda) : ''}</td>
+        <td style="white-space:nowrap;font-size:12px">${d.es_nc ? '<span class="mini">—</span>' : celdaRemitos({id: d.documento_id, tipo_gasto: d.tipo_gasto})}</td>
         <td class="num"${d.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(d.total)}</td>
       </tr>`).join('')}</tbody></table>
     </div>
 
+    ${(() => { const n = cands.filter(d => !d.es_nc && d.tipo_gasto === 'mercaderia' && !(REMITOS_DOC[d.documento_id]||[]).length).length;
+      return n ? `<div class="alerta" style="margin:-4px 0 12px;font-size:13px">⚠ ${n} factura${n>1?'s':''} de mercadería sin remito asociado: la mercadería todavía no tiene cómo entrar al stock. Se puede pagar igual; conviene resolver el remito en 🚚 Mercadería.</div>` : ''; })()}
     <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:12px">
       <div><label>Fecha de la OP</label><input type="date" id="op-fecha" value="${_hoyISO()}"></div>
       <div><label>Vence <span class="mini" title="Se propone el vencimiento más cercano de las facturas marcadas. Es la fecha de pago del pendiente en Tesorería.">(fecha de pago)</span></label><input type="date" id="op-venc" value="${_opVencDefault(cands)}" onchange="opVencManual=true"></div>
@@ -2377,13 +2390,19 @@ async function rechazarDoc(){
 
 // ── 📄 COMPROBANTES: facturas, NC, ND y remitos (22-sep, JP) ─────────────
 function _provPorCuit(cuit){ const d = DOCS.find(x => x.cuit_emisor === cuit); return d ? d.proveedor_nombre : null; }
+// (25-sep) la factura del remito: DOCS solo trae las aprobadas; si todavía está en la Bandeja
+// viene embebida desde compras_remitos (antes decía "sin factura" aunque estuviera asociado)
+function _docDeRemito(r){
+  if (!r.documento_id) return null;
+  return DOCS.find(d => d.id === r.documento_id) || (r.doc ? {...r.doc, _bandeja: r.doc.estado !== 'aprobada'} : null);
+}
 function remitosFiltrados(){
   const t = filtro.texto.toLowerCase();
   return REMITOS_ALL.filter(r => {
     if (filtro.mes && (r.fecha||'').slice(5,7) !== filtro.mes) return false;
     if (!MODO_PRUEBA && filtro.anio && (r.fecha||'').slice(0,4) !== String(filtro.anio)) return false;
     if (t){
-      const doc = r.documento_id ? DOCS.find(d => d.id === r.documento_id) : null;
+      const doc = _docDeRemito(r);
       const bolsa = `${doc?.proveedor_nombre || _provPorCuit(r.proveedor_cuit) || ''} ${r.numero} ${r.numero_proveedor||''} ${r.proveedor_cuit||''}`.toLowerCase();
       if (!bolsa.includes(t)) return false;
     }
@@ -2396,13 +2415,13 @@ function tablaRemitos(rs){
   return `<div style="overflow-x:auto"><table>
     <thead><tr><th>Fecha</th><th>Proveedor</th><th>Remito</th><th>Factura</th><th>Destino</th><th>Stock</th><th></th></tr></thead>
     <tbody>${rs.slice(0,400).map(r => {
-      const doc = r.documento_id ? DOCS.find(d => d.id === r.documento_id) : null;
+      const doc = _docDeRemito(r);
       const e = EST[r.estado] || ['#f1f5f9','#475569', r.estado || '—'];
-      return `<tr ${doc ? `style="cursor:pointer" onclick="abrirResumenDoc(${doc.id})"` : ''}>
+      return `<tr ${doc && !doc._bandeja ? `style="cursor:pointer" onclick="abrirResumenDoc(${doc.id})"` : ''}>
       <td>${fechaCorta(r.fecha)}</td>
       <td>${esc(doc?.proveedor_nombre || _provPorCuit(r.proveedor_cuit) || r.proveedor_cuit || '—')}</td>
       <td class="oculta-mov">R ${String(r.punto_venta||0).padStart(4,'0')}-${String(r.numero).padStart(8,'0')}${r.numero_proveedor ? ` <span class="mini">(${esc(r.numero_proveedor)})</span>` : ''}</td>
-      <td>${doc ? `${esc(doc.tipo)} ${esc(doc.letra)} ${String(doc.punto_venta).padStart(4,'0')}-${String(doc.numero).padStart(8,'0')}` : '<span class="mini" style="color:#b45309">sin factura</span>'}</td>
+      <td>${doc ? `${esc(doc.tipo)} ${esc(doc.letra)} ${String(doc.punto_venta).padStart(4,'0')}-${String(doc.numero).padStart(8,'0')}${doc._bandeja ? ` <span class="chip" style="background:#fef3c7;color:#92400e" title="La factura está asociada pero todavía no se controló: está en la Bandeja">en Bandeja</span>` : ''}` : '<span class="mini" style="color:#b45309">sin factura</span>'}</td>
       <td>${esc(r.local_destino || '—')}</td>
       <td><span class="chip" style="background:${e[0]};color:${e[1]}">${esc(e[2])}</span>${r.txt_generado_at ? ' <span class="mini">TXT ✓</span>' : ''}${r.txt_proveedor ? ' <span class="mini">📨 TXT prov.</span>' : ''}</td>
       <td class="num">${r.archivo_path ? `<a href="${pdfUrl(r.archivo_path)}" target="_blank" title="Ver PDF" onclick="event.stopPropagation()" style="text-decoration:none">📄</a>` : ''}</td>
@@ -2431,7 +2450,7 @@ function vistaFacturas(){
 function tabla(lista, bandeja){
   if (!lista.length) return `<div class="vacio">No hay comprobantes con esos filtros.</div>`;
   const cab = [['numero_interno','Nº int.'],['fecha_emision','Fecha'],['fecha_ingreso','Ingreso'],['proveedor_nombre','Proveedor'],['numero','Comprobante'],
-               ['tipo_gasto','Tipo'],['total','Total'],['estado_pago','Estado'],['remito','Remito']];
+               ['tipo_gasto','Tipo'],['total','Total'],['estado_pago','Estado'],['remito','Remito asociado']];
   return `<div style="overflow-x:auto"><table>
     <thead><tr>${cab.map(([k,t]) =>
       `<th onclick="ordenar('${k}')" class="${k==='total'?'num':''}">${t}${orden.col===k?(orden.desc?' ▾':' ▴'):''}</th>`).join('')}
@@ -4223,6 +4242,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="manual.js?v=49"></script>
+<script src="manual.js?v=51"></script>
 </body>
 </html>
