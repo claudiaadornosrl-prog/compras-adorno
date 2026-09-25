@@ -2367,7 +2367,7 @@ async function contabilizar(){
 }
 
 async function rechazarDoc(){
-  const motivo = prompt('¿Por qué queda afuera? (duplicada, archivo mal armado, no corresponde…)');
+  const motivo = prompt('¿Por qué queda afuera? (duplicada, archivo mal armado, no corresponde…)\n\nEl PDF vuelve a «1 - SIN CONTABILIZAR» con el nombre «RECHAZADO - …». Si después lo corregís, sacale el «RECHAZADO - » del nombre y el sistema lo vuelve a leer y lo trae de nuevo a la Bandeja.');
   if (motivo === null) return;
   const {error} = await sb.rpc('compras_rechazar', {p_doc_id: enControl.id, p_motivo: motivo});
   if (error){ alert('No se pudo rechazar: ' + error.message); return; }
@@ -4223,6 +4223,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="manual.js?v=48"></script>
+<script src="manual.js?v=49"></script>
 </body>
 </html>
