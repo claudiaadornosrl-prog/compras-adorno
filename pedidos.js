@@ -247,6 +247,7 @@ function _pedEditor(){
           <b style="font-size:13.5px">🔎 Catálogo del proveedor</b>
           <input type="search" id="ped-cat-q" placeholder="SKU o descripción (Enter)" onkeydown="if(event.key==='Enter')pedBuscarCat()">
           <label class="mini" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="ped-cat-todos" onchange="pedBuscarCat()"> todo el catálogo</label>
+          <label class="mini" style="display:flex;gap:4px;align-items:center" title="Solo los artículos que están por debajo de su mínimo de reposición"><input type="checkbox" id="ped-cat-bajo" onchange="document.getElementById('ped-cat').innerHTML=_pedCatHtml()"> solo bajo mínimo</label>
           <button class="act gh" onclick="pedBuscarCat()">Buscar</button>
         </div>
         <div id="ped-cat">${_pedCatHtml()}</div>
@@ -286,24 +287,59 @@ async function pedBuscarCat(){
   pedCat = data || [];
   document.getElementById('ped-cat').innerHTML = _pedCatHtml();
 }
+// (25-sep) Mínimo de reposición = el umbral de reposición por local (hoy sale de
+// COMB.MINREPO del Dragonfish, vía sync_mercaderia.py → stock_minimos).
+// "Falta" = lo que hay que pedir para volver al mínimo: el depósito cubre lo que les
+// falta a los locales + su propio mínimo; el sobrante de un local no cubre al otro;
+// el stock negativo cuenta como 0; ya descuenta lo pedido y no entregado.
+function _pedFalta(a){ const n = Number(a.falta_minimo); return a.falta_minimo == null ? null : (n > 0 ? n : 0); }
+function _pedStk(stock, min){
+  const s = _pedN(stock);
+  if (min == null || !(Number(min) > 0)) return s;
+  return Number(stock || 0) < Number(min) ? `<b style="color:var(--bad)" title="Por debajo del mínimo (${_pedN(min)})">${s}</b>` : s;
+}
+function _pedMin(v){ return v == null || !(Number(v) > 0) ? '—' : _pedN(v); }
 function _pedCatHtml(){
   if (!pedEd || !pedEd.proveedor_nombre) return '<div class="mini" style="padding:8px">Elegí el proveedor para ver sus artículos.</div>';
   if (!pedCat.length) return `<div class="mini" style="padding:8px">No hay artículos de este proveedor con ese filtro. Probá "todo el catálogo" o cargá un renglón sin SKU.</div>`;
   const ya = new Set(pedEd.lineas.map(l => (l.sku||'').toUpperCase()));
-  return `<div class="ped-cat"><table>
-    <thead><tr><th>SKU</th><th>Descripción</th><th class="num" title="Stock Alcorta / Unicenter / Oficina">Stock A · U · O</th>
+  const soloBajo = !!document.getElementById('ped-cat-bajo')?.checked;
+  const filas = pedCat.map((a, i) => ({a, i})).filter(x => !soloBajo || _pedFalta(x.a) > 0);
+  const faltan = pedCat.map((a, i) => ({a, i})).filter(x => _pedFalta(x.a) > 0 && !ya.has(String(x.a.sku).toUpperCase()));
+  const sinMin = pedCat.filter(a => a.falta_minimo == null).length;
+  const cab = `<div class="mini" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:2px 0 6px">
+      <span>${faltan.length ? `<b style="color:var(--bad)">${faltan.length}</b> artículo(s) por debajo del mínimo sin agregar` : 'Ningún artículo por debajo del mínimo sin agregar'}${sinMin ? ` · ${sinMin} sin mínimo cargado` : ''}</span>
+      ${faltan.length ? `<button class="act gh" style="padding:2px 10px;font-size:12.5px" onclick="pedAgregarBajoMinimo()">＋ Agregar todo lo que falta (${faltan.length})</button>` : ''}
+    </div>`;
+  if (!filas.length) return cab + '<div class="mini" style="padding:8px">Ningún artículo de la lista está por debajo de su mínimo.</div>';
+  return cab + `<div class="ped-cat"><table>
+    <thead><tr><th>SKU</th><th>Descripción</th><th class="num" title="Stock Alcorta / Unicenter / Oficina (en rojo: por debajo de su mínimo)">Stock A · U · O</th>
+      <th class="num" title="Mínimo de reposición (umbral) Alcorta / Unicenter / Oficina — sale del Dragonfish">Mín. A · U · O</th>
+      <th class="num" title="Lo que hay que pedir para volver al mínimo: lo que les falta a los locales + el mínimo del depósito, menos lo que ya hay en Oficina y lo ya pedido">Falta p/ mín.</th>
       <th class="num">$ compra</th><th class="num" title="Ya pedido y todavía no entregado (otros pedidos abiertos)">Ya pedido</th>
       <th class="num">Cant.</th><th></th></tr></thead>
-    <tbody>${pedCat.map((a, i) => `<tr>
+    <tbody>${filas.map(({a, i}) => { const f = _pedFalta(a); return `<tr>
       <td><b>${esc(a.sku)}</b>${a.codigo_proveedor ? `<div class="mini">${esc(a.codigo_proveedor)}</div>` : ''}</td>
       <td>${esc(a.descripcion||'')}</td>
-      <td class="num">${_pedN(a.stock_alcorta)} · ${_pedN(a.stock_unicenter)} · ${_pedN(a.stock_oficina)}</td>
+      <td class="num">${_pedStk(a.stock_alcorta, a.min_alcorta)} · ${_pedStk(a.stock_unicenter, a.min_unicenter)} · ${_pedStk(a.stock_oficina, a.min_oficina)}</td>
+      <td class="num">${_pedMin(a.min_alcorta)} · ${_pedMin(a.min_unicenter)} · ${_pedMin(a.min_oficina)}</td>
+      <td class="num">${f == null ? '<span class="mini">sin mín.</span>' : (f > 0 ? `<b style="color:var(--bad)">${_pedN(f)}</b>` : '<span class="mini ped-ok">OK</span>')}</td>
       <td class="num">${a.precio_compra ? plata(a.precio_compra) : '—'}</td>
       <td class="num">${Number(a.pendiente_pedidos) ? `<b style="color:var(--warn)">${_pedN(a.pendiente_pedidos)}</b>` : '—'}</td>
-      <td class="num"><input class="ped-in" id="ped-cq-${i}" inputmode="decimal" value="1" onkeydown="if(event.key==='Enter')pedAgregarCat(${i})"></td>
+      <td class="num"><input class="ped-in" id="ped-cq-${i}" inputmode="decimal" value="${f > 0 ? Math.ceil(f) : 1}" onkeydown="if(event.key==='Enter')pedAgregarCat(${i})"></td>
       <td>${ya.has(String(a.sku).toUpperCase()) ? '<span class="mini ped-ok">✓ en el pedido</span>'
-            : `<button class="act" style="padding:3px 10px;font-size:13px" onclick="pedAgregarCat(${i})">＋</button>`}</td></tr>`).join('')}
+            : `<button class="act" style="padding:3px 10px;font-size:13px" onclick="pedAgregarCat(${i})">＋</button>`}</td></tr>`; }).join('')}
     </tbody></table></div>`;
+}
+function pedAgregarBajoMinimo(){
+  const ya = new Set(pedEd.lineas.map(l => (l.sku||'').toUpperCase()));
+  const lista = pedCat.filter(a => _pedFalta(a) > 0 && !ya.has(String(a.sku).toUpperCase()));
+  if (!lista.length) return;
+  if (!confirm(`Se agregan ${lista.length} artículo(s) con la cantidad que falta para volver al mínimo. Después podés ajustar cada renglón. ¿Seguimos?`)) return;
+  for (const a of lista) pedEd.lineas.push({id: null, sku: a.sku, codigo_proveedor: a.codigo_proveedor || '', descripcion: a.descripcion || a.sku,
+                          cantidad: Math.ceil(_pedFalta(a)), precio_unitario: a.precio_compra ?? null, recibido: 0, cancelado: 0});
+  document.getElementById('ped-lin').innerHTML = _pedLineasHtml();
+  document.getElementById('ped-cat').innerHTML = _pedCatHtml();
 }
 function pedAgregarCat(i){
   const a = pedCat[i]; if (!a) return;
