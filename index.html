@@ -1430,7 +1430,7 @@ function _gRepartoHTML(){
     </table></div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px">
       <button class="act gh" type="button" style="font-size:12px;padding:3px 9px" onclick="_gPartAgregar()" title="Otro renglón: otro local, otro mes o las dos cosas. Arranca con lo que falta repartir.">+ Agregar renglón</button>
-      <span class="mini" id="g-dif" style="${Math.abs(dif) > 0.01 && varias ? 'color:#b45309' : 'color:var(--mut)'}">${varias ? (Math.abs(dif) > 0.01 ? `⚠ Los renglones suman ${plata(suma)} y el total es ${plata(base)}: ${dif > 0 ? 'faltan' : 'sobran'} ${plata(Math.abs(dif))}.` : '✓ Los renglones suman el total.') : ''}</span>
+      <span class="mini" id="g-dif" style="${Math.abs(dif) > 0.01 && varias ? 'color:#b45309' : 'color:var(--mut)'}">${varias ? (Math.abs(dif) > 0.01 ? `⚠ Los renglones suman ${plata(suma)} y el total es ${plata(base)}: ${dif > 0 ? 'faltan' : 'sobran'} ${plata(Math.abs(dif))}. Hasta que cierre no se puede contabilizar.` : '✓ Los renglones suman el total.') : ''}</span>
     </div>`;
 }
 function _gRepintar(){ const el = document.getElementById('ctrl-g-rep'); if (el) el.innerHTML = _gRepartoHTML(); _avisoUnidadConcepto(); }
@@ -1440,7 +1440,7 @@ function _gRefrescarSuma(){
   const s = document.getElementById('g-suma'); if (s) s.innerHTML = `<b>${plata(suma)}</b>`;
   const e = document.getElementById('g-dif');
   if (e && P.length > 1){ e.style.color = Math.abs(dif) > 0.01 ? '#b45309' : 'var(--mut)';
-    e.innerHTML = Math.abs(dif) > 0.01 ? `⚠ Los renglones suman ${plata(suma)} y el total es ${plata(base)}: ${dif > 0 ? 'faltan' : 'sobran'} ${plata(Math.abs(dif))}.` : '✓ Los renglones suman el total.'; }
+    e.innerHTML = Math.abs(dif) > 0.01 ? `⚠ Los renglones suman ${plata(suma)} y el total es ${plata(base)}: ${dif > 0 ? 'faltan' : 'sobran'} ${plata(Math.abs(dif))}. Hasta que cierre no se puede contabilizar.` : '✓ Los renglones suman el total.'; }
 }
 function _gPartSet(i, campo, v){ enControl._reparto[i][campo] = v; if (campo === 'unidad') _avisoUnidadConcepto(); }
 function _gPartImp(i, v){
@@ -1854,13 +1854,16 @@ function _descGeneralesHTML(d, reng){
       <span class="mini">Dto a todos los renglones <input type="text" inputmode="decimal" id="fx-dto-todos" class="fx-in" style="width:46px" placeholder="%"> %
         <button class="act gh" type="button" style="font-size:12px;padding:3px 8px" onclick="_dtoATodos()">Aplicar</button></span>
     </div>
-    ${ex.map((x, i) => `<div class="fx-dg-fila">
+    ${ex.map((x, i) => { const esPct = x.pct !== null && x.pct !== undefined && x.pct !== ''; return `<div class="fx-dg-fila">
       <input type="text" class="fx-in" style="flex:1;min-width:150px;text-align:left" value="${esc(x.descripcion || '')}" placeholder="Ej: Pago contado" oninput="_descEdit(${i}, 'descripcion', this.value)">
-      <input type="text" inputmode="decimal" class="fx-in" style="width:54px" value="${x.pct ?? ''}" placeholder="%" title="Porcentaje sobre la suma de renglones. Si lo dejás vacío, se usa el importe fijo." oninput="_descEdit(${i}, 'pct', this.value)"> %
-      <span class="mini">o importe</span>
-      <input type="text" inputmode="decimal" class="fx-in" id="fx-dg-imp-${i}" style="width:110px" value="${nmShow(x.monto)}" ${x.pct !== null && x.pct !== undefined && x.pct !== '' ? 'disabled' : ''} oninput="_descEdit(${i}, 'importe', this.value)">
+      <select class="fx-in" style="width:auto;text-align:left" title="Porcentaje sobre la suma de renglones, o un importe fijo" onchange="_descTipo(${i}, this.value)">
+        <option value="pct" ${esPct ? 'selected' : ''}>%</option><option value="fijo" ${esPct ? '' : 'selected'}>$ importe fijo</option></select>
+      ${esPct
+        ? `<input type="text" inputmode="decimal" class="fx-in" style="width:54px" value="${x.pct}" placeholder="%" oninput="_descEdit(${i}, 'pct', this.value)"> %
+           <span class="mini">=</span><span class="mini" id="fx-dg-imp-${i}" style="min-width:90px;text-align:right"><b>${plata(x.monto)}</b></span>`
+        : `<span class="mini">$</span><input type="text" inputmode="decimal" class="fx-in" id="fx-dg-fijo-${i}" style="width:120px" value="${nmShow(x.monto)}" placeholder="0,00" oninput="_descEdit(${i}, 'importe', this.value)">`}
       <button class="act gh" type="button" style="padding:3px 8px" title="Quitar" onclick="_descQuitar(${i})">✕</button>
-    </div>`).join('')}
+    </div>`; }).join('')}
     <button class="act gh" type="button" style="font-size:12px;padding:4px 9px" onclick="_descAgregar()">+ Agregar descuento general</button>
   </div>`;
 }
@@ -1896,15 +1899,24 @@ function _descQuitar(i){ _descLista().splice(i, 1); enControl._descDirty = true;
 function _descEdit(i, campo, v){
   const l = _descLista(), x = l[i]; if (!x) return;
   if (campo === 'descripcion') x.descripcion = v;
-  else if (campo === 'pct'){ x.pct = String(v).trim() === '' ? null : nmParse(v); const el = document.getElementById('fx-dg-imp-' + i); if (el) el.disabled = x.pct !== null; }
-  else x.importe = nmParse(v);
+  else if (campo === 'pct') x.pct = String(v).trim() === '' ? 0 : nmParse(v);   // en modo % el % nunca queda vacío (vacío = 0 %)
+  else x.importe = String(v).trim() === '' ? 0 : nmParse(v);
   enControl._descDirty = true;
   if (campo !== 'descripcion'){ _refrescarDescMontos(); _repintarPie(); }
 }
 function _refrescarDescMontos(){
   const d = enControl; if (!d) return;
   const sub = (d._renglones || []).reduce((a,r) => a + _rengNeto(r), 0);
-  _descExtras(d, sub).forEach((x, i) => { const el = document.getElementById('fx-dg-imp-' + i); if (el && el.disabled) el.value = nmShow(x.monto); });
+  _descExtras(d, sub).forEach((x, i) => { const el = document.getElementById('fx-dg-imp-' + i); if (el) el.innerHTML = `<b>${plata(x.monto)}</b>`; });
+}
+// (25-sep, JP) cada descuento general es por % o por importe fijo: lo elige el desplegable
+function _descTipo(i, tipo){
+  const d = enControl, l = _descLista(), x = l[i]; if (!x) return;
+  const sub = (d._renglones || []).reduce((a,r) => a + _rengNeto(r), 0);
+  const actual = _descExtras(d, sub)[i];
+  if (tipo === 'fijo'){ x.importe = actual ? actual.monto : 0; x.pct = null; }
+  else { x.pct = sub > 0 && actual && actual.monto ? _r2(actual.monto / sub * 100) : 0; x.importe = 0; }
+  enControl._descDirty = true; _repintarRenglones();
 }
 function _repintarRenglones(){
   const d = enControl, el = document.getElementById('fx-reng'); if (!d || !el) return;
@@ -2322,8 +2334,14 @@ async function contabilizar(){
       const falta = P.findIndex(x => !x.periodo || !x.unidad || !x.categoria || x.importe == null || x.importe === '');
       if (falta >= 0){ alert('La parte ' + (falta+1) + ' del reparto está incompleta: necesita período, unidad, categoría e importe.'); return; }
       const suma = _r2g(P.reduce((a,x) => a + Number(x.importe), 0)), base = Number(enControl._gBase || 0);
-      if (Math.abs(suma - base) > 0.01 && !confirm('Las partes suman ' + plata(suma) + ' y el total a la planilla es ' + plata(base) + '.\n\nSe va a cargar lo que suman las partes (' + plata(suma) + '). ¿Seguir?')) return;
-      gestionPayload = {reparto: P.map(x => ({periodo: x.periodo, unidad: x.unidad, categoria: x.categoria, pct: null, importe: Number(x.importe)}))};
+      // (25-sep, JP) TRABA: los renglones tienen que sumar exacto el total (la base lo vuelve a controlar)
+      if (Math.abs(suma - base) > 0.01){
+        const dif = _r2g(suma - base);
+        alert('No se puede contabilizar: el reparto no cierra.\n\nLos renglones suman ' + plata(suma) + ' y el total a la planilla es ' + plata(base) + ': ' + (dif > 0 ? 'sobran ' : 'faltan ') + plata(Math.abs(dif)) + '.\n\nCorregí el importe de algún renglón o el total a la planilla.');
+        const el = document.getElementById('ctrl-g-rep'); if (el) el.scrollIntoView({behavior:'smooth', block:'center'});
+        return;
+      }
+      gestionPayload = {total: base, reparto: P.map(x => ({periodo: x.periodo, unidad: x.unidad, categoria: x.categoria, pct: null, importe: Number(x.importe)}))};
     } else if (P.length === 1){
       const x = P[0];
       gestionPayload = {periodo: x.periodo || null, unidad: x.unidad || null, categoria: x.categoria || null,
@@ -4205,6 +4223,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="manual.js?v=46"></script>
+<script src="manual.js?v=47"></script>
 </body>
 </html>
