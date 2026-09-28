@@ -1671,6 +1671,7 @@ async function abrirControl(id){
     const { data: ac } = await _arcaDe(enControl.cuit_emisor);
     if (enControl && enControl.id === id){ enControl._arca = ac; pintarControl(); }
   } catch (_) {}
+  { const e = enControl; await _remitosDelDoc(e); if (enControl === e) pintarControl(); }
   const {data} = await sb.rpc('compras_conceptos_proveedor', {p_cuit: enControl.cuit_emisor});
   enControl._usados = data || [];
   pintarControl();
@@ -1794,11 +1795,22 @@ async function _arcaConsultarDoc(cuit){
   } catch (e) { alert(e.message); }
   if (enControl && enControl.id === d.id){ enControl._arcaBuscando = false; pintarControl(); }
 }
+// (28-sep, JP) Remitos asociados a la factura, para el botón "📦 Ver remito" del control/resumen.
+async function _remitosDelDoc(d){
+  try {
+    const { data } = await sb.from('compras_remitos')
+      .select('punto_venta,numero,numero_proveedor,archivo_path,estado,origen').eq('documento_id', d.id).order('numero');
+    d._remitos = data || [];
+  } catch (_) { d._remitos = d._remitos || []; }
+}
+function _numRemito(r){ return `${String(r.punto_venta||0).padStart(4,'0')}-${String(r.numero).padStart(8,'0')}`; }
 function _facturaCabecera(d, opts = {}){
   const ej = d.extraido_json || {};
+  const rems = d._remitos || REMITOS_DOC[d.id] || [];
+  const remsPdf = rems.filter(r => r.archivo_path);
   const num = `${esc(d.tipo || 'FC')} ${esc(d.letra || '')} ${String(d.punto_venta ?? '').padStart(4,'0')}-${String(d.numero ?? '').padStart(8,'0')}`;
   const cae = d.cae || ej.cae, caeVto = d.cae_vto || ej.cae_vto, vto = d.fecha_vto || ej.fecha_vto;
-  const remito = ej.remito || (ej.remitos || []).join(', ');
+  const remito = ej.remito || (ej.remitos || []).join(', ') || rems.map(_numRemito).join(', ');
   const cond = ej.cond_venta || ej.condicion_venta || '';
   const falta = '<span class="fx-falta">—</span>';
   const a = d._arca;
@@ -1826,6 +1838,7 @@ function _facturaCabecera(d, opts = {}){
         : ((d.fecha_ingreso || d.numero_interno) ? `<div class="mini">Ingreso <b>${d.fecha_ingreso ? fechaCorta(d.fecha_ingreso) : '—'}</b> · Nº int. <b>${d.numero_interno ?? '—'}</b></div>` : '')}
       <div class="mini">Remito ${remito ? esc(remito) : falta}</div>
       ${d.archivo_path ? `<a class="act fx-pdf" target="_blank" rel="noopener" href="${_pdfUrl(d.archivo_path)}" title="Abre el PDF en OneDrive, en otra pestaña">📄 Ver la factura</a>` : ''}
+      ${remsPdf.map(r => `<a class="act fx-pdf" target="_blank" rel="noopener" href="${_pdfUrl(r.archivo_path)}" title="Abre el PDF del remito ${_numRemito(r)} en OneDrive, en otra pestaña">📦 Ver remito${remsPdf.length > 1 ? ' ' + Number(r.numero) : ''}</a>`).join(' ')}
     </div>
   </div>`;
 }
@@ -4070,6 +4083,7 @@ async function abrirResumenDoc(docId){
   _mapeoRengCache = {doc, reng};
   doc._impuestosOk = true;
   try { doc._arca = (await _arcaDe(doc.cuit_emisor)).data; } catch (_) {}
+  await _remitosDelDoc(doc);
   const neto = Number(doc.neto_gravado||0)+Number(doc.neto_no_gravado||0)+Number(doc.exento||0);
   const iva = Number(doc.iva_21||0)+Number(doc.iva_105||0)+Number(doc.iva_27||0)+Number(doc.iva_otros||0);
   const cMap = Object.fromEntries(CONCEPTOS.map(c=>[c.codigo, c.descripcion]));
@@ -4248,6 +4262,7 @@ async function editarContabilizacion(docId){
     sb.rpc('compras_doc_renglones', {p_doc: docId})]);
   enControl._usados = data || [];
   enControl._renglones = rg || [];
+  await _remitosDelDoc(enControl);
   pintarControl();
 }
 
@@ -4265,6 +4280,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
 <script src="pedidos.js?v=3"></script>
-<script src="manual.js?v=55"></script>
+<script src="manual.js?v=56"></script>
 </body>
 </html>
