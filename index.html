@@ -416,13 +416,27 @@ function filtrados(base){
 }
 function ordenar(col){ orden = {col, desc: orden.col===col ? !orden.desc : true}; render(); }
 function setF(k,v){ filtro[k]=v; if(k==='anio') cargarTodo(); else render(); }
+// (28-sep, JP) El buscador de texto espera a que termines de escribir: busca 0,6 s
+// después de la última tecla (o al apretar Enter) y te devuelve el cursor al campo.
+// Antes re-dibujaba la pantalla con cada letra y el campo perdía el foco.
+let _buscaTimer = null;
+function buscarTexto(v, inmediato){
+  filtro.texto = v;
+  clearTimeout(_buscaTimer);
+  const go = () => {
+    render();
+    const el = document.querySelector('input[data-busca="texto"]');
+    if (el){ el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch(_){} }
+  };
+  if (inmediato) go(); else _buscaTimer = setTimeout(go, 600);
+}
 
 function barraFiltros(){
   const anios = [];
   for (let a = new Date().getFullYear(); a >= 2019; a--) anios.push(a);
   return `<div class="filtros">
-    <input type="search" placeholder="Buscar proveedor, número, CUIT…" value="${esc(filtro.texto)}"
-           oninput="setF('texto',this.value)">
+    <input type="search" data-busca="texto" placeholder="Buscar proveedor, número, CUIT…" value="${esc(filtro.texto)}"
+           oninput="buscarTexto(this.value)" onkeydown="if(event.key==='Enter')buscarTexto(this.value,true)">
     <select onchange="setF('anio',this.value)">${anios.map(a=>`<option ${a==filtro.anio?'selected':''}>${a}</option>`).join('')}</select>
     <select onchange="setF('mes',this.value)"><option value="">Todos los meses</option>
       ${MESES.map((m,i)=>`<option value="${String(i+1).padStart(2,'0')}" ${filtro.mes==String(i+1).padStart(2,'0')?'selected':''}>${m}</option>`).join('')}</select>
@@ -1598,8 +1612,8 @@ function vistaBandeja(){
     `${d.proveedor_nombre||''} ${d.numero} ${d.cuit_emisor||''}`.toLowerCase().includes(t));
 
   return h + `<div class="card">
-    <div class="filtros"><input type="search" placeholder="Buscar proveedor, número, CUIT…"
-      value="${esc(filtro.texto)}" oninput="setF('texto',this.value)"></div>
+    <div class="filtros"><input type="search" data-busca="texto" placeholder="Buscar proveedor, número, CUIT…"
+      value="${esc(filtro.texto)}" oninput="buscarTexto(this.value)" onkeydown="if(event.key==='Enter')buscarTexto(this.value,true)"></div>
     <div style="overflow-x:auto"><table>
       <thead><tr><th>Fecha</th><th>Proveedor</th><th class="oculta-mov">Comprobante</th>
         <th class="num">Total</th><th>Concepto propuesto</th><th></th></tr></thead>
@@ -4243,7 +4257,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="pedidos.js?v=2"></script>
-<script src="manual.js?v=53"></script>
+<script src="pedidos.js?v=3"></script>
+<script src="manual.js?v=55"></script>
 </body>
 </html>

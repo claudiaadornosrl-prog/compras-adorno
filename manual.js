@@ -123,7 +123,7 @@ function _manualSecciones() {
       desc: 'La orden de pedido y el listado de lo que falta entregar. Todo lo pedido va al depósito (Oficina).',
       pasos: [
         '➕ Nuevo pedido: elegís el proveedor y aparece su catálogo (los artículos que Dragonfish tiene a su nombre y los que ya vinieron en sus remitos o facturas). Muestra el stock de Alcorta · Unicenter · Oficina, el precio de la lista COMPRA y cuánto de ese artículo ya está pedido y sin entregar en otros pedidos, para no pedirlo dos veces.',
-        'MÍNIMO DE REPOSICIÓN (el umbral): cada artículo muestra su mínimo en Alcorta · Unicenter · Oficina (el que está cargado en "mínimos" del Dragonfish, se actualiza todas las mañanas). El stock que está por debajo de su mínimo sale en rojo, y la columna "Falta p/ mín." dice cuánto pedir para volver al mínimo: lo que les falta a los locales + el mínimo del depósito, menos lo que ya hay en Oficina y lo que ya está pedido sin entregar. El sobrante de un local no cubre al otro.',
+        'MÍNIMO DE REPOSICIÓN (el umbral): cada artículo muestra su mínimo en Alcorta · Unicenter · Oficina (el que está cargado en "mínimos" del Dragonfish, se actualiza todas las mañanas). El stock que está por debajo de su mínimo sale en rojo, y la columna "Falta p/ mín." dice cuánto pedir para volver al mínimo: lo que les falta a los locales + el mínimo del depósito, menos lo que ya hay en Oficina y lo que ya está pedido sin entregar. El sobrante de un local no cubre al otro. La lista sale ordenada de MAYOR a menor según lo que falta: arriba lo que más hay que pedir, después los que están OK y al final los que no tienen mínimo cargado.',
         'Tildá "solo bajo mínimo" para ver únicamente lo que hay que reponer, y "＋ Agregar todo lo que falta" suma de una vez todos esos artículos con la cantidad que falta (después se ajusta cada renglón). Al sumar uno por uno con ＋, la cantidad ya viene propuesta con lo que falta.',
         'Con ＋ se suma al pedido; la cantidad y el precio se corrigen en la tabla de abajo. Si el artículo no está en el catálogo, tildá "todo el catálogo" o cargá un renglón sin SKU.',
         'Se guarda como BORRADOR: mientras está así no descuenta nada. Cuando lo mandás al proveedor, 📤 Guardar y enviar (o Marcar como enviado) y bajá el PDF o el Excel para mandárselo por mail o WhatsApp.',
@@ -172,7 +172,7 @@ function _manualSecciones() {
       icon: '📄', titulo: 'Comprobantes',
       desc: 'Facturas, notas de crédito, notas de débito Y remitos: todo lo YA contabilizado (histórico desde 2019 + lo que se aprueba en la Bandeja). Lo que espera control no aparece acá hasta que le das el OK.',
       pasos: [
-        'Buscá por proveedor, número o CUIT. Filtrá por año, mes, tipo de gasto y clase (solo facturas / solo NC / solo ND / solo remitos).',
+        'Buscá por proveedor, número o CUIT (escribí la palabra entera: busca cuando dejás de tipear medio segundo, o al apretar Enter). Filtrá por año, mes, tipo de gasto y clase (solo facturas / solo NC / solo ND / solo remitos).',
         'Los remitos aparecen abajo en su propia tabla, con la factura a la que están vinculados (o "sin factura"), el destino y el estado del stock. Tocar un remito con factura abre esa factura. Si la factura ya está asociada pero todavía no se controló, aparece su número con el chip "en Bandeja" (no dice "sin factura"): el remito ya está vinculado, falta aprobar la factura.',
         'El total del encabezado es FC + ND − NC.',
         'Tocá los títulos de las columnas para ordenar.',

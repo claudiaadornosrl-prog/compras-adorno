@@ -285,6 +285,13 @@ async function pedBuscarCat(){
     p_nombre: pedEd.proveedor_nombre, p_busca: q || null, p_todos: todos, p_prueba: MODO_PRUEBA});
   if (error){ document.getElementById('ped-cat').innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return; }
   pedCat = data || [];
+  // (28-sep, JP) Arriba lo que MÁS hay que pedir para completar el mínimo; después
+  // los que están OK y al final los que no tienen mínimo cargado. La base ya lo
+  // devuelve así: esto lo asegura aunque cambie el orden de la RPC.
+  pedCat.sort((a, b) => {
+    const fa = a.falta_minimo == null ? -1 : Number(a.falta_minimo), fb = b.falta_minimo == null ? -1 : Number(b.falta_minimo);
+    return (fb - fa) || String(a.descripcion||'').localeCompare(String(b.descripcion||''));
+  });
   document.getElementById('ped-cat').innerHTML = _pedCatHtml();
 }
 // (25-sep) Mínimo de reposición = el umbral de reposición por local (hoy sale de
