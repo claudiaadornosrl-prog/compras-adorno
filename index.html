@@ -2521,7 +2521,14 @@ function _fechaInvalida(el){
   const y = +v.slice(0,4); return !(y >= 2000 && y <= 2100);
 }
 // Aviso para TODOS los campos de fecha del módulo, apenas se sale del campo.
+// (28-sep, JP) Se valida al SALIR del campo, no mientras se escribe: al tipear el año
+// dígito por dígito el navegador pasa por 0002, 0020, 0202… y cada paso disparaba
+// 'change' con un año "absurdo" → alerta a mitad de camino, solo andaba el calendario.
 document.addEventListener('change', e => {
+  const el = e.target; if (!el || el.type !== 'date') return;
+  if (!_fechaInvalida(el)) el.classList.remove('fecha-mala');   // mientras escribe: nada de alertas
+}, true);
+document.addEventListener('focusout', e => {
   const el = e.target; if (!el || el.type !== 'date') return;
   if (_fechaInvalida(el)){
     el.classList.add('fecha-mala');

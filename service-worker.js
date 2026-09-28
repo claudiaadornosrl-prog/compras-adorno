@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v72-buscador-espera';
+const CACHE_VERSION = 'compras-v73-fecha-tipear';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './pedidos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
