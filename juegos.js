@@ -130,6 +130,7 @@ async function confirmarJuego(juego) {
   if (error) return alert(error.message);
   const r = JG.recetas.find(x => x.juego === juego); if (r) r.confirmado = true;
   pintarJuegosCard();
+  if (typeof onJuegoCambio === 'function') onJuegoCambio(juego);
 }
 
 async function confirmarJuegosTodos() {
@@ -149,13 +150,15 @@ async function borrarJuego(juego) {
   if (error) return alert(error.message);
   JG.recetas = JG.recetas.filter(r => r.juego !== juego);
   pintarJuegosCard();
+  if (typeof onJuegoCambio === 'function') onJuegoCambio(juego);
 }
 
 // ── Editor ──────────────────────────────────────────────────────────
 let JGE = null;
-function editarJuego(juego) {
+function editarJuego(juego, skuNuevo) {
   const r = JG.recetas.find(x => x.juego === juego);
-  JGE = { nuevo: !r, juego: juego || '', piezas: r ? r.piezas.map(p => ({ sku: p.sku, cantidad: p.cantidad, descripcion: p.descripcion })) : [{ sku: '', cantidad: 1 }], nota: '' };
+  const pz = r ? r.piezas : (Array.isArray(skuNuevo) ? skuNuevo : null);
+  JGE = { nuevo: !r && !pz, juego: juego || (typeof skuNuevo === 'string' ? skuNuevo : '') || '', piezas: pz ? pz.map(p => ({ sku: p.sku, cantidad: p.cantidad, descripcion: p.descripcion })) : [{ sku: '', cantidad: 1 }], nota: '' };
   let ov = document.getElementById('jg-overlay');
   if (!ov) { ov = document.createElement('div'); ov.id = 'jg-overlay'; document.body.appendChild(ov); }
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9998;display:flex;align-items:flex-start;justify-content:center;padding:30px 12px;overflow:auto';
@@ -208,4 +211,5 @@ async function guardarJuego() {
   cerrarEditorJuego();
   JG.vista = 'recetas';
   cargarJuegosCard();
+  if (typeof onJuegoCambio === 'function') onJuegoCambio(juego);
 }
