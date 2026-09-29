@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v77-packs';
+const CACHE_VERSION = 'compras-v78-condiciones-pedido';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './pedidos.js', './equiv-import.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

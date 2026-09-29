@@ -1160,7 +1160,8 @@ function _renderDescuentos(){
       <button class="btn" type="button" title="Quitar" onclick="_fDescuentos.splice(${i},1);_renderDescuentos()">🗑</button>
     </div>`).join('') : '<div class="hint">Sin descuentos pactados cargados.</div>')
     + `<button class="btn" type="button" onclick="_fDescuentos.push({tipo:'general'});_renderDescuentos()">➕ Agregar descuento</button>
-       <div class="hint" style="margin-top:6px;">El descuento POR ARTÍCULO ya vive en Dragonfish (lista COSTO). Acá van las condiciones comerciales pactadas: acuerdos generales, por volumen, pronto pago, etc.</div>`;
+       <div class="hint" style="margin-top:6px;">El descuento POR ARTÍCULO ya vive en Dragonfish (lista COSTO). Acá van las condiciones comerciales pactadas: acuerdos generales, por volumen, pronto pago, etc.
+         Los de tipo "Por compra mínima ($)" y "Por cantidad mínima (unidades)" se aplican SOLOS en los 📝 Pedidos cuando se supera el "Desde" (si hay varios, el mayor % alcanzado, no se suman).</div>`;
   _estilarModalP();
 }
 function _renderRetenciones(){
@@ -1232,6 +1233,17 @@ async function fichaProveedor(i){
       <label style="grid-column:1/-1;">Web / Instagram<input id="pf-web" value="${_mEscP(p.web||'')}" placeholder="https://…"></label>
     </div>
     ${_h4P('Personas de contacto')}<div id="pf-contactos"></div>
+    ${_h4P('Condiciones para los pedidos')}
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+      <label>Compra mínima $<input id="pf-min-imp" type="number" step="1" min="0" value="${p.pedido_minimo?.importe ?? ''}" placeholder="sin mínimo"></label>
+      <label>Compra mínima (unidades)<input id="pf-min-uni" type="number" step="1" min="0" value="${p.pedido_minimo?.unidades ?? ''}" placeholder="sin mínimo"></label>
+      <label>Si tiene los dos<select id="pf-min-modo">
+        <option value="cualquiera" ${(p.pedido_minimo?.modo||'cualquiera')==='cualquiera'?'selected':''}>alcanza con cumplir uno</option>
+        <option value="ambos" ${p.pedido_minimo?.modo==='ambos'?'selected':''}>hay que cumplir los dos</option></select></label>
+      <label style="grid-column:1/-1;">Nota del mínimo<input id="pf-min-nota" value="${_mEscP(p.pedido_minimo?.nota||'')}" placeholder="ej.: por debajo cobran flete"></label>
+    </div>
+    <div class="hint" style="margin-top:6px;">Importe = lista COMPRA sin IVA. Unidades = como cuenta el proveedor (un pack ×2 cuenta 1). El pedido avisa si no llega.
+      Los descuentos extra por volumen se cargan abajo, con tipo "Por compra mínima ($)" o "Por cantidad mínima (unidades)": el pedido los aplica solos.</div>
     ${_h4P('Descuentos pactados')}<div id="pf-descuentos"></div>
     ${p.cuit && !p.es_exterior ? _h4P('Retenciones') + '<div id="pf-ret"><div class="hint">Cargando…</div></div>' : ''}
     ${_h4P('Notas')}
@@ -1261,7 +1273,11 @@ async function guardarFichaProveedor(codigo, cuit){
     pais:g('pf-pais'), es_exterior: !!document.getElementById('pf-ext')?.checked,
     telefono:g('pf-tel'), whatsapp:g('pf-wa'), email:g('pf-email'), web:g('pf-web'),
     contactos: _fContactos.filter(c => c.nombre || c.telefono || c.whatsapp || c.email),
-    descuentos: _fDescuentos.filter(d => d.descripcion || d.porcentaje) };
+    descuentos: _fDescuentos.filter(d => d.descripcion || d.porcentaje),
+    pedido_minimo: { importe: parseFloat(g('pf-min-imp')) || null, unidades: parseFloat(g('pf-min-uni')) || null,
+                     modo: g('pf-min-modo') || 'cualquiera', nota: g('pf-min-nota') } };
+  const volMal = datos.descuentos.find(d => ['monto_minimo','cantidad_minima'].includes(d.tipo) && !(d.umbral > 0 && d.porcentaje > 0));
+  if (volMal) return alert('El descuento "' + (volMal.descripcion || volMal.tipo) + '" es por volumen: necesita el "Desde" y el %.');
   const { error } = await sb.rpc('compras_proveedor_guardar', { p_codigo: codigo, p_datos: datos });
   if (error) return alert('No se pudo guardar: ' + error.message);
   if (cuit && _fRet.length){
@@ -4329,8 +4345,8 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="pedidos.js?v=4"></script>
+<script src="pedidos.js?v=5"></script>
 <script src="equiv-import.js?v=2"></script>
-<script src="manual.js?v=58"></script>
+<script src="manual.js?v=59"></script>
 </body>
 </html>

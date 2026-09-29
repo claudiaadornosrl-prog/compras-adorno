@@ -58,6 +58,60 @@ const _pedNro = n => String(n || 0).padStart(6, '0');
 // nuestras (como el stock y los mínimos) y tiene que ser múltiplo del pack; al proveedor se le pide en packs.
 const _pedPk = x => Number(x && x.pack) > 1 ? Number(x.pack) : 1;
 function _pedPackChip(pk){ return pk > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="El proveedor lo vende en pack de ${pk}: se pide de a ${pk} unidades">📦 pack ×${pk}</span>` : ''; }
+// (29-sep, JP) Condiciones del proveedor: compra mínima ($ y/o unidades) y descuento extra por volumen.
+// La cuenta la hace la base (compras_pedido_condiciones): importe = cant × precio (lista COMPRA sin IVA),
+// unidades = como las cuenta el proveedor (un pack ×2 cuenta 1). Al guardar, el pedido se queda con la foto.
+function _pedBase(L){
+  return { importe: (L||[]).reduce((a, l) => a + Number(l.cantidad||0) * Number(l.precio_unitario||0), 0),
+           unidades: (L||[]).reduce((a, l) => a + Number(l.cantidad||0) / _pedPk(l), 0) };
+}
+function _pedUmbralTxt(t){ return t.tipo === 'monto_minimo' ? plata(t.umbral) : `${_pedN(t.umbral)} unidades`; }
+function _pedFaltaTxt(t){ return t.tipo === 'monto_minimo' ? plata(t.falta) : `${_pedN(Math.ceil(t.falta))} unidades`; }
+function _pedCondHtml(c, importe, conProximo){
+  if (!c) return '';
+  const m = c.minimo, d = c.descuento, px = conProximo ? c.proximo : null, otros = c.otros || [];
+  if (!m && !d && !px && !(c.escalones||[]).length && !otros.length)
+    return '<div class="mini" style="margin-top:8px">Este proveedor no tiene cargada compra mínima ni descuento por volumen (se cargan en 🏢 Proveedores → su ficha).</div>';
+  const partes = [];
+  if (m){
+    const req = [m.importe ? plata(m.importe) : null, m.unidades ? `${_pedN(m.unidades)} unidades` : null].filter(Boolean)
+      .join(m.modo === 'ambos' ? ' y ' : ' o ');
+    const falta = [m.falta_importe > 0 ? plata(m.falta_importe) : null, m.falta_unidades > 0 ? `${_pedN(Math.ceil(m.falta_unidades))} unidades` : null]
+      .filter(Boolean).join(m.modo === 'ambos' ? ' y ' : ' o ');
+    partes.push(m.cumple
+      ? `<div style="color:#166534">✓ Llega a la compra mínima (${req}).</div>`
+      : `<div style="color:var(--bad);font-weight:600">⚠ No llega a la compra mínima (${req}): faltan ${falta}.</div>`);
+    if (m.nota) partes.push(`<div class="mini">${esc(m.nota)}</div>`);
+  }
+  if (d){
+    const ahorro = Math.round(Number(importe||0) * Number(d.pct) / 100 * 100) / 100;
+    partes.push(`<div style="color:#166534;font-weight:600">🎁 Descuento extra ${_pedN(d.pct)} % por superar ${_pedUmbralTxt(d)}${d.descripcion ? ` (${esc(d.descripcion)})` : ''}
+      ${importe ? `: −${plata(ahorro)} · total con descuento <b>${plata(Number(importe) - ahorro)}</b>` : ''}</div>`);
+  }
+  if (px) partes.push(`<div style="color:#92400e">💡 Si sumás ${_pedFaltaTxt(px)} más llegás al ${_pedN(px.pct)} % de descuento (desde ${_pedUmbralTxt(px)}).</div>`);
+  if (otros.length) partes.push(`<div class="mini">Otras condiciones pactadas (no se aplican al pedido): ${otros.map(o =>
+      esc(`${o.porcentaje ?? ''}${o.porcentaje ? ' % ' : ''}${o.descripcion || o.tipo || ''}`)).join(' · ')}</div>`);
+  return `<div class="card" style="margin-top:10px;padding:10px 12px;background:#fafafa;font-size:13px;display:flex;flex-direction:column;gap:4px">
+    <b style="font-size:13px">📋 Condiciones del proveedor</b>${partes.join('')}</div>`;
+}
+function _pedPintarLin(){
+  const el = document.getElementById('ped-lin'); if (el) el.innerHTML = _pedLineasHtml();
+  pedCondRefrescar();
+}
+function pedCondRefrescar(){
+  clearTimeout(window._pedCondT);
+  window._pedCondT = setTimeout(async () => {
+    const box = document.getElementById('ped-cond'); if (!box || !pedEd) return;
+    if (!pedEd.proveedor_nombre){ box.innerHTML = ''; pedEd._cond = null; return; }
+    const b = _pedBase(pedEd.lineas);
+    const {data, error} = await sb.rpc('compras_pedido_condiciones', {p_cuit: pedEd.proveedor_cuit || null,
+      p_codigo: pedEd.proveedor_codigo || null, p_importe: b.importe, p_unidades: b.unidades});
+    if (error){ box.innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return; }
+    pedEd._cond = data;
+    box.innerHTML = _pedCondHtml(data, b.importe, true);
+    const tot = document.getElementById('ped-tot'); if (tot) tot.innerHTML = _pedTotHtml();
+  }, 350);
+}
 function _pedPacksTxt(u, pk){ const n = Number(u||0) / pk; return `${_pedN(n)} pack${n === 1 ? '' : 's'} ×${pk}`; }
 const _pedChip = e => `<span class="chip ped-e-${esc(e)}">${PED_ESTADOS[e] || esc(e)}</span>`;
 const _pedDias = f => f ? Math.round((new Date(_hoyAR()) - new Date(String(f).slice(0,10))) / 864e5) : null;
@@ -135,10 +189,10 @@ function _pedVistaLista(){
         return `<tr style="cursor:pointer" onclick="pedAbrir(${p.id})">
           <td><b>${_pedNro(p.numero)}</b></td><td>${fechaCorta(p.fecha)}</td>
           <td>${esc(p.proveedor_nombre)}${p.notas ? `<div class="mini">${esc(p.notas)}</div>` : ''}</td>
-          <td>${_pedChip(p.estado)}</td><td class="num">${p.renglones}</td>
+          <td>${_pedChip(p.estado)}${Number(p.descuento_extra_pct) ? ` <span class="chip" style="background:#dcfce7;color:#166534" title="Descuento extra por volumen">🎁 −${_pedN(p.descuento_extra_pct)} %</span>` : ''}${p.condiciones?.minimo && !p.condiciones.minimo.cumple && p.estado !== 'anulado' ? ' <span class="chip" style="background:#fee2e2;color:#991b1b" title="No llega a la compra mínima del proveedor">⚠ bajo mínimo</span>' : ''}</td><td class="num">${p.renglones}</td>
           <td class="num">${_pedN(p.unidades)}</td><td class="num">${_pedN(p.recibido)}</td>
           <td class="num"><b>${_pedN(p.pendiente)}</b>${Number(p.cancelado) ? `<div class="mini">${_pedN(p.cancelado)} cancel.</div>` : ''}</td>
-          <td class="num">${Number(p.importe_pendiente) ? plata(p.importe_pendiente) : '—'}</td>
+          <td class="num">${Number(p.importe_pendiente) ? plata(p.importe_pendiente * (1 - Number(p.descuento_extra_pct||0)/100)) : '—'}</td>
           <td class="${venc?'ped-venc':''}">${p.entrega_estimada ? fechaCorta(p.entrega_estimada) : '—'}${venc?' ⚠':''}</td></tr>`;
       }).join('')}</tbody></table></div>`
       : `<div class="vacio">${PED_LISTA.length ? 'No hay pedidos con ese filtro.' : 'Todavía no hay pedidos. Tocá ➕ Nuevo pedido para armar el primero.'}</div>`}
@@ -225,6 +279,7 @@ async function pedEditar(id){
   await _pedProvs();
   _pedEditor();
   if (pedEd.proveedor_nombre) pedBuscarCat();
+  pedCondRefrescar();
 }
 
 function _pedEditor(){
@@ -261,6 +316,7 @@ function _pedEditor(){
       </div>
 
       <div id="ped-lin">${_pedLineasHtml()}</div>
+      <div id="ped-cond"></div>
     </div>
     <div class="c-pie">
       <button class="act gh" onclick="pedAgregarLibre()">＋ Renglón sin SKU</button>
@@ -268,7 +324,7 @@ function _pedEditor(){
       <button class="act gh" onclick="pedCerrarModal()">Cancelar</button>
       <button class="act gh" onclick="pedGuardar(false)">💾 Guardar${e.estado==='borrador'?' borrador':''}</button>
       ${e.estado === 'borrador' ? `<button class="act" onclick="pedGuardar(true)">📤 Guardar y enviar</button>` : ''}
-    </div></div>`;
+    </div></div>`;  pedCondRefrescar();
 }
 
 function pedElegirProv(v){
@@ -281,6 +337,7 @@ function pedElegirProv(v){
   }
   pedEd.proveedor_codigo = p.codigo; pedEd.proveedor_cuit = p.cuit_norm || ''; pedEd.proveedor_nombre = p.nombre;
   pedBuscarCat();
+  pedCondRefrescar();
 }
 
 async function pedBuscarCat(){
@@ -355,7 +412,7 @@ function pedAgregarBajoMinimo(){
     pedEd.lineas.push({id: null, sku: a.sku, codigo_proveedor: a.codigo_proveedor || '', descripcion: a.descripcion || a.sku,
                        cantidad: Math.ceil(_pedFalta(a) / pk) * pk, precio_unitario: a.precio_compra ?? null, recibido: 0, cancelado: 0,
                        pack: pk, descripcion_proveedor: a.descripcion_proveedor || ''}); }
-  document.getElementById('ped-lin').innerHTML = _pedLineasHtml();
+  _pedPintarLin();
   document.getElementById('ped-cat').innerHTML = _pedCatHtml();
 }
 function pedAgregarCat(i){
@@ -370,18 +427,18 @@ function pedAgregarCat(i){
   else pedEd.lineas.push({id: null, sku: a.sku, codigo_proveedor: a.codigo_proveedor || '', descripcion: a.descripcion || a.sku,
                           cantidad: cant, precio_unitario: a.precio_compra ?? null, recibido: 0, cancelado: 0,
                           pack: pk, descripcion_proveedor: a.descripcion_proveedor || ''});
-  document.getElementById('ped-lin').innerHTML = _pedLineasHtml();
+  _pedPintarLin();
   document.getElementById('ped-cat').innerHTML = _pedCatHtml();
 }
 function pedAgregarLibre(){
   pedEd.lineas.push({id: null, sku: '', codigo_proveedor: '', descripcion: '', cantidad: 1, precio_unitario: null, recibido: 0, cancelado: 0, pack: 1});
-  document.getElementById('ped-lin').innerHTML = _pedLineasHtml();
+  _pedPintarLin();
 }
 function pedQuitar(i){
   const l = pedEd.lineas[i];
   if (l.recibido > 0){ alert('Ese renglón ya recibió mercadería: bajale la cantidad en vez de sacarlo.'); return; }
   pedEd.lineas.splice(i, 1);
-  document.getElementById('ped-lin').innerHTML = _pedLineasHtml();
+  _pedPintarLin();
   if (document.getElementById('ped-cat')) document.getElementById('ped-cat').innerHTML = _pedCatHtml();
 }
 function pedCampo(i, k, v){
@@ -396,13 +453,15 @@ function pedCampo(i, k, v){
   else if (k === 'cantidad' || k === 'precio_unitario'){ const n = nmParse(v); l[k] = (k === 'precio_unitario' && !String(v).trim()) ? null : n; }
   else l[k] = v;
   const tot = document.getElementById('ped-tot'); if (tot) tot.innerHTML = _pedTotHtml();
+  if (['cantidad','packs','precio_unitario'].includes(k)) pedCondRefrescar();
   const sub = document.getElementById('ped-sub-' + i);
   if (sub) sub.textContent = l.precio_unitario ? plata(Number(l.cantidad||0) * Number(l.precio_unitario)) : '—';
 }
 function _pedTotHtml(){
   const u = pedEd.lineas.reduce((a, l) => a + Number(l.cantidad||0), 0);
   const i = pedEd.lineas.reduce((a, l) => a + Number(l.cantidad||0) * Number(l.precio_unitario||0), 0);
-  return `<b>${pedEd.lineas.length} renglones · ${_pedN(u)} unidades${i ? ' · ' + plata(i) : ''}</b>`;
+  const pct = Number(pedEd._cond?.pct || 0);
+  return `<b>${pedEd.lineas.length} renglones · ${_pedN(u)} unidades${i ? ' · ' + plata(i) : ''}</b>${pct && i ? ` <span style="color:#166534">· con ${_pedN(pct)} % extra: ${plata(i * (1 - pct/100))}</span>` : ''}`;
 }
 function _pedLineasHtml(){
   const L = pedEd.lineas;
@@ -441,6 +500,16 @@ async function pedGuardar(enviar){
   if (e.lineas.some(l => !String(l.descripcion||'').trim() && !String(l.sku||'').trim())){ alert('Hay renglones sin SKU ni descripción.'); return; }
   const malPack = e.lineas.find(l => _pedPk(l) > 1 && Number(l.cantidad) % _pedPk(l) !== 0);
   if (malPack){ alert(`${malPack.sku || malPack.descripcion} viene en pack de ${_pedPk(malPack)}: la cantidad tiene que ser múltiplo (${_pedN(Math.floor(malPack.cantidad/_pedPk(malPack))*_pedPk(malPack))} o ${_pedN(Math.ceil(malPack.cantidad/_pedPk(malPack))*_pedPk(malPack))} unidades).`); return; }
+  if (enviar){
+    const b = _pedBase(e.lineas);
+    const {data: c} = await sb.rpc('compras_pedido_condiciones', {p_cuit: e.proveedor_cuit || null,
+      p_codigo: e.proveedor_codigo || null, p_importe: b.importe, p_unidades: b.unidades});
+    if (c && c.minimo && !c.minimo.cumple){
+      const falta = [c.minimo.falta_importe > 0 ? plata(c.minimo.falta_importe) : null,
+                     c.minimo.falta_unidades > 0 ? `${_pedN(Math.ceil(c.minimo.falta_unidades))} unidades` : null].filter(Boolean).join(' / ');
+      if (!confirm(`⚠ El pedido NO llega a la compra mínima del proveedor (faltan ${falta}).${c.minimo.nota ? '\n' + c.minimo.nota : ''}\n\n¿Lo marcás como enviado igual?`)) return;
+    }
+  }
   const {data, error} = await sb.rpc('compras_pedido_guardar', {p_id: e.id,
     p_cab: {es_prueba: MODO_PRUEBA, proveedor_codigo: e.proveedor_codigo, proveedor_cuit: e.proveedor_cuit,
             proveedor_nombre: e.proveedor_nombre, fecha: e.fecha, entrega_estimada: e.entrega_estimada || null, notas: e.notas},
@@ -510,7 +579,8 @@ function _pedDetalle(recibiendo){
         <tfoot><tr><td colspan="3"><b>Totales</b></td>
           <td class="num"><b>${_pedN(p.unidades)}</b></td><td class="num"><b>${_pedN(p.recibido)}</b></td>
           <td class="num">${Number(p.cancelado) ? _pedN(p.cancelado) : '—'}</td><td class="num"><b>${_pedN(p.pendiente)}</b></td>
-          <td class="num">${Number(p.importe) ? plata(p.importe) : ''}</td>${recibiendo ? '<td></td>' : ''}</tr></tfoot></table></div>
+          <td class="num">${Number(p.importe) ? plata(p.importe) : ''}${Number(p.descuento_extra_pct) && Number(p.importe) ? `<div class="mini" style="color:#166534">−${_pedN(p.descuento_extra_pct)} % = ${plata(p.importe_neto)}</div>` : ''}</td>${recibiendo ? '<td></td>' : ''}</tr></tfoot></table></div>
+      ${p.condiciones ? _pedCondHtml(p.condiciones, p.importe, ['borrador','enviado','parcial'].includes(p.estado)) : ''}
       ${recibiendo ? `<div class="filtros" style="margin-top:10px">
           <label class="mini">Fecha <input type="date" id="ped-rec-f" value="${_hoyAR()}"></label>
           <input id="ped-rec-n" placeholder="Nota (remito papel nº, quién recibió…; obligatoria si corregís con negativo)" style="flex:1;min-width:220px">
@@ -590,6 +660,14 @@ async function pedExcel(id){
     filas.push([l.nroitem, l.codigo_proveedor || '', l.descripcion_proveedor || '', l.sku || '', l.descripcion, pk,
       Number(l.cantidad) / pk, pk > 1 ? 'packs' : 'unidades', Number(l.cantidad),
       ...(conPrecio ? [l.precio_unitario != null ? Number(l.precio_unitario) * pk : '', l.precio_unitario != null ? Number(l.cantidad) * Number(l.precio_unitario) : ''] : [])]); });
+  if (conPrecio && Number(p.importe)){
+    filas.push([], ['', '', '', '', 'Total estimado', '', '', '', '', '', Number(p.importe)]);
+    if (Number(p.descuento_extra_pct)){
+      const dd = p.condiciones?.descuento;
+      filas.push(['', '', '', '', `Descuento por volumen ${_pedN(p.descuento_extra_pct)} %${dd ? ' (desde ' + _pedUmbralTxt(dd) + ')' : ''}`, '', '', '', '', '', -Math.round(Number(p.importe) * Number(p.descuento_extra_pct)) / 100]);
+      filas.push(['', '', '', '', 'Total con descuento', '', '', '', '', '', Number(p.importe_neto)]);
+    }
+  }
   const ws = X.utils.aoa_to_sheet(filas); ws['!cols'] = [{wch:5},{wch:18},{wch:30},{wch:14},{wch:40},{wch:9},{wch:10},{wch:9},{wch:9},{wch:14},{wch:14}];
   const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'Pedido');
   X.writeFile(wb, `Pedido ${_pedNro(p.numero)} ${String(p.proveedor_nombre).replace(/[\\/:*?"<>|]/g,'')}.xlsx`);
@@ -661,6 +739,13 @@ async function pedPdf(id){
   doc.setFont(fnt, 'bold'); doc.setFontSize(9);
   doc.text(`${L.length} renglones · ${_pedN(p.unidades)} unidades`, 14, y);
   if (conPrecio && Number(p.importe)) doc.text(`Total estimado: $ ${_pdfN(p.importe)}`, 196, y, {align: 'right'});
+  if (conPrecio && Number(p.importe) && Number(p.descuento_extra_pct)){
+    const dd = p.condiciones?.descuento;
+    doc.setFont(fnt, 'normal');
+    y += 5; doc.text(`Descuento por volumen ${_pedN(p.descuento_extra_pct)} %${dd ? ' (pedido desde ' + _pedUmbralTxt(dd).replace(/\s/g, ' ') + ')' : ''}: - $ ${_pdfN(Number(p.importe) - Number(p.importe_neto))}`, 196, y, {align: 'right'});
+    doc.setFont(fnt, 'bold');
+    y += 5; doc.text(`Total estimado con descuento: $ ${_pdfN(p.importe_neto)}`, 196, y, {align: 'right'});
+  }
   doc.setFont(fnt, 'normal'); doc.setFontSize(7.5);
   doc.text('Por favor, indicar en el remito el N° de este pedido. Precios de referencia según lista vigente.'
     + (L.some(l => _pedPk(l) > 1) ? ' Cantidades en packs donde se indica (precio por pack).' : ''), 14, y + 6);
