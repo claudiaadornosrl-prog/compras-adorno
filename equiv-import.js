@@ -1,14 +1,15 @@
 // ═══════════════════════════════════════════════════════════════════════
 //  📥 Importar equivalencias desde el Excel del proveedor (29-sep, pedido Contreras)
 //
-//  Paso 1: proveedor + archivo (xlsx / xls / csv). Paso 2: qué columna es el
-//  código del proveedor, cuál la descripción y (si la trae) cuál nuestro SKU.
+//  Paso 1: proveedor + archivo (xlsx / xls / csv). Paso 2 (29-sep, JP): SOLO dos
+//  columnas — cómo factura el proveedor (su código O su descripción, se elige cuál)
+//  y nuestro SKU. No hay columna de "descripción" aparte: el importador no la toca.
 //  Paso 3: el sistema propone el SKU fila por fila (compras_equivalencias_proponer,
 //  mismo buscador que el modal de 🔗) y la persona revisa: se guarda SOLO lo tildado
 //  (compras_equivalencias_importar, que usa la misma función que el modal).
 //  Usa _pedProvs / _pedProvTxt / _pedXlsx de pedidos.js.
 // ═══════════════════════════════════════════════════════════════════════
-let EQI = null;   // {prov, filas:[[celdas]], hdr, cols:{cod,desc,sku}, items:[...], filtro}
+let EQI = null;   // {prov, filas:[[celdas]], hdr, cols:{fact,sku}, modo:'codigo'|'descripcion', items:[...], filtro}
 
 const EQI_ESTADOS = {
   sku_excel:     ['SKU del Excel', '#15803d', 'El Excel trae nuestro SKU y existe en el catálogo.'],
@@ -23,7 +24,7 @@ const EQI_ESTADOS = {
 function _eqiNorm(s){ return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim(); }
 
 async function abrirImportarEquiv(){
-  EQI = {prov: null, filas: [], hdr: 0, cols: {cod: -1, desc: -1, sku: -1, pack: -1}, items: [], filtro: 'todos', archivo: ''};
+  EQI = {prov: null, filas: [], hdr: 0, cols: {fact: -1, sku: -1}, modo: 'codigo', items: [], filtro: 'todos', archivo: ''};
   _eqiPintar('Cargando proveedores…');
   await _pedProvs();
   _eqiPintar();
@@ -70,15 +71,20 @@ function _eqiDetectarEncabezado(filas){
 }
 function _eqiAdivinarColumnas(){
   const h = (EQI.filas[EQI.hdr] || []).map(_eqiNorm);
-  const busca = (re, no) => h.findIndex((c, i) => re.test(c) && !(no || []).includes(i));
-  let sku  = busca(/\bsku\b|nuestro|adorno|cod.*interno/);
-  let cod  = busca(/cod|art[ií]c|item|ref|modelo/, [sku]);
-  let desc = busca(/desc|detalle|producto|nombre|articulo/, [sku, cod]);
   const n = Math.max(...EQI.filas.slice(EQI.hdr, EQI.hdr + 30).map(r => r.length), 0);
-  if (cod < 0 && n > 0) cod = 0;
-  if (desc < 0 && n > 1) desc = cod === 0 ? 1 : 0;
-  const pack = busca(/pack|unid.*(por|x)|x ?caja|bulto/, [sku, cod, desc]);
-  EQI.cols = {cod, desc, sku, pack};
+  const busca = (re, no) => h.findIndex((c, i) => re.test(c) && !(no || []).includes(i));
+  let sku  = busca(/\bsku\b|nuestro|adorno|claudia|cod.*interno/);
+  let fact = busca(/proveedor|desc|detalle|producto|nombre|art[ií]c|cod|item|ref|modelo/, [sku]);
+  if (fact < 0) for (let i = 0; i < n; i++) if (i !== sku){ fact = i; break; }
+  EQI.cols = {fact, sku};
+  EQI.modo = _eqiModoSugerido();
+}
+// Si la columna del proveedor trae textos con espacios, es su descripción; si no, su código.
+function _eqiModoSugerido(){
+  const c = EQI.cols.fact; if (c < 0) return 'codigo';
+  const v = EQI.filas.slice(EQI.hdr + 1, EQI.hdr + 41).map(r => String(r[c] || '').trim()).filter(Boolean);
+  const conEsp = v.filter(x => /\s/.test(x)).length;
+  return v.length && conEsp * 2 >= v.length ? 'descripcion' : 'codigo';
 }
 
 function _eqiColOpts(sel, conNinguna){
@@ -93,19 +99,20 @@ function _eqiColOpts(sel, conNinguna){
 }
 
 function _eqiFilasDatos(){
-  const {cod, desc, sku, pack} = EQI.cols;
+  const {fact, sku} = EQI.cols;
   return EQI.filas.slice(EQI.hdr + 1).map(r => {
-    const pk = pack >= 0 ? parseInt(String(r[pack] || '').replace(/\D/g, ''), 10) : NaN;
-    return {codigo: cod >= 0 ? (r[cod] || '') : '', descripcion: desc >= 0 ? (r[desc] || '') : '',
-            sku: sku >= 0 ? (r[sku] || '') : '', pack: pk > 0 ? pk : null};
+    const v = fact >= 0 ? String(r[fact] || '').trim() : '';
+    return {codigo: EQI.modo === 'codigo' ? v : '', descripcion: EQI.modo === 'descripcion' ? v : '',
+            sku: sku >= 0 ? String(r[sku] || '').trim() : ''};
   }).filter(x => x.codigo || x.descripcion);
 }
 
 async function _eqiBuscar(){
   if (!EQI.prov){ alert('Elegí el proveedor.'); return; }
-  if (EQI.cols.cod < 0 && EQI.cols.desc < 0){ alert('Indicá al menos la columna del código o la de la descripción.'); return; }
+  if (EQI.cols.fact < 0){ alert('Indicá la columna de cómo factura el proveedor.'); return; }
+  if (EQI.cols.sku === EQI.cols.fact){ alert('La columna del proveedor y la de nuestro SKU no pueden ser la misma.'); return; }
   const datos = _eqiFilasDatos();
-  if (!datos.length){ alert('No hay filas con código o descripción debajo del encabezado.'); return; }
+  if (!datos.length){ alert('No hay filas con datos debajo del encabezado.'); return; }
   if (datos.length > 3000 && !confirm(`El archivo tiene ${datos.length} filas. Va a tardar unos minutos. ¿Seguimos?`)) return;
   EQI.items = [];
   const TANDA = 40;
@@ -118,7 +125,7 @@ async function _eqiBuscar(){
     (data || []).forEach(r => {
       if (r.estado === 'vacia') return;
       const it = {...r, sku: r.sku || '', skuOriginal: r.sku || '',
-                  pack: (lote[r.i] && lote[r.i].pack) || Number(r.pack_actual) || 1};
+                  pack: Number(r.pack_actual) || 1};
       it.marcada = r.estado === 'sku_excel' || r.estado === 'es_nuestro'
         || (r.estado === 'propuesta' && Number(r.parecido) >= 0.75 && !r.eq_actual);
       EQI.items.push(it);
@@ -212,9 +219,9 @@ function _eqiPintar(cargando){
   if (cargando) cuerpo = `<div class="vacio" id="eqi-prog">${esc(cargando)}</div>`;
   else if (!EQI.items.length) cuerpo = `
     <p class="mini" style="margin-bottom:10px">Sirve para cargar de una vez las equivalencias de todos los artículos de un
-      proveedor (por ejemplo la lista de precios de LEXO). El Excel tiene que tener, como mínimo, una columna con el
-      <b>código del proveedor</b> o con la <b>descripción</b>. Si además trae nuestro SKU, mejor: se usa tal cual.
-      Si no lo trae, el sistema propone uno por parecido y vos revisás antes de guardar.</p>
+      proveedor. Solo importan dos columnas: <b>cómo factura el proveedor</b> (su código de artículo o su descripción,
+      tal cual aparece en la factura) y <b>nuestro SKU</b>. Si el Excel no trae nuestro SKU, el sistema propone uno
+      por parecido y vos revisás antes de guardar.</p>
     <div class="c-fila" style="margin-top:0;border-top:none;padding-top:0">
       <label style="flex:1;min-width:260px">1 · Proveedor
         <input list="eqi-dl-provs" value="${esc(prov ? _pedProvTxt(prov) : '')}" placeholder="Escribí el nombre o el CUIT…"
@@ -229,19 +236,19 @@ function _eqiPintar(cargando){
         <label>Encabezado en la fila
           <input type="number" min="1" max="${EQI.filas.length}" value="${EQI.hdr + 1}" style="width:80px"
                  onchange="EQI.hdr=Math.max(0,Math.min(EQI.filas.length-1,Number(this.value)-1)); _eqiAdivinarColumnas(); _eqiPintar()"></label>
-        <label style="min-width:200px">Código del proveedor
-          <select onchange="EQI.cols.cod=Number(this.value); _eqiPintar()">${_eqiColOpts(EQI.cols.cod, true)}</select></label>
-        <label style="min-width:200px">Descripción
-          <select onchange="EQI.cols.desc=Number(this.value); _eqiPintar()">${_eqiColOpts(EQI.cols.desc, true)}</select></label>
-        <label style="min-width:200px">Nuestro SKU (opcional)
+        <label style="min-width:240px">Cómo factura el proveedor
+          <select onchange="EQI.cols.fact=Number(this.value); EQI.modo=_eqiModoSugerido(); _eqiPintar()">${_eqiColOpts(EQI.cols.fact, false)}</select></label>
+        <label style="min-width:190px">Esa columna es su…
+          <select onchange="EQI.modo=this.value; _eqiPintar()">
+            <option value="codigo"${EQI.modo === 'codigo' ? ' selected' : ''}>código de artículo</option>
+            <option value="descripcion"${EQI.modo === 'descripcion' ? ' selected' : ''}>descripción</option></select></label>
+        <label style="min-width:200px">Nuestro SKU
           <select onchange="EQI.cols.sku=Number(this.value); _eqiPintar()">${_eqiColOpts(EQI.cols.sku, true)}</select></label>
-        <label style="min-width:200px" title="Si el proveedor vende en pack (PX2, PACK X 3) y nuestro SKU es la unidad suelta: cuántas unidades trae cada pack">Unid. por pack (opcional)
-          <select onchange="EQI.cols.pack=Number(this.value); _eqiPintar()">${_eqiColOpts(EQI.cols.pack, true)}</select></label>
       </div>
       <div class="mini" style="margin:10px 0 5px">Así se leen las primeras filas:</div>
-      <div style="overflow-x:auto"><table><thead><tr><th>Código</th><th>Descripción</th><th>SKU</th><th>Pack</th></tr></thead>
-        <tbody>${_eqiFilasDatos().slice(0, 5).map(x => `<tr><td><code>${esc(x.codigo)}</code></td><td>${esc(x.descripcion)}</td>
-          <td>${esc(x.sku) || '<span class="mini">—</span>'}</td><td>${x.pack || '<span class="mini">—</span>'}</td></tr>`).join('')}</tbody></table></div>
+      <div style="overflow-x:auto"><table><thead><tr><th>Cómo lo factura el proveedor (${EQI.modo === 'codigo' ? 'código' : 'descripción'})</th><th>Nuestro SKU</th></tr></thead>
+        <tbody>${_eqiFilasDatos().slice(0, 5).map(x => `<tr><td><code>${esc(x.codigo || x.descripcion)}</code></td>
+          <td>${esc(x.sku) || '<span class="mini">— (lo propone el sistema)</span>'}</td></tr>`).join('')}</tbody></table></div>
       <div style="margin-top:12px"><button class="act" onclick="_eqiBuscar()" ${prov ? '' : 'disabled title="Elegí el proveedor"'}>
         🔎 Buscar equivalencias de las ${nDatos} filas</button></div>` : ''}`;
   else {
@@ -258,7 +265,7 @@ function _eqiPintar(cargando){
         <button class="act gh" style="padding:4px 10px;font-size:12.5px" onclick="_eqiMarcarVisibles(false)">☐ Destildar visibles</button>
       </div>
       <div style="overflow:auto;max-height:58vh"><table>
-        <thead><tr><th></th><th>Su código</th><th>Cómo lo llama él</th><th>Nuestro SKU</th>
+        <thead><tr><th></th><th>Cómo lo factura él</th><th>Nuestro SKU</th>
           <th title="Cuántas unidades de nuestro SKU trae 1 unidad del proveedor. 1 = se vende suelto. PX2 → 2.">Unid. por pack</th>
           <th>Nuestro artículo</th><th>Estado</th></tr></thead>
         <tbody>${vis.length ? vis.map(({it, i}) => {
@@ -266,15 +273,14 @@ function _eqiPintar(cargando){
           const par = it.parecido != null && it.estado === 'propuesta' ? ` · ${Number(it.parecido).toFixed(2)}` : '';
           return `<tr>
             <td><input type="checkbox" id="eqi-cb-${i}" ${it.marcada ? 'checked' : ''} onchange="_eqiMarcar(${i}, this.checked)"></td>
-            <td><code>${esc(it.codigo || '—')}</code></td>
-            <td>${esc(it.descripcion || '')}</td>
+            <td><code>${esc(it.codigo || it.descripcion || '—')}</code></td>
             <td><input value="${esc(it.sku)}" style="width:120px" placeholder="SKU" onchange="_eqiSku(${i}, this.value)"></td>
             <td><input type="number" min="1" step="1" value="${Number(it.pack) || 1}" style="width:60px;text-align:right" onchange="_eqiPack(${i}, this.value)">${
               (typeof _packDeTexto === 'function' && _packDeTexto(it.descripcion) > 1 && Number(it.pack) === 1)
                 ? `<div class="mini" style="color:#6d28d9" title="La descripción del proveedor dice pack de ${_packDeTexto(it.descripcion)}. Si nuestro SKU es la unidad suelta, poné ${_packDeTexto(it.descripcion)}; si ya es el set entero, dejá 1.">¿pack ×${_packDeTexto(it.descripcion)}?</div>` : ''}</td>
             <td class="mini">${esc(it.sku_descripcion || '')}${it.eq_actual && it.eq_actual !== it.sku ? `<br><span style="color:#b45309">hoy: ${esc(it.eq_actual)}</span>` : ''}</td>
             <td><span class="chip" style="background:${e[1]}1a;color:${e[1]}" title="${esc(e[2])}">${e[0]}${par}</span></td>
-          </tr>`; }).join('') : '<tr><td colspan="7" class="vacio">Nada en este filtro.</td></tr>'}</tbody></table></div>
+          </tr>`; }).join('') : '<tr><td colspan="6" class="vacio">Nada en este filtro.</td></tr>'}</tbody></table></div>
       <p class="mini" style="margin-top:8px">🚨 Las propuestas de menos de 0,75 de parecido vienen destildadas: el parecido es
         de texto y confunde colores y talles. <b>Unid. por pack</b>: si el proveedor vende en pack (PX2, PACK X 3) y nuestro SKU es la
         unidad suelta, poné cuántas trae (así entran al stock las unidades correctas y el pedido sale en packs). Los sets que ustedes
