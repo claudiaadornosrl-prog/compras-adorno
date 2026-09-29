@@ -132,13 +132,13 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 #eqi-overlay thead th{position:sticky;top:0;background:#fff;z-index:1;}
 #map-overlay{z-index:10000!important}
 .fx-eq-btn{font-size:11.5px!important;padding:2px 8px!important;margin-left:4px;vertical-align:middle}
-#ctrl-overlay,#map-overlay,#res-overlay,#merc-overlay,#sf-overlay,#rem-overlay,#suc-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9998;display:flex;
+#ctrl-overlay,#map-overlay,#res-overlay,#merc-overlay,#sf-overlay,#rem-overlay,#suc-overlay,#rdet-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9998;display:flex;
   align-items:flex-start;justify-content:center;padding:18px 12px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
-#ctrl-overlay .c-box,#map-overlay .c-box,#res-overlay .c-box,#merc-overlay .c-box,#sf-overlay .c-box,#rem-overlay,#suc-overlay .c-box{background:#fff;border-radius:14px;max-width:720px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);}
-#ctrl-overlay .c-head,#map-overlay .c-head,#res-overlay .c-head,#merc-overlay .c-head,#sf-overlay .c-head,#rem-overlay,#suc-overlay .c-head{position:sticky;top:0;background:var(--primary);color:#fff;padding:13px 17px;
+#ctrl-overlay .c-box,#map-overlay .c-box,#res-overlay .c-box,#merc-overlay .c-box,#sf-overlay .c-box,#rem-overlay,#suc-overlay .c-box,#rdet-overlay .c-box{background:#fff;border-radius:14px;max-width:720px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+#ctrl-overlay .c-head,#map-overlay .c-head,#res-overlay .c-head,#merc-overlay .c-head,#sf-overlay .c-head,#rem-overlay,#suc-overlay .c-head,#rdet-overlay .c-head{position:sticky;top:0;background:var(--primary);color:#fff;padding:13px 17px;
   border-radius:14px 14px 0 0;display:flex;align-items:flex-start;gap:10px;z-index:1;}
-#ctrl-overlay .m-x,#map-overlay .m-x,#res-overlay .m-x,#merc-overlay .m-x,#sf-overlay .m-x,#rem-overlay,#suc-overlay .m-x{background:rgba(255,255,255,.18);border:none;color:#fff;font-size:15px;border-radius:8px;padding:5px 10px;cursor:pointer;}
-#ctrl-overlay .c-body,#map-overlay .c-body,#res-overlay .c-body,#merc-overlay .c-body,#sf-overlay .c-body,#rem-overlay,#suc-overlay .c-body{padding:15px 17px;}
+#ctrl-overlay .m-x,#map-overlay .m-x,#res-overlay .m-x,#merc-overlay .m-x,#sf-overlay .m-x,#rem-overlay,#suc-overlay .m-x,#rdet-overlay .m-x{background:rgba(255,255,255,.18);border:none;color:#fff;font-size:15px;border-radius:8px;padding:5px 10px;cursor:pointer;}
+#ctrl-overlay .c-body,#map-overlay .c-body,#res-overlay .c-body,#merc-overlay .c-body,#sf-overlay .c-body,#rem-overlay,#suc-overlay .c-body,#rdet-overlay .c-body{padding:15px 17px;}
 #ctrl-overlay .c-nums,#map-overlay .c-nums,#res-overlay .c-nums,#merc-overlay .c-nums{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:9px;padding-bottom:10px;border-bottom:1px solid var(--bd);}
 #ctrl-overlay .c-nums .lbl,#map-overlay .c-nums .lbl,#res-overlay .c-nums .lbl,#merc-overlay .c-nums .lbl{display:block;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px;}
 #ctrl-overlay .c-nums .v,#map-overlay .c-nums .v,#res-overlay .c-nums .v,#merc-overlay .c-nums .v{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;}
@@ -1784,6 +1784,7 @@ const _FX_ESTADO = {
   sin_lista:  ['sin lista', '#64748b', 'El SKU no tiene precio cargado en el Dragonfish a esa fecha'],
   sin_sku:    ['sin SKU', '#b91c1c', 'No se pudo traducir el código del proveedor: resolverlo en 🔗 Equivalencias'],
   sin_stock:  ['no es stock', '#64748b', 'Renglón que se paga pero no entra al stock (cajas, fletes)'],
+  desglosado: ['🎨 por color', '#6d28d9', 'La factura lo trae como un solo renglón; en el remito está desglosado por color (📥 Remitos para importar → 👁)'],
 };
 const _fxPct = v => v == null ? '' : (v > 0 ? '+' : '') + Number(v).toLocaleString('es-AR', {maximumFractionDigits: 1}) + ' %';
 // (24-sep, JP) Un renglón = cant × p.unit × (1 − dto). Mismas cuentas que compras_doc_renglones / compras_renglones_guardar.
@@ -1801,7 +1802,7 @@ function _rengEstado(r){
   const dk = lk > 0 && pun != null ? Math.round((pun / lk - 1) * 10000) / 100 : null;
   let e;
   if (r.sin_stock) e = 'sin_stock';
-  else if (!r.sku) e = 'sin_sku';
+  else if (!r.sku) e = r.estado === 'desglosado' ? 'desglosado' : 'sin_sku';
   else if (lc == null && lk == null) e = 'sin_lista';
   else if (lk > 0 && pun != null && Math.abs(pun / lk - 1) <= 0.005) e = 'ok';
   else if (lc > 0 && pu != null && Math.abs(pu / lc - 1) <= 0.005) e = 'ok_precio';
@@ -1903,7 +1904,7 @@ function _facturaRenglones(d, reng, opts = {}){
       <tbody>${reng.map((r, i) => { const est = _rengEstado(r), pun = _rengPun(r);
         return `<tr>
         <td class="num">${ed ? inp(i, 'cantidad', r.cantidad, 54) : Number(r.cantidad||0).toLocaleString('es-AR')}</td>
-        <td>${esc(r.descripcion || '')}<br><span class="mini">${r.sku ? `<code>${esc(r.sku)}</code>${Number(r.pack) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="El proveedor lo vende en pack de ${Number(r.pack)}: al stock entran ${_rengN(Number(r.cantidad||0) * Number(r.pack))} unidades">📦 ×${Number(r.pack)} = ${_rengN(Number(r.cantidad||0) * Number(r.pack))} u.</span>` : ''}` : `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>`}${(!r.sku && !r.sin_stock && opts.desde) ? ` <button class="act fx-eq-btn" title="Traducir el código del proveedor a un artículo nuestro. Se guarda como equivalencia y las próximas facturas de este proveedor lo reconocen solas." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${i})">🔗 Asignar SKU</button>` : ''}${r.lista_compra != null ? ` · lista ${plata(r.lista_compra)}` : ''}${r.lista_costo != null ? ` · costo ${plata(r.lista_costo)}` : ''}</span></td>
+        <td>${esc(r.descripcion || '')}<br><span class="mini">${r.sku ? `<code>${esc(r.sku)}</code>${Number(r.pack) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="El proveedor lo vende en pack de ${Number(r.pack)}: al stock entran ${_rengN(Number(r.cantidad||0) * Number(r.pack))} unidades">📦 ×${Number(r.pack)} = ${_rengN(Number(r.cantidad||0) * Number(r.pack))} u.</span>` : ''}` : (r.estado === 'desglosado' ? `<span style="color:#6d28d9">🎨 desglosado por color en el remito</span>` : `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>`)}${(!r.sku && !r.sin_stock && r.estado !== 'desglosado' && opts.desde) ? ` <button class="act fx-eq-btn" title="Traducir el código del proveedor a un artículo nuestro. Se guarda como equivalencia y las próximas facturas de este proveedor lo reconocen solas." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${i})">🔗 Asignar SKU</button>` : ''}${r.lista_compra != null ? ` · lista ${plata(r.lista_compra)}` : ''}${r.lista_costo != null ? ` · costo ${plata(r.lista_costo)}` : ''}</span></td>
         <td class="num">${ed ? inp(i, 'precio_unitario', r.precio_unitario, 96) : (r.precio_unitario != null ? plata(r.precio_unitario) : '—')}</td>
         <td class="num">${ed ? inp(i, 'descuento_pct', r.descuento_pct, 46) + ' %' : (Number(r.descuento_pct) ? Number(r.descuento_pct).toLocaleString('es-AR') + ' %' : '—')}</td>
         <td class="num" id="fx-pun-${i}">${pun != null ? plata(pun) : '—'}</td>
@@ -2063,7 +2064,7 @@ function _facturaPie(d, reng, opts = {}){
   const okDif = Math.abs(dif) <= 1;
   checks.push([okDif, okDif ? 'Neto + IVA + percepciones = total' : `Neto + impuestos no llegan al total: faltan ${plata(dif)}`]);
   if (reng && reng.length){
-    const conSku = reng.filter(r => r.sku && !r.sin_stock), sinSku = reng.filter(r => !r.sku && !r.sin_stock);
+    const conSku = reng.filter(r => r.sku && !r.sin_stock), sinSku = reng.filter(r => !r.sku && !r.sin_stock && r.estado !== 'desglosado');
     const _e = r => _rengEstado(r).estado;
     const okL = conSku.filter(r => _e(r) === 'ok' || _e(r) === 'ok_precio').length, difL = conSku.filter(r => _e(r) === 'difiere').length, sinL = conSku.filter(r => _e(r) === 'sin_lista').length;
     checks.push([difL === 0, `Precio vs lista Dragonfish: ${okL} de ${conSku.length} coinciden${difL ? ` · ${difL} difieren` : ''}${sinL ? ` · ${sinL} sin lista` : ''}`]);
@@ -3578,7 +3579,8 @@ async function vistaMercaderia(){
                 ${(SUCS.length?SUCS:[{clave:'alcorta',nombre:'Alcorta'},{clave:'unicenter',nombre:'Unicenter'},{clave:'oficina',nombre:'Venta Online'}]).filter(x=>x.activo!==false)
                   .map(x=>`<option value="${esc(x.clave)}" ${r.local_destino===x.clave?'selected':''}>${esc(x.nombre||x.clave)}${x.codigo_txt?' · '+esc(x.codigo_txt):''}</option>`).join('')}
               </select></td>
-          <td class="num">${r.renglones||0}${r.sin_sku?` <span class="chip" style="background:#fee2e2;color:#991b1b" title="renglones sin SKU">${r.sin_sku} sin SKU</span>`:''}</td>
+          <td class="num">${r.renglones||0}${r.sin_sku?` <span class="chip" style="background:#fee2e2;color:#991b1b;cursor:pointer" title="Renglones sin SKU: abrí el remito para asignarlos o desglosarlos por color" onclick="abrirRemitoDetalle('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">${r.sin_sku} sin SKU</span>`:''}
+            ${r.renglones?` <button class="act gh" style="font-size:11.5px;padding:2px 7px" title="Ver los renglones del remito · desglosar por color" onclick="abrirRemitoDetalle('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">👁</button>`:''}</td>
           <td class="mini">${r.origen==='factura'?'📑 factura':r.origen==='proveedor_pdf'?'📄 remito PDF':esc(r.origen)}</td>
           <td class="num" style="white-space:nowrap">
             ${!r.factura?`<button class="act gh" style="font-size:12px;padding:4px 9px" onclick="asociarRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">🔗</button> `:''}
@@ -3708,6 +3710,160 @@ async function descargarTxtRemito(cuit, pv, num){
   URL.revokeObjectURL(aEl.href);
   alert(`TXT descargado: ${data.nombre}\n${data.lineas} renglones · ${data.unidades} unidades · destino ${data.destino}\n\nImportalo en el Dragonfish UNA sola vez.`);
   return true;
+}
+
+// ── 🎨 Remito desglosado por color (29-sep, JP) ─────────────────────────
+// Un proveedor factura un artículo en UN renglón y en el remito lo manda por color.
+// La factura queda por modelo (plata, IVA, OP); el remito manda en los colores
+// (TXT y stock). La puerta es la RPC compras_remito_desglosar: valida SKUs, que los
+// colores sumen lo facturado (o motivo) y que el remito no se haya importado.
+let RDET = null;
+async function abrirRemitoDetalle(cuit, pv, num){
+  const {data, error} = await sb.rpc('compras_remito_detalle', {p_cuit: cuit, p_numero: num});
+  if (error){ alert('No se pudo abrir el remito: ' + error.message); return; }
+  RDET = {cuit, pv, num, ...data, form: null};
+  let ov = document.getElementById('rdet-overlay');
+  if (!ov){
+    ov = document.createElement('div'); ov.id = 'rdet-overlay';
+    document.body.appendChild(ov); document.body.style.overflow = 'hidden';
+    ov.addEventListener('click', e => { if (e.target === ov) cerrarRemitoDetalle(); });
+  }
+  _rdetPintar();
+}
+function cerrarRemitoDetalle(recargar){
+  const o = document.getElementById('rdet-overlay'); if (o) o.remove();
+  document.body.style.overflow = '';
+  RDET = null;
+  if (recargar) vistaMercaderia();
+}
+function _rdetNum(n){ return Number(n || 0).toLocaleString('es-AR', {maximumFractionDigits: 2}); }
+function _rdetPintar(){
+  const ov = document.getElementById('rdet-overlay'); if (!ov || !RDET) return;
+  const R = RDET, nro = `${String(R.pv).padStart(4,'0')}-${String(R.num).padStart(8,'0')}`;
+  const desg = {}; (R.desgloses || []).forEach(d => { desg[d.id] = d; });
+  const vistos = new Set();
+  const filas = (R.lineas || []).map(l => {
+    let extra = '';
+    if (l.desglose_id && !vistos.has(l.desglose_id)){
+      vistos.add(l.desglose_id);
+      const d = desg[l.desglose_id] || {};
+      const suma = (d.partes || []).reduce((a,p) => a + Number(p.cantidad||0), 0);
+      extra = `<tr style="background:#f5f3ff"><td colspan="4" class="mini">🎨 <b>${esc(d.descripcion || l.descripcion || '')}</b> — factura ${_rdetNum(d.cantidad_factura)} u., colores ${_rdetNum(suma)} u.
+          ${d.nota ? ` · <i>${esc(d.nota)}</i>` : ''}${d.creado_por ? ` · ${esc(d.creado_por)} ${_fechaTs(d.creado_at)}` : ''}</td>
+        <td class="num">${R.editable ? `<button class="act gh" style="font-size:11.5px;padding:3px 8px" onclick="deshacerDesglose(${Number(l.desglose_id)})">↩ Deshacer</button>` : ''}</td></tr>`;
+    }
+    const sinSku = !l.sku;
+    return extra + `<tr>
+      <td class="num">${_rdetNum(l.cantidad)}</td>
+      <td>${esc(l.descripcion || '')}${l.codigo_proveedor ? `<div class="mini">${esc(l.codigo_proveedor)}</div>` : ''}</td>
+      <td>${sinSku ? '<span style="color:#b91c1c">sin SKU</span>' : `<code>${esc(l.sku)}</code>${l.desglose_id ? ' <span class="chip" style="background:#ede9fe;color:#6d28d9">🎨</span>' : ''}<div class="mini">${esc(l.sku_desc || '')}</div>`}</td>
+      <td class="num">${l.precio_unitario != null ? plata(l.precio_unitario) : '—'}</td>
+      <td class="num">${sinSku && R.editable ? `<button class="act" style="font-size:11.5px;padding:3px 8px" onclick="remDesglosarForm(${Number(l.nroitem)})">🎨 Desglosar por color</button>` : ''}</td>
+    </tr>`;
+  }).join('');
+  ov.innerHTML = `<div class="c-box" style="max-width:860px;max-height:92vh;overflow:auto">
+    <div class="c-head">
+      <div style="flex:1"><div style="font-weight:700;font-size:16px">📦 Remito ${nro}</div>
+        <div style="font-size:12.5px;opacity:.9">Lo que sale en el TXT para el Dragonfish, renglón por renglón</div></div>
+      <button class="m-x" onclick="cerrarRemitoDetalle(${R._cambio ? 'true' : 'false'})">✕</button>
+    </div>
+    <div class="c-body">
+      ${!R.editable && R.bloqueo ? `<div class="alerta" style="margin-bottom:10px">🔒 ${esc(R.bloqueo)}</div>` : ''}
+      ${R.form ? _rdetFormHtml() : `
+      <p class="mini" style="margin-bottom:9px">Si la factura trae un artículo en <b>un solo renglón</b> y el remito lo manda <b>por color</b>,
+        tocá <b>🎨 Desglosar por color</b> y cargá cuántas vinieron de cada uno. La factura no cambia; el TXT sale por color.
+        Para un renglón que es UN solo artículo nuestro, usá 🔗 Asignar SKU en el control de la factura.</p>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th class="num">Cant</th><th>Como lo trae el proveedor</th><th>SKU nuestro</th><th class="num">P. unit</th><th></th></tr></thead>
+        <tbody>${filas || '<tr><td colspan="5" class="mini">El remito no tiene renglones.</td></tr>'}</tbody>
+      </table></div>`}
+    </div></div>`;
+  if (R.form) remDesgSuma();
+}
+async function remDesglosarForm(nroitem){
+  const l = (RDET.lineas || []).find(x => Number(x.nroitem) === Number(nroitem)); if (!l) return;
+  RDET.form = {nroitem, linea: l, partes: [{sku: '', cantidad: ''}], nota: '', sug: []};
+  _rdetPintar();
+  // Sugerencias: artículos parecidos (los colores de un modelo suelen compartir la descripción)
+  const {data} = await sb.rpc('compras_resolver_articulo', {p_cuit: RDET.cuit, p_codigo: l.codigo_proveedor || '', p_descripcion: l.descripcion || '', p_limite: 30});
+  if (RDET && RDET.form){ RDET.form.sug = (data || []).filter(x => x.sku); _rdetPintar(); }
+}
+function _rdetFormHtml(){
+  const f = RDET.form, l = f.linea;
+  const dl = `<datalist id="rdet-sug">${(f.sug || []).map(x => `<option value="${esc(x.sku)}">${esc(x.descripcion || '')}</option>`).join('')}</datalist>`;
+  return `${dl}
+    <div style="background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:11px">
+      <div class="mini">Renglón de la factura</div>
+      <div style="font-weight:700">${_rdetNum(l.cantidad)} × ${esc(l.descripcion || '')}</div>
+      ${l.codigo_proveedor ? `<div class="mini">Código del proveedor: ${esc(l.codigo_proveedor)}</div>` : ''}
+    </div>
+    <table><thead><tr><th>SKU del color</th><th class="num">Cantidad</th><th></th></tr></thead>
+      <tbody>${f.partes.map((p, i) => `<tr>
+        <td><input list="rdet-sug" placeholder="SKU (tocá para ver sugeridos)" value="${esc(p.sku)}" style="width:260px;text-transform:uppercase"
+             oninput="RDET.form.partes[${i}].sku=this.value.toUpperCase().trim();remDesgSuma()">
+          <div class="mini" id="rdet-desc-${i}">${esc(_rdetDescSku(p.sku))}</div></td>
+        <td class="num"><input type="text" inputmode="decimal" value="${esc(String(p.cantidad))}" style="width:80px;text-align:right"
+             oninput="RDET.form.partes[${i}].cantidad=this.value;remDesgSuma()"></td>
+        <td class="num">${f.partes.length > 1 ? `<button class="act gh" style="padding:3px 8px" onclick="RDET.form.partes.splice(${i},1);_rdetPintar()">✕</button>` : ''}</td>
+      </tr>`).join('')}</tbody></table>
+    <button class="act gh" style="margin-top:7px;font-size:12.5px" onclick="remDesgAgregar()">＋ Agregar color</button>
+    <div id="rdet-suma" style="margin-top:11px;font-weight:700"></div>
+    <div id="rdet-nota-wrap" style="margin-top:8px;display:none">
+      <label class="mini">Motivo de la diferencia (faltante, sobrante, cambio de color…)</label>
+      <input id="rdet-nota" style="width:100%" value="${esc(f.nota)}" oninput="RDET.form.nota=this.value">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
+      <button class="act gh" onclick="RDET.form=null;_rdetPintar()">Volver</button>
+      <button class="act" onclick="guardarDesglose()">Guardar desglose</button>
+    </div>`;
+}
+function _rdetDescSku(sku){
+  if (!sku || !RDET || !RDET.form) return '';
+  const x = (RDET.form.sug || []).find(s => String(s.sku).toUpperCase() === String(sku).toUpperCase());
+  return x ? (x.descripcion || '') : '';
+}
+function _rdetCant(v){ const n = Number(String(v == null ? '' : v).replace(/\./g, '').replace(',', '.')); return isFinite(n) ? n : 0; }
+function remDesgAgregar(){
+  const f = RDET.form, falta = Number(f.linea.cantidad || 0) - f.partes.reduce((a,p) => a + _rdetCant(p.cantidad), 0);
+  f.partes.push({sku: '', cantidad: falta > 0 ? String(falta) : ''});
+  _rdetPintar();
+}
+function remDesgSuma(){
+  if (!RDET || !RDET.form) return;
+  const f = RDET.form, tot = Number(f.linea.cantidad || 0), suma = f.partes.reduce((a,p) => a + _rdetCant(p.cantidad), 0);
+  f.partes.forEach((p, i) => { const e = document.getElementById('rdet-desc-' + i); if (e) e.textContent = _rdetDescSku(p.sku); });
+  const el = document.getElementById('rdet-suma'), nw = document.getElementById('rdet-nota-wrap');
+  const ok = Math.abs(suma - tot) < 0.0001;
+  if (el){
+    el.style.color = ok ? '#166534' : '#b45309';
+    el.textContent = ok ? `Los colores suman ${_rdetNum(suma)} de ${_rdetNum(tot)} ✓`
+      : `Los colores suman ${_rdetNum(suma)} y la factura dice ${_rdetNum(tot)} — ${suma < tot ? 'faltan ' + _rdetNum(tot - suma) : 'sobran ' + _rdetNum(suma - tot)}`;
+  }
+  if (nw) nw.style.display = ok ? 'none' : 'block';
+}
+async function guardarDesglose(){
+  const f = RDET.form;
+  const partes = f.partes.map(p => ({sku: String(p.sku || '').toUpperCase().trim(), cantidad: _rdetCant(p.cantidad)}))
+    .filter(p => p.sku || p.cantidad);
+  if (!partes.length){ alert('Cargá al menos un color con su cantidad.'); return; }
+  if (partes.some(p => !p.sku)){ alert('Hay un color sin SKU.'); return; }
+  if (partes.some(p => !(p.cantidad > 0))){ alert('Todas las cantidades tienen que ser mayores a 0.'); return; }
+  const suma = partes.reduce((a,p) => a + p.cantidad, 0), tot = Number(f.linea.cantidad || 0);
+  const nota = (f.nota || '').trim();
+  if (Math.abs(suma - tot) >= 0.0001 && !nota){ alert(`Los colores suman ${_rdetNum(suma)} y la factura dice ${_rdetNum(tot)}.\nAnotá el motivo de la diferencia.`); return; }
+  const {data, error} = await sb.rpc('compras_remito_desglosar', {p_cuit: RDET.cuit, p_numero: RDET.num, p_nroitem: f.nroitem, p_partes: partes, p_nota: nota || null});
+  if (error){ alert('No se pudo guardar: ' + error.message); return; }
+  const cuit = RDET.cuit, pv = RDET.pv, num = RDET.num;
+  await abrirRemitoDetalle(cuit, pv, num);
+  if (RDET) { RDET._cambio = true; _rdetPintar(); }
+}
+async function deshacerDesglose(id){
+  if (!confirm('¿Deshacer el desglose por color? El renglón vuelve a quedar sin SKU (y el TXT se frena hasta resolverlo).')) return;
+  const {error} = await sb.rpc('compras_remito_deshacer_desglose', {p_desglose_id: id});
+  if (error){ alert('No se pudo deshacer: ' + error.message); return; }
+  const cuit = RDET.cuit, pv = RDET.pv, num = RDET.num;
+  await abrirRemitoDetalle(cuit, pv, num);
+  if (RDET) { RDET._cambio = true; _rdetPintar(); }
 }
 
 async function cargarSucursales(){
@@ -4347,6 +4503,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="op-pdf.js?v=1"></script>
 <script src="pedidos.js?v=6"></script>
 <script src="equiv-import.js?v=3"></script>
-<script src="manual.js?v=61"></script>
+<script src="manual.js?v=62"></script>
 </body>
 </html>

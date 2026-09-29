@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v80-equiv-dos-columnas';
+const CACHE_VERSION = 'compras-v81-desglose-color';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './pedidos.js', './equiv-import.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
