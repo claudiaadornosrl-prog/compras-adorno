@@ -160,6 +160,21 @@ function _manualSecciones() {
       ],
     },
     {
+      icon: '🔗', titulo: 'Equivalencias · su código → nuestro SKU',
+      desc: 'Cada proveedor nombra sus artículos a su manera. Una equivalencia dice "el código X de este proveedor es nuestro SKU Y"; se carga una vez y de ahí en más el sistema traduce solo las facturas y los remitos.',
+      pasos: [
+        'De a uno: en la pestaña 🔗 Equivalencias, lista "Artículos que el proveedor nombra distinto" → Traducir. También desde el renglón de una factura, con 🔗 Asignar SKU.',
+        '📥 Todos juntos desde el Excel del proveedor (por ejemplo la lista de precios de LEXO): en 🔗 Equivalencias tocá "📥 Importar desde Excel".',
+        '1) Elegí el proveedor de la lista (tiene que tener CUIT cargado). 2) Subí el archivo (.xlsx, .xls o .csv). El sistema busca solo la fila de títulos aunque arriba haya un encabezado de la lista; si se equivoca, cambiá "Encabezado en la fila".',
+        '3) Indicá qué columna es el código del proveedor, cuál la descripción y, si el Excel la trae, cuál es nuestro SKU. Abajo se ven las primeras filas tal como las va a leer: miralas antes de seguir.',
+        '4) "🔎 Buscar equivalencias": el sistema propone nuestro SKU fila por fila. Estados: SKU del Excel (lo trae el archivo y existe) · ya es nuestro SKU (el código del proveedor es igual a uno nuestro; conviene guardarlo igual para que el motor lo reconozca en las facturas) · propuesta (buscó un artículo parecido por la descripción, con su nivel de parecido) · ya cargada (ese código ya tenía equivalencia) · sin parecido / SKU inexistente.',
+        '5) Revisá: vienen tildadas solo las seguras (SKU del Excel, ya es nuestro y propuestas de parecido 0,75 o más). Las de menos de 0,75 vienen destildadas porque el parecido es de texto y confunde colores y talles. Podés escribir otro SKU en la fila (se tilda sola), usar los filtros Listas / Para revisar / Sin SKU y "Tildar visibles".',
+        '6) "✓ Guardar": se guarda SOLO lo tildado. Las facturas y remitos pendientes de ese proveedor pasan solos al SKU. Si alguna fila falla (SKU que no existe), el aviso lo dice y esas filas quedan en pantalla para corregirlas.',
+        'Si una fila tildada ya tenía otra equivalencia, se reemplaza (antes de guardar se avisa cuántas). Los sets que ustedes fraccionan en varios artículos no se importan: se cargan de a uno con Traducir.',
+        '🔗 Equivalencias ya cargadas: ✏️ Editar corrige una traducción mal hecha y 🗑 la borra.',
+      ],
+    },
+    {
       icon: '🧠', titulo: 'Cómo aprende el sistema',
       desc: 'No hay reglas que mantener a mano: aprende de lo que ustedes contabilizan.',
       pasos: [
@@ -283,6 +298,7 @@ function abrirManual() {
     </div>`;
   ov.addEventListener('click', e => { if (e.target === ov) cerrarManual(); });
   document.body.appendChild(ov);
+  _manualLupa(ov);
   document.body.style.overflow = 'hidden';
 }
 
@@ -320,3 +336,61 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarManual
   poner();
   new MutationObserver(poner).observe(document.body, { childList: true, subtree: true });
 })();
+
+// ── 🔍 Lupa del manual (29-sep, pedido Contreras): busca por palabra, sin tildes ni mayúsculas.
+//    Deja solo las secciones que la contienen, dentro de ellas los pasos que la contienen,
+//    y resalta la palabra. Mismo bloque en todos los módulos (el de RRHH usa _mLupaFiltrar).
+function _mLupaNorm(s){ return String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+function _mLupaMarcar(el, q){
+  const nodos = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  while (w.nextNode()) nodos.push(w.currentNode);
+  nodos.forEach(n => {
+    const t = n.nodeValue; let norm = '', mapa = [];
+    for (let i = 0; i < t.length; i++){ const c = _mLupaNorm(t[i]); for (let k = 0; k < c.length; k++){ norm += c[k]; mapa.push(i); } }
+    let desde = 0, pos, frag = null, ult = 0;
+    while (q && (pos = norm.indexOf(q, desde)) >= 0){
+      frag = frag || document.createDocumentFragment();
+      const a = mapa[pos], b = mapa[pos + q.length - 1] + 1;
+      if (a > ult) frag.appendChild(document.createTextNode(t.slice(ult, a)));
+      const m = document.createElement('mark'); m.textContent = t.slice(a, b);
+      m.style.cssText = 'background:#fde047;color:inherit;padding:0 1px;border-radius:3px'; frag.appendChild(m);
+      ult = b; desde = pos + q.length;
+    }
+    if (frag){ if (ult < t.length) frag.appendChild(document.createTextNode(t.slice(ult))); n.parentNode.replaceChild(frag, n); }
+  });
+}
+function _mLupaFiltrar(cont, selSec, texto, info){
+  if (!cont) return;
+  const q = _mLupaNorm(String(texto || '').trim());
+  let vistas = 0;
+  cont.querySelectorAll(selSec).forEach(sec => {
+    if (sec.dataset.mOrig == null) sec.dataset.mOrig = sec.innerHTML; else sec.innerHTML = sec.dataset.mOrig;
+    if (!q){ sec.style.display = ''; return; }
+    const lis = [...sec.querySelectorAll('li')];
+    const enLis = lis.filter(li => _mLupaNorm(li.textContent).includes(q));
+    const hay = _mLupaNorm(sec.textContent).includes(q);
+    sec.style.display = hay ? '' : 'none';
+    if (!hay) return;
+    vistas++;
+    if (enLis.length) lis.forEach(li => { if (!enLis.includes(li)) li.style.display = 'none'; });
+    _mLupaMarcar(sec, q);
+  });
+  if (info) info.textContent = !q ? '' : vistas ? `${vistas} ${vistas === 1 ? 'sección' : 'secciones'} con «${String(texto).trim()}»` : `No encontré «${String(texto).trim()}» en el manual.`;
+  const primera = q && cont.querySelector('mark');
+  if (primera) primera.scrollIntoView({block: 'center', behavior: 'smooth'});
+}
+function _manualLupa(ov){
+  const head = ov && ov.querySelector('.m-head'); if (!head) return;
+  head.style.flexWrap = 'wrap';
+  const box = document.createElement('div');
+  box.style.cssText = 'flex-basis:100%;display:flex;gap:8px;align-items:center;margin-top:8px';
+  box.innerHTML = '<input type="search" placeholder="🔍 Buscar en el manual (por ej.: equivalencias, remito, echeq)…" '
+    + 'style="flex:1;min-width:0;padding:8px 11px;border-radius:9px;border:none;font-size:14px;color:#0f172a;font-family:inherit">'
+    + '<span class="m-lupa-info" style="font-size:12px;opacity:.9;white-space:nowrap"></span>';
+  head.appendChild(box);
+  const inp = box.querySelector('input'), info = box.querySelector('.m-lupa-info');
+  let t = null;
+  inp.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => _mLupaFiltrar(ov, '.m-sec', inp.value, info), 250); });
+  inp.addEventListener('keydown', e => { if (e.key === 'Escape' && inp.value){ e.stopPropagation(); inp.value = ''; _mLupaFiltrar(ov, '.m-sec', '', info); } });
+  setTimeout(() => inp.focus(), 50);
+}
