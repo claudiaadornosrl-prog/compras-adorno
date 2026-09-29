@@ -53,6 +53,12 @@ let pedEd = null;      // pedido que se está armando/editando
 let pedCat = [];       // resultados del catálogo
 const _pedN = n => Number(n || 0).toLocaleString('es-AR', {maximumFractionDigits: 2});
 const _pedNro = n => String(n || 0).padStart(6, '0');
+// (29-sep, JP) Packs: el proveedor vende algunos artículos de a varios (MINIES = "PX2", HOTEL2 = "PACK X 3").
+// El pack sale de la equivalencia (cantidad por unidad). La cantidad del pedido se guarda en UNIDADES
+// nuestras (como el stock y los mínimos) y tiene que ser múltiplo del pack; al proveedor se le pide en packs.
+const _pedPk = x => Number(x && x.pack) > 1 ? Number(x.pack) : 1;
+function _pedPackChip(pk){ return pk > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="El proveedor lo vende en pack de ${pk}: se pide de a ${pk} unidades">📦 pack ×${pk}</span>` : ''; }
+function _pedPacksTxt(u, pk){ const n = Number(u||0) / pk; return `${_pedN(n)} pack${n === 1 ? '' : 's'} ×${pk}`; }
 const _pedChip = e => `<span class="chip ped-e-${esc(e)}">${PED_ESTADOS[e] || esc(e)}</span>`;
 const _pedDias = f => f ? Math.round((new Date(_hoyAR()) - new Date(String(f).slice(0,10))) / 864e5) : null;
 
@@ -213,7 +219,8 @@ async function pedEditar(id){
            entrega_estimada: p.entrega_estimada || '', notas: p.notas || '',
            lineas: (data.lineas || []).map(l => ({id: l.id, sku: l.sku || '', codigo_proveedor: l.codigo_proveedor || '',
              descripcion: l.descripcion, cantidad: Number(l.cantidad), precio_unitario: l.precio_unitario,
-             recibido: Number(l.recibido || 0), cancelado: Number(l.cantidad_cancelada || 0)}))};
+             recibido: Number(l.recibido || 0), cancelado: Number(l.cantidad_cancelada || 0),
+             pack: _pedPk(l), descripcion_proveedor: l.descripcion_proveedor || ''}))};
   pedCat = [];
   await _pedProvs();
   _pedEditor();
@@ -327,13 +334,14 @@ function _pedCatHtml(){
       <th class="num">Cant.</th><th></th></tr></thead>
     <tbody>${filas.map(({a, i}) => { const f = _pedFalta(a); return `<tr>
       <td><b>${esc(a.sku)}</b>${a.codigo_proveedor ? `<div class="mini">${esc(a.codigo_proveedor)}</div>` : ''}</td>
-      <td>${esc(a.descripcion||'')}</td>
+      <td>${esc(a.descripcion||'')}${_pedPackChip(_pedPk(a))}</td>
       <td class="num">${_pedStk(a.stock_alcorta, a.min_alcorta)} · ${_pedStk(a.stock_unicenter, a.min_unicenter)} · ${_pedStk(a.stock_oficina, a.min_oficina)}</td>
       <td class="num">${_pedMin(a.min_alcorta)} · ${_pedMin(a.min_unicenter)} · ${_pedMin(a.min_oficina)}</td>
-      <td class="num">${f == null ? '<span class="mini">sin mín.</span>' : (f > 0 ? `<b style="color:var(--bad)">${_pedN(f)}</b>` : '<span class="mini ped-ok">OK</span>')}</td>
+      <td class="num">${f == null ? '<span class="mini">sin mín.</span>' : (f > 0 ? `<b style="color:var(--bad)">${_pedN(f)}</b>${_pedPk(a) > 1 ? `<div class="mini">= ${_pedN(Math.ceil(f/_pedPk(a)))} pack${Math.ceil(f/_pedPk(a))===1?'':'s'}</div>` : ''}` : '<span class="mini ped-ok">OK</span>')}</td>
       <td class="num">${a.precio_compra ? plata(a.precio_compra) : '—'}</td>
       <td class="num">${Number(a.pendiente_pedidos) ? `<b style="color:var(--warn)">${_pedN(a.pendiente_pedidos)}</b>` : '—'}</td>
-      <td class="num"><input class="ped-in" id="ped-cq-${i}" inputmode="decimal" value="${f > 0 ? Math.ceil(f) : 1}" onkeydown="if(event.key==='Enter')pedAgregarCat(${i})"></td>
+      <td class="num"><input class="ped-in" id="ped-cq-${i}" inputmode="decimal" value="${f > 0 ? Math.ceil(f / _pedPk(a)) : 1}" onkeydown="if(event.key==='Enter')pedAgregarCat(${i})"
+            title="${_pedPk(a) > 1 ? 'Cantidad de PACKS (de a ' + _pedPk(a) + ' unidades)' : 'Unidades'}">${_pedPk(a) > 1 ? '<div class="mini">packs</div>' : ''}</td>
       <td>${ya.has(String(a.sku).toUpperCase()) ? '<span class="mini ped-ok">✓ en el pedido</span>'
             : `<button class="act" style="padding:3px 10px;font-size:13px" onclick="pedAgregarCat(${i})">＋</button>`}</td></tr>`; }).join('')}
     </tbody></table></div>`;
@@ -343,24 +351,30 @@ function pedAgregarBajoMinimo(){
   const lista = pedCat.filter(a => _pedFalta(a) > 0 && !ya.has(String(a.sku).toUpperCase()));
   if (!lista.length) return;
   if (!confirm(`Se agregan ${lista.length} artículo(s) con la cantidad que falta para volver al mínimo. Después podés ajustar cada renglón. ¿Seguimos?`)) return;
-  for (const a of lista) pedEd.lineas.push({id: null, sku: a.sku, codigo_proveedor: a.codigo_proveedor || '', descripcion: a.descripcion || a.sku,
-                          cantidad: Math.ceil(_pedFalta(a)), precio_unitario: a.precio_compra ?? null, recibido: 0, cancelado: 0});
+  for (const a of lista){ const pk = _pedPk(a);
+    pedEd.lineas.push({id: null, sku: a.sku, codigo_proveedor: a.codigo_proveedor || '', descripcion: a.descripcion || a.sku,
+                       cantidad: Math.ceil(_pedFalta(a) / pk) * pk, precio_unitario: a.precio_compra ?? null, recibido: 0, cancelado: 0,
+                       pack: pk, descripcion_proveedor: a.descripcion_proveedor || ''}); }
   document.getElementById('ped-lin').innerHTML = _pedLineasHtml();
   document.getElementById('ped-cat').innerHTML = _pedCatHtml();
 }
 function pedAgregarCat(i){
   const a = pedCat[i]; if (!a) return;
-  const cant = nmParse(document.getElementById('ped-cq-' + i)?.value || '1');
-  if (!(cant > 0)){ alert('Poné una cantidad mayor a 0.'); return; }
+  const pk = _pedPk(a);
+  const n = nmParse(document.getElementById('ped-cq-' + i)?.value || '1');
+  if (!(n > 0)){ alert('Poné una cantidad mayor a 0.'); return; }
+  if (pk > 1 && !Number.isInteger(n)){ alert(`${a.sku} viene en pack de ${pk}: poné una cantidad entera de packs.`); return; }
+  const cant = n * pk;   // en unidades nuestras
   const ex = pedEd.lineas.find(l => (l.sku||'').toUpperCase() === String(a.sku).toUpperCase());
   if (ex){ ex.cantidad = Number(ex.cantidad) + cant; }
   else pedEd.lineas.push({id: null, sku: a.sku, codigo_proveedor: a.codigo_proveedor || '', descripcion: a.descripcion || a.sku,
-                          cantidad: cant, precio_unitario: a.precio_compra ?? null, recibido: 0, cancelado: 0});
+                          cantidad: cant, precio_unitario: a.precio_compra ?? null, recibido: 0, cancelado: 0,
+                          pack: pk, descripcion_proveedor: a.descripcion_proveedor || ''});
   document.getElementById('ped-lin').innerHTML = _pedLineasHtml();
   document.getElementById('ped-cat').innerHTML = _pedCatHtml();
 }
 function pedAgregarLibre(){
-  pedEd.lineas.push({id: null, sku: '', codigo_proveedor: '', descripcion: '', cantidad: 1, precio_unitario: null, recibido: 0, cancelado: 0});
+  pedEd.lineas.push({id: null, sku: '', codigo_proveedor: '', descripcion: '', cantidad: 1, precio_unitario: null, recibido: 0, cancelado: 0, pack: 1});
   document.getElementById('ped-lin').innerHTML = _pedLineasHtml();
 }
 function pedQuitar(i){
@@ -372,7 +386,14 @@ function pedQuitar(i){
 }
 function pedCampo(i, k, v){
   const l = pedEd.lineas[i]; if (!l) return;
-  if (k === 'cantidad' || k === 'precio_unitario'){ const n = nmParse(v); l[k] = (k === 'precio_unitario' && !String(v).trim()) ? null : n; }
+  if (k === 'packs'){
+    const n = nmParse(v), pk = _pedPk(l);
+    if (!Number.isInteger(n) || n <= 0){ alert(`Viene en pack de ${pk}: poné una cantidad entera de packs.`);
+      const inp = document.getElementById('ped-pq-' + i); if (inp) inp.value = _pedN(l.cantidad / pk); return; }
+    l.cantidad = n * pk;
+    const u = document.getElementById('ped-u-' + i); if (u) u.textContent = `= ${_pedN(l.cantidad)} u.`;
+  }
+  else if (k === 'cantidad' || k === 'precio_unitario'){ const n = nmParse(v); l[k] = (k === 'precio_unitario' && !String(v).trim()) ? null : n; }
   else l[k] = v;
   const tot = document.getElementById('ped-tot'); if (tot) tot.innerHTML = _pedTotHtml();
   const sub = document.getElementById('ped-sub-' + i);
@@ -394,15 +415,19 @@ function _pedLineasHtml(){
       <td>${i+1}</td>
       <td>${l.id || l.sku ? `<b>${esc(l.sku||'—')}</b>` : `<input class="ped-in w" style="width:90px" placeholder="(opcional)" value="${esc(l.sku)}" onchange="pedCampo(${i},'sku',this.value.toUpperCase())">`}</td>
       <td><input class="ped-in w" style="width:110px" value="${esc(l.codigo_proveedor||'')}" onchange="pedCampo(${i},'codigo_proveedor',this.value)"></td>
-      <td><input class="ped-in w" style="min-width:200px" value="${esc(l.descripcion||'')}" onchange="pedCampo(${i},'descripcion',this.value)"></td>
-      <td class="num"><input class="ped-in" inputmode="decimal" value="${_pedN(l.cantidad)}" onchange="pedCampo(${i},'cantidad',this.value)"></td>
+      <td><input class="ped-in w" style="min-width:200px" value="${esc(l.descripcion||'')}" onchange="pedCampo(${i},'descripcion',this.value)">${_pedPackChip(_pedPk(l))}${l.descripcion_proveedor ? `<div class="mini">prov.: ${esc(l.descripcion_proveedor)}</div>` : ''}</td>
+      <td class="num">${_pedPk(l) > 1
+        ? `<input class="ped-in" id="ped-pq-${i}" inputmode="decimal" value="${_pedN(l.cantidad / _pedPk(l))}" onchange="pedCampo(${i},'packs',this.value)"
+             title="Cantidad de PACKS"><div class="mini">packs ×${_pedPk(l)} <span id="ped-u-${i}">= ${_pedN(l.cantidad)} u.</span></div>`
+        : `<input class="ped-in" inputmode="decimal" value="${_pedN(l.cantidad)}" onchange="pedCampo(${i},'cantidad',this.value)">`}</td>
       ${conRec ? `<td class="num">${_pedN(l.recibido)}</td>` : ''}
       <td class="num"><input class="ped-in" style="width:100px" inputmode="decimal" value="${l.precio_unitario != null ? _pedN(l.precio_unitario) : ''}" placeholder="—" onchange="pedCampo(${i},'precio_unitario',this.value)"></td>
       <td class="num" id="ped-sub-${i}">${l.precio_unitario ? plata(Number(l.cantidad||0) * Number(l.precio_unitario)) : '—'}</td>
       <td>${l.recibido > 0 ? '' : `<button class="act gh" style="padding:2px 8px;font-size:12px" title="Sacar" onclick="pedQuitar(${i})">✕</button>`}</td></tr>`).join('')}
     </tbody><tfoot><tr><td colspan="9" id="ped-tot">${_pedTotHtml()}</td></tr></tfoot></table></div>
-    <p class="mini" style="margin-top:6px">El precio es el de la lista COMPRA vigente cuando lo hay; se puede corregir. Los renglones sin SKU
-      no se descuentan solos con los remitos: se reciben a mano.</p>`;
+    <p class="mini" style="margin-top:6px">El precio es el de la lista COMPRA vigente cuando lo hay (por unidad nuestra); se puede corregir.
+      Los artículos 📦 en pack se piden en packs y se cuentan en unidades (el stock y los remitos van en unidades).
+      Los renglones sin SKU no se descuentan solos con los remitos: se reciben a mano.</p>`;
 }
 
 async function pedGuardar(enviar){
@@ -414,11 +439,14 @@ async function pedGuardar(enviar){
   if (!e.lineas.length){ alert('El pedido no tiene artículos.'); return; }
   if (e.lineas.some(l => !(Number(l.cantidad) > 0))){ alert('Hay renglones con cantidad 0.'); return; }
   if (e.lineas.some(l => !String(l.descripcion||'').trim() && !String(l.sku||'').trim())){ alert('Hay renglones sin SKU ni descripción.'); return; }
+  const malPack = e.lineas.find(l => _pedPk(l) > 1 && Number(l.cantidad) % _pedPk(l) !== 0);
+  if (malPack){ alert(`${malPack.sku || malPack.descripcion} viene en pack de ${_pedPk(malPack)}: la cantidad tiene que ser múltiplo (${_pedN(Math.floor(malPack.cantidad/_pedPk(malPack))*_pedPk(malPack))} o ${_pedN(Math.ceil(malPack.cantidad/_pedPk(malPack))*_pedPk(malPack))} unidades).`); return; }
   const {data, error} = await sb.rpc('compras_pedido_guardar', {p_id: e.id,
     p_cab: {es_prueba: MODO_PRUEBA, proveedor_codigo: e.proveedor_codigo, proveedor_cuit: e.proveedor_cuit,
             proveedor_nombre: e.proveedor_nombre, fecha: e.fecha, entrega_estimada: e.entrega_estimada || null, notas: e.notas},
     p_lineas: e.lineas.map(l => ({id: l.id, sku: l.sku || null, codigo_proveedor: l.codigo_proveedor || null,
-      descripcion: l.descripcion || l.sku, cantidad: l.cantidad, precio_unitario: l.precio_unitario}))});
+      descripcion: l.descripcion || l.sku, cantidad: l.cantidad, precio_unitario: l.precio_unitario,
+      pack: _pedPk(l), descripcion_proveedor: l.descripcion_proveedor || null}))});
   if (error){ alert(error.message); return; }
   const id = data.id;
   if (enviar){
@@ -463,7 +491,7 @@ function _pedDetalle(recibiendo){
       ${p.estado === 'borrador' ? `<div class="alerta" style="background:#fffbeb;border-left-color:#d97706;color:#92400e">
         Está en BORRADOR: todavía no descuenta entregas. Cuando lo mandes al proveedor tocá 📤 Marcar como enviado.</div>` : ''}
       ${recibiendo ? `<div class="alerta" style="background:#eff6ff;border-left-color:#2563eb;color:#1e3a8a">
-        Cargá lo que llegó en la columna <b>Recibe ahora</b>. Si el proveedor manda remito con SKU, esto se descuenta solo:
+        Cargá lo que llegó en la columna <b>Recibe ahora</b>, en UNIDADES (un pack ×2 son 2). Si el proveedor manda remito con SKU, esto se descuenta solo:
         recibí a mano solo lo que no viene por remito, para no contarlo dos veces.</div>` : ''}
       <div style="overflow-x:auto"><table class="fx-tbl">
         <thead><tr><th>#</th><th>SKU</th><th>Descripción</th><th class="num">Pedido</th><th class="num">Recibido</th>
@@ -471,7 +499,7 @@ function _pedDetalle(recibiendo){
           ${recibiendo ? '<th class="num">Recibe ahora</th>' : ''}</tr></thead>
         <tbody>${L.map(l => `<tr>
           <td>${l.nroitem}</td><td><b>${esc(l.sku||'—')}</b>${l.codigo_proveedor ? `<div class="mini">${esc(l.codigo_proveedor)}</div>` : ''}</td>
-          <td>${esc(l.descripcion)}</td><td class="num">${_pedN(l.cantidad)}</td>
+          <td>${esc(l.descripcion)}${_pedPackChip(_pedPk(l))}</td><td class="num">${_pedN(l.cantidad)}${_pedPk(l) > 1 ? `<div class="mini">${_pedPacksTxt(l.cantidad, _pedPk(l))}</div>` : ''}</td>
           <td class="num">${Number(l.recibido) ? _pedN(l.recibido) : '—'}</td>
           <td class="num">${Number(l.cantidad_cancelada) ? _pedN(l.cantidad_cancelada) : '—'}</td>
           <td class="num">${Number(l.pendiente) ? `<b>${_pedN(l.pendiente)}</b>` : '<span class="ped-ok">✓</span>'}</td>
@@ -556,10 +584,13 @@ async function pedExcel(id){
   const filas = [['Claudia Adorno SRL — ORDEN DE PEDIDO Nº ' + _pedNro(p.numero)], ['Proveedor', p.proveedor_nombre],
     ['Fecha', fechaCorta(p.fecha)], ['Entrega estimada', p.entrega_estimada ? fechaCorta(p.entrega_estimada) : ''],
     ['Entregar en', data.empresa.entrega], ['Notas', p.notas || ''], [],
-    ['#', 'Código proveedor', 'SKU', 'Descripción', 'Cantidad', ...(conPrecio ? ['Precio unitario', 'Subtotal'] : [])]];
-  (data.lineas||[]).forEach(l => filas.push([l.nroitem, l.codigo_proveedor || '', l.sku || '', l.descripcion, Number(l.cantidad),
-    ...(conPrecio ? [l.precio_unitario != null ? Number(l.precio_unitario) : '', l.precio_unitario != null ? Number(l.cantidad) * Number(l.precio_unitario) : ''] : [])]));
-  const ws = X.utils.aoa_to_sheet(filas); ws['!cols'] = [{wch:5},{wch:18},{wch:14},{wch:48},{wch:10},{wch:14},{wch:14}];
+    ['#', 'Código proveedor', 'Descripción proveedor', 'SKU', 'Descripción', 'Pack (u. por pack)', 'Cantidad a pedir', 'Unidad', 'Unidades',
+     ...(conPrecio ? ['Precio por pack/unidad', 'Subtotal'] : [])]];
+  (data.lineas||[]).forEach(l => { const pk = _pedPk(l);
+    filas.push([l.nroitem, l.codigo_proveedor || '', l.descripcion_proveedor || '', l.sku || '', l.descripcion, pk,
+      Number(l.cantidad) / pk, pk > 1 ? 'packs' : 'unidades', Number(l.cantidad),
+      ...(conPrecio ? [l.precio_unitario != null ? Number(l.precio_unitario) * pk : '', l.precio_unitario != null ? Number(l.cantidad) * Number(l.precio_unitario) : ''] : [])]); });
+  const ws = X.utils.aoa_to_sheet(filas); ws['!cols'] = [{wch:5},{wch:18},{wch:30},{wch:14},{wch:40},{wch:9},{wch:10},{wch:9},{wch:9},{wch:14},{wch:14}];
   const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'Pedido');
   X.writeFile(wb, `Pedido ${_pedNro(p.numero)} ${String(p.proveedor_nombre).replace(/[\\/:*?"<>|]/g,'')}.xlsx`);
 }
@@ -567,12 +598,13 @@ async function pedPendExcel(){
   const rows = _pedPendFiltrados();
   if (!rows.length){ alert('No hay pendientes con ese filtro.'); return; }
   const X = await _pedXlsx();
-  const filas = [['Proveedor','Pedido Nº','Fecha pedido','Entrega estimada','SKU','Código proveedor','Descripción','Pedido','Recibido','Cancelado','Pendiente','Precio unitario','Pendiente $','Días']];
-  rows.forEach(l => filas.push([l.proveedor_nombre, l.pedido_numero, fechaCorta(l.fecha), l.entrega_estimada ? fechaCorta(l.entrega_estimada) : '',
-    l.sku || '', l.codigo_proveedor || '', l.descripcion, Number(l.cantidad), Number(l.recibido), Number(l.cantidad_cancelada), Number(l.pendiente),
-    l.precio_unitario != null ? Number(l.precio_unitario) : '', l.precio_unitario != null ? Number(l.pendiente) * Number(l.precio_unitario) : '', _pedDias(l.fecha)]));
+  const filas = [['Proveedor','Pedido Nº','Fecha pedido','Entrega estimada','SKU','Código proveedor','Descripción','Pack','Pedido (u.)','Recibido','Cancelado','Pendiente (u.)','Pendiente (packs)','Precio unitario','Pendiente $','Días']];
+  rows.forEach(l => { const pk = _pedPk(l); filas.push([l.proveedor_nombre, l.pedido_numero, fechaCorta(l.fecha), l.entrega_estimada ? fechaCorta(l.entrega_estimada) : '',
+    l.sku || '', l.codigo_proveedor || '', l.descripcion, pk, Number(l.cantidad), Number(l.recibido), Number(l.cantidad_cancelada), Number(l.pendiente),
+    pk > 1 ? Number(l.pendiente) / pk : '',
+    l.precio_unitario != null ? Number(l.precio_unitario) : '', l.precio_unitario != null ? Number(l.pendiente) * Number(l.precio_unitario) : '', _pedDias(l.fecha)]); });
   const ws = X.utils.aoa_to_sheet(filas);
-  ws['!cols'] = [{wch:32},{wch:9},{wch:12},{wch:12},{wch:14},{wch:16},{wch:44},{wch:8},{wch:9},{wch:9},{wch:9},{wch:12},{wch:13},{wch:6}];
+  ws['!cols'] = [{wch:32},{wch:9},{wch:12},{wch:12},{wch:14},{wch:16},{wch:44},{wch:6},{wch:9},{wch:9},{wch:9},{wch:10},{wch:10},{wch:12},{wch:13},{wch:6}];
   const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'Pendiente de entrega');
   X.writeFile(wb, `Pendiente de entrega${PED_PROV_PEND ? ' ' + PED_PROV_PEND.replace(/[\\/:*?"<>|]/g,'') : ''} ${_hoyAR()}.xlsx`);
 }
@@ -615,19 +647,23 @@ async function pedPdf(id){
   doc.line(14, y, 196, y); y += 5;
   const conPrecio = L.some(l => l.precio_unitario != null);
   const cols = conPrecio
-    ? [{t:'#',x:14,w:6},{t:'CÓD. PROV.',x:21,w:24},{t:'SKU',x:46,w:22},{t:'DESCRIPCIÓN',x:69,w:70},{t:'CANT.',x:140,w:12,der:true},{t:'P. UNIT.',x:153,w:19,der:true},{t:'SUBTOTAL',x:173,w:23,der:true}]
-    : [{t:'#',x:14,w:6},{t:'CÓD. PROV.',x:21,w:28},{t:'SKU',x:50,w:26},{t:'DESCRIPCIÓN',x:77,w:100},{t:'CANTIDAD',x:178,w:18,der:true}];
+    ? [{t:'#',x:14,w:6},{t:'CÓD. PROV.',x:21,w:24},{t:'SKU',x:46,w:22},{t:'DESCRIPCIÓN',x:69,w:62},{t:'CANTIDAD',x:132,w:20,der:true},{t:'P. UNIT.',x:153,w:19,der:true},{t:'SUBTOTAL',x:173,w:23,der:true}]
+    : [{t:'#',x:14,w:6},{t:'CÓD. PROV.',x:21,w:28},{t:'SKU',x:50,w:26},{t:'DESCRIPCIÓN',x:77,w:94},{t:'CANTIDAD',x:172,w:24,der:true}];
+  // (29-sep) Al proveedor se le pide en PACKS cuando lo vende así: "4 packs x2"; el precio va por pack.
+  const cantTxt = l => { const pk = _pedPk(l); return pk > 1 ? `${_pedN(l.cantidad/pk)} pack${l.cantidad/pk===1?'':'s'} x${pk}` : _pedN(l.cantidad); };
+  const descTxt = l => l.descripcion + (l.descripcion_proveedor ? '\n' + l.descripcion_proveedor : '');
   const filas = L.map(l => conPrecio
-    ? [l.nroitem, l.codigo_proveedor||'', l.sku||'', l.descripcion, _pedN(l.cantidad), l.precio_unitario != null ? _pdfN(l.precio_unitario) : '',
+    ? [l.nroitem, l.codigo_proveedor||'', l.sku||'', descTxt(l), cantTxt(l), l.precio_unitario != null ? _pdfN(Number(l.precio_unitario) * _pedPk(l)) : '',
        l.precio_unitario != null ? _pdfN(Number(l.cantidad) * Number(l.precio_unitario)) : '']
-    : [l.nroitem, l.codigo_proveedor||'', l.sku||'', l.descripcion, _pedN(l.cantidad)]);
+    : [l.nroitem, l.codigo_proveedor||'', l.sku||'', descTxt(l), cantTxt(l)]);
   y = _pedPdfTabla(doc, fnt, cols, filas, y, 272);
   doc.line(14, y, 196, y); y += 5;
   doc.setFont(fnt, 'bold'); doc.setFontSize(9);
   doc.text(`${L.length} renglones · ${_pedN(p.unidades)} unidades`, 14, y);
   if (conPrecio && Number(p.importe)) doc.text(`Total estimado: $ ${_pdfN(p.importe)}`, 196, y, {align: 'right'});
   doc.setFont(fnt, 'normal'); doc.setFontSize(7.5);
-  doc.text('Por favor, indicar en el remito el N° de este pedido. Precios de referencia según lista vigente.', 14, y + 6);
+  doc.text('Por favor, indicar en el remito el N° de este pedido. Precios de referencia según lista vigente.'
+    + (L.some(l => _pedPk(l) > 1) ? ' Cantidades en packs donde se indica (precio por pack).' : ''), 14, y + 6);
   const n = doc.getNumberOfPages();
   for (let i = 1; i <= n; i++){ doc.setPage(i); doc.setFontSize(7); doc.text(`Página ${i} de ${n}`, 196, 290, {align: 'right'}); }
   doc.save(`Pedido ${_pedNro(p.numero)} ${String(p.proveedor_nombre).replace(/[\\/:*?"<>|]/g,'')}.pdf`);

@@ -23,7 +23,7 @@ const EQI_ESTADOS = {
 function _eqiNorm(s){ return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim(); }
 
 async function abrirImportarEquiv(){
-  EQI = {prov: null, filas: [], hdr: 0, cols: {cod: -1, desc: -1, sku: -1}, items: [], filtro: 'todos', archivo: ''};
+  EQI = {prov: null, filas: [], hdr: 0, cols: {cod: -1, desc: -1, sku: -1, pack: -1}, items: [], filtro: 'todos', archivo: ''};
   _eqiPintar('Cargando proveedores…');
   await _pedProvs();
   _eqiPintar();
@@ -77,7 +77,8 @@ function _eqiAdivinarColumnas(){
   const n = Math.max(...EQI.filas.slice(EQI.hdr, EQI.hdr + 30).map(r => r.length), 0);
   if (cod < 0 && n > 0) cod = 0;
   if (desc < 0 && n > 1) desc = cod === 0 ? 1 : 0;
-  EQI.cols = {cod, desc, sku};
+  const pack = busca(/pack|unid.*(por|x)|x ?caja|bulto/, [sku, cod, desc]);
+  EQI.cols = {cod, desc, sku, pack};
 }
 
 function _eqiColOpts(sel, conNinguna){
@@ -92,12 +93,12 @@ function _eqiColOpts(sel, conNinguna){
 }
 
 function _eqiFilasDatos(){
-  const {cod, desc, sku} = EQI.cols;
-  return EQI.filas.slice(EQI.hdr + 1).map(r => ({
-    codigo: cod >= 0 ? (r[cod] || '') : '',
-    descripcion: desc >= 0 ? (r[desc] || '') : '',
-    sku: sku >= 0 ? (r[sku] || '') : '',
-  })).filter(x => x.codigo || x.descripcion);
+  const {cod, desc, sku, pack} = EQI.cols;
+  return EQI.filas.slice(EQI.hdr + 1).map(r => {
+    const pk = pack >= 0 ? parseInt(String(r[pack] || '').replace(/\D/g, ''), 10) : NaN;
+    return {codigo: cod >= 0 ? (r[cod] || '') : '', descripcion: desc >= 0 ? (r[desc] || '') : '',
+            sku: sku >= 0 ? (r[sku] || '') : '', pack: pk > 0 ? pk : null};
+  }).filter(x => x.codigo || x.descripcion);
 }
 
 async function _eqiBuscar(){
@@ -111,11 +112,13 @@ async function _eqiBuscar(){
   for (let i = 0; i < datos.length; i += TANDA){
     _eqiProgreso(`Buscando equivalencias… ${Math.min(i + TANDA, datos.length)} de ${datos.length}`);
     const lote = datos.slice(i, i + TANDA);
-    const {data, error} = await sb.rpc('compras_equivalencias_proponer', {p_cuit: EQI.prov.cuit_norm, p_filas: lote});
+    const {data, error} = await sb.rpc('compras_equivalencias_proponer', {p_cuit: EQI.prov.cuit_norm,
+      p_filas: lote.map(x => ({codigo: x.codigo, descripcion: x.descripcion, sku: x.sku}))});
     if (error){ alert('Error buscando: ' + error.message); _eqiPintar(); return; }
     (data || []).forEach(r => {
       if (r.estado === 'vacia') return;
-      const it = {...r, sku: r.sku || '', skuOriginal: r.sku || ''};
+      const it = {...r, sku: r.sku || '', skuOriginal: r.sku || '',
+                  pack: (lote[r.i] && lote[r.i].pack) || Number(r.pack_actual) || 1};
       it.marcada = r.estado === 'sku_excel' || r.estado === 'es_nuestro'
         || (r.estado === 'propuesta' && Number(r.parecido) >= 0.75 && !r.eq_actual);
       EQI.items.push(it);
@@ -135,6 +138,14 @@ function _eqiSku(i, v){
   it.sku = String(v || '').trim().toUpperCase();
   if (it.sku !== it.skuOriginal){ it.estado = 'manual'; it.sku_descripcion = ''; it.parecido = null; }
   it.marcada = !!it.sku;
+  const cb = document.getElementById('eqi-cb-' + i); if (cb) cb.checked = it.marcada;
+  _eqiContador();
+}
+function _eqiPack(i, v){
+  const it = EQI.items[i]; if (!it) return;
+  const n = parseInt(v, 10);
+  if (!(n > 0)){ alert('El pack tiene que ser un número entero mayor a 0 (1 = se vende suelto).'); _eqiPintar(); return; }
+  it.pack = n; if (it.sku) it.marcada = true;
   const cb = document.getElementById('eqi-cb-' + i); if (cb) cb.checked = it.marcada;
   _eqiContador();
 }
@@ -161,7 +172,7 @@ function _eqiContador(){
 
 async function _eqiGuardar(){
   const filas = EQI.items.filter(it => it.marcada && it.sku)
-    .map(it => ({codigo: it.codigo || '', descripcion: it.descripcion || '', sku: it.sku}));
+    .map(it => ({codigo: it.codigo || '', descripcion: it.descripcion || '', sku: it.sku, pack: Number(it.pack) || 1}));
   if (!filas.length){ alert('No hay filas tildadas con SKU.'); return; }
   const reemplazan = EQI.items.filter(it => it.marcada && it.sku && it.eq_actual && it.eq_actual !== it.sku).length;
   if (!confirm(`Se van a guardar ${filas.length} equivalencias de ${EQI.prov.nombre}.`
@@ -224,11 +235,13 @@ function _eqiPintar(cargando){
           <select onchange="EQI.cols.desc=Number(this.value); _eqiPintar()">${_eqiColOpts(EQI.cols.desc, true)}</select></label>
         <label style="min-width:200px">Nuestro SKU (opcional)
           <select onchange="EQI.cols.sku=Number(this.value); _eqiPintar()">${_eqiColOpts(EQI.cols.sku, true)}</select></label>
+        <label style="min-width:200px" title="Si el proveedor vende en pack (PX2, PACK X 3) y nuestro SKU es la unidad suelta: cuántas unidades trae cada pack">Unid. por pack (opcional)
+          <select onchange="EQI.cols.pack=Number(this.value); _eqiPintar()">${_eqiColOpts(EQI.cols.pack, true)}</select></label>
       </div>
       <div class="mini" style="margin:10px 0 5px">Así se leen las primeras filas:</div>
-      <div style="overflow-x:auto"><table><thead><tr><th>Código</th><th>Descripción</th><th>SKU</th></tr></thead>
+      <div style="overflow-x:auto"><table><thead><tr><th>Código</th><th>Descripción</th><th>SKU</th><th>Pack</th></tr></thead>
         <tbody>${_eqiFilasDatos().slice(0, 5).map(x => `<tr><td><code>${esc(x.codigo)}</code></td><td>${esc(x.descripcion)}</td>
-          <td>${esc(x.sku) || '<span class="mini">—</span>'}</td></tr>`).join('')}</tbody></table></div>
+          <td>${esc(x.sku) || '<span class="mini">—</span>'}</td><td>${x.pack || '<span class="mini">—</span>'}</td></tr>`).join('')}</tbody></table></div>
       <div style="margin-top:12px"><button class="act" onclick="_eqiBuscar()" ${prov ? '' : 'disabled title="Elegí el proveedor"'}>
         🔎 Buscar equivalencias de las ${nDatos} filas</button></div>` : ''}`;
   else {
@@ -245,7 +258,9 @@ function _eqiPintar(cargando){
         <button class="act gh" style="padding:4px 10px;font-size:12.5px" onclick="_eqiMarcarVisibles(false)">☐ Destildar visibles</button>
       </div>
       <div style="overflow:auto;max-height:58vh"><table>
-        <thead><tr><th></th><th>Su código</th><th>Cómo lo llama él</th><th>Nuestro SKU</th><th>Nuestro artículo</th><th>Estado</th></tr></thead>
+        <thead><tr><th></th><th>Su código</th><th>Cómo lo llama él</th><th>Nuestro SKU</th>
+          <th title="Cuántas unidades de nuestro SKU trae 1 unidad del proveedor. 1 = se vende suelto. PX2 → 2.">Unid. por pack</th>
+          <th>Nuestro artículo</th><th>Estado</th></tr></thead>
         <tbody>${vis.length ? vis.map(({it, i}) => {
           const e = EQI_ESTADOS[it.estado] || [it.estado, '#64748b', ''];
           const par = it.parecido != null && it.estado === 'propuesta' ? ` · ${Number(it.parecido).toFixed(2)}` : '';
@@ -254,11 +269,16 @@ function _eqiPintar(cargando){
             <td><code>${esc(it.codigo || '—')}</code></td>
             <td>${esc(it.descripcion || '')}</td>
             <td><input value="${esc(it.sku)}" style="width:120px" placeholder="SKU" onchange="_eqiSku(${i}, this.value)"></td>
+            <td><input type="number" min="1" step="1" value="${Number(it.pack) || 1}" style="width:60px;text-align:right" onchange="_eqiPack(${i}, this.value)">${
+              (typeof _packDeTexto === 'function' && _packDeTexto(it.descripcion) > 1 && Number(it.pack) === 1)
+                ? `<div class="mini" style="color:#6d28d9" title="La descripción del proveedor dice pack de ${_packDeTexto(it.descripcion)}. Si nuestro SKU es la unidad suelta, poné ${_packDeTexto(it.descripcion)}; si ya es el set entero, dejá 1.">¿pack ×${_packDeTexto(it.descripcion)}?</div>` : ''}</td>
             <td class="mini">${esc(it.sku_descripcion || '')}${it.eq_actual && it.eq_actual !== it.sku ? `<br><span style="color:#b45309">hoy: ${esc(it.eq_actual)}</span>` : ''}</td>
             <td><span class="chip" style="background:${e[1]}1a;color:${e[1]}" title="${esc(e[2])}">${e[0]}${par}</span></td>
-          </tr>`; }).join('') : '<tr><td colspan="6" class="vacio">Nada en este filtro.</td></tr>'}</tbody></table></div>
+          </tr>`; }).join('') : '<tr><td colspan="7" class="vacio">Nada en este filtro.</td></tr>'}</tbody></table></div>
       <p class="mini" style="margin-top:8px">🚨 Las propuestas de menos de 0,75 de parecido vienen destildadas: el parecido es
-        de texto y confunde colores y talles. Los sets que ustedes fraccionan en varios artículos se cargan de a uno con 🔗 Traducir.</p>
+        de texto y confunde colores y talles. <b>Unid. por pack</b>: si el proveedor vende en pack (PX2, PACK X 3) y nuestro SKU es la
+        unidad suelta, poné cuántas trae (así entran al stock las unidades correctas y el pedido sale en packs). Los sets que ustedes
+        fraccionan en varios artículos distintos se cargan de a uno con 🔗 Traducir.</p>
       <div id="eqi-prog" class="mini" style="margin-top:4px"></div>`;
   }
 

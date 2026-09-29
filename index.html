@@ -1772,12 +1772,15 @@ const _FX_ESTADO = {
 const _fxPct = v => v == null ? '' : (v > 0 ? '+' : '') + Number(v).toLocaleString('es-AR', {maximumFractionDigits: 1}) + ' %';
 // (24-sep, JP) Un renglón = cant × p.unit × (1 − dto). Mismas cuentas que compras_doc_renglones / compras_renglones_guardar.
 const _r2 = x => Math.round((Number(x) || 0) * 100) / 100;
+const _rengN = n => Number(n || 0).toLocaleString('es-AR', {maximumFractionDigits: 2});
 function _rengPun(r){ return r.precio_unitario == null ? null : Number(r.precio_unitario) * (1 - Number(r.descuento_pct || 0) / 100); }
 function _rengNeto(r){ const pu = _rengPun(r); return pu == null ? Number(r.importe || 0) : _r2(Number(r.cantidad || 0) * pu); }
 // El control contra lista se recalcula en el navegador cuando se edita un renglón (misma regla que la RPC)
 function _rengEstado(r){
   const lc = r.lista_compra != null ? Number(r.lista_compra) : null, lk = r.lista_costo != null ? Number(r.lista_costo) : null;
-  const pu = r.precio_unitario != null ? Number(r.precio_unitario) : null, pun = _rengPun(r);
+  // (29-sep) Con pack (PX2, PACK X 3) la lista es por unidad nuestra: se compara el precio ÷ pack.
+  const pk = Number(r.pack) > 1 ? Number(r.pack) : 1;
+  const pu = r.precio_unitario != null ? Number(r.precio_unitario) / pk : null, pun0 = _rengPun(r), pun = pun0 != null ? pun0 / pk : null;
   const dp = lc > 0 && pu != null ? Math.round((pu / lc - 1) * 10000) / 100 : null;
   const dk = lk > 0 && pun != null ? Math.round((pun / lk - 1) * 10000) / 100 : null;
   let e;
@@ -1884,7 +1887,7 @@ function _facturaRenglones(d, reng, opts = {}){
       <tbody>${reng.map((r, i) => { const est = _rengEstado(r), pun = _rengPun(r);
         return `<tr>
         <td class="num">${ed ? inp(i, 'cantidad', r.cantidad, 54) : Number(r.cantidad||0).toLocaleString('es-AR')}</td>
-        <td>${esc(r.descripcion || '')}<br><span class="mini">${r.sku ? `<code>${esc(r.sku)}</code>` : `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>`}${(!r.sku && !r.sin_stock && opts.desde) ? ` <button class="act fx-eq-btn" title="Traducir el código del proveedor a un artículo nuestro. Se guarda como equivalencia y las próximas facturas de este proveedor lo reconocen solas." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${i})">🔗 Asignar SKU</button>` : ''}${r.lista_compra != null ? ` · lista ${plata(r.lista_compra)}` : ''}${r.lista_costo != null ? ` · costo ${plata(r.lista_costo)}` : ''}</span></td>
+        <td>${esc(r.descripcion || '')}<br><span class="mini">${r.sku ? `<code>${esc(r.sku)}</code>${Number(r.pack) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="El proveedor lo vende en pack de ${Number(r.pack)}: al stock entran ${_rengN(Number(r.cantidad||0) * Number(r.pack))} unidades">📦 ×${Number(r.pack)} = ${_rengN(Number(r.cantidad||0) * Number(r.pack))} u.</span>` : ''}` : `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>`}${(!r.sku && !r.sin_stock && opts.desde) ? ` <button class="act fx-eq-btn" title="Traducir el código del proveedor a un artículo nuestro. Se guarda como equivalencia y las próximas facturas de este proveedor lo reconocen solas." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${i})">🔗 Asignar SKU</button>` : ''}${r.lista_compra != null ? ` · lista ${plata(r.lista_compra)}` : ''}${r.lista_costo != null ? ` · costo ${plata(r.lista_costo)}` : ''}</span></td>
         <td class="num">${ed ? inp(i, 'precio_unitario', r.precio_unitario, 96) : (r.precio_unitario != null ? plata(r.precio_unitario) : '—')}</td>
         <td class="num">${ed ? inp(i, 'descuento_pct', r.descuento_pct, 46) + ' %' : (Number(r.descuento_pct) ? Number(r.descuento_pct).toLocaleString('es-AR') + ' %' : '—')}</td>
         <td class="num" id="fx-pun-${i}">${pun != null ? plata(pun) : '—'}</td>
@@ -3288,7 +3291,7 @@ async function vistaEquivalencias(){
           <td>${esc(g.prov || g.cuit)}</td>
           <td><code>${esc(g.codigo_proveedor || '—')}</code></td>
           <td>${esc(g.descripcion || '')}</td>
-          <td>${g.partes.map(h => `<b>${esc(h.sku)}</b>${g.partes.length > 1 ? ' <span class="mini">' + Math.round((h.proporcion_costo || 1) * 100) + ' %</span>' : ''}`).join('<br>')}</td>
+          <td>${g.partes.map(h => `<b>${esc(h.sku)}</b>${Number(h.cantidad_por_unidad) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="1 unidad del proveedor = ${Number(h.cantidad_por_unidad)} de este SKU">📦 ×${Number(h.cantidad_por_unidad)}</span>` : ''}${g.partes.length > 1 ? ' <span class="mini">' + Math.round((h.proporcion_costo || 1) * 100) + ' %</span>' : ''}`).join('<br>')}</td>
           <td class="mini" title="${esc(g.creada_por || '')}">${_fechaTs(g.creada_at)}</td>
           <td class="num" style="white-space:nowrap">
             <button class="act gh" style="padding:4px 9px;font-size:12.5px" onclick="editarEquivalencia(${i})">✏️ Editar</button>
@@ -3397,10 +3400,20 @@ function pintarMapeo(cargando){
              conviene mirarlos dos veces: en las pruebas, ahí es donde confunde variantes.</p>`}
 
       <h4 style="font-size:14px;margin:14px 0 7px">Se traduce a</h4>
+      ${_packDeTexto(m.descripcion) > 1 ? `<div class="alerta" style="background:#f5f3ff;border-left-color:#7c3aed;color:#4c1d95;margin-bottom:8px">
+        📦 El proveedor lo describe como pack de <b>${_packDeTexto(m.descripcion)}</b>. Si nuestro SKU es la unidad suelta
+        (como MINIES o HOTEL2), poné <b>${_packDeTexto(m.descripcion)}</b> en "Unid. por pack". Si nuestro SKU ya es el set
+        entero (como SET X 2 REPASADOR), dejá 1.</div>` : ''}
+      <div class="mini" style="display:flex;gap:7px;margin-bottom:3px"><span style="flex:1;min-width:140px">SKU nuestro</span>
+        <span style="width:90px;text-align:right" title="Cuántas unidades nuestras trae 1 unidad del proveedor">Unid. por pack</span>
+        ${partesMapeo.length > 1 ? '<span style="width:110px;text-align:right">Parte del costo</span>' : ''}</div>
       ${partesMapeo.map((p,i) => `<div class="c-linea">
         <input list="dl-skus" value="${esc(p.sku)}" placeholder="SKU nuestro" style="flex:1;min-width:140px"
                oninput="partesMapeo[${i}].sku=this.value.split(' ')[0].trim()">
-        <input type="number" step="0.01" min="0" max="1" value="${p.proporcion}" style="width:110px;text-align:right"
+        <input type="number" step="1" min="1" value="${Number(p.cantidad)||1}" style="width:90px;text-align:right"
+               title="Cuántas unidades de ESTE SKU trae 1 unidad del proveedor (pack de 2 = 2). Con esto entran al stock las unidades correctas y el precio se controla por unidad."
+               oninput="partesMapeo[${i}].cantidad=Number(this.value)||1">
+        <input type="number" step="0.01" min="0" max="1" value="${p.proporcion}" style="width:110px;text-align:right;${partesMapeo.length > 1 ? '' : 'display:none'}"
                title="Qué parte del costo va a este artículo"
                oninput="partesMapeo[${i}].proporcion=Number(this.value); pintarSumaMapeo()">
         ${partesMapeo.length > 1
@@ -3449,16 +3462,22 @@ function elegirSku(sku){
   pintarMapeo();
 }
 
+// (29-sep) "PX2", "PACK X 3", "PACK X3" en la descripción del proveedor → pack sugerido (solo como aviso, no se aplica solo).
+function _packDeTexto(t){
+  const m = String(t||'').toUpperCase().match(/\bP(?:ACK)?\s*X\s*(\d{1,2})\b/);
+  return m ? Number(m[1]) : 1;
+}
 async function guardarMapeo(){
   const partes = partesMapeo.filter(p => (p.sku||'').trim())
-    .map(p => ({sku: p.sku.trim(), cantidad: Number(p.cantidad)||1, proporcion: Number(p.proporcion)||0}));
+    .map(p => ({sku: p.sku.trim(), cantidad: Number(p.cantidad)||1, proporcion: partesMapeo.length === 1 ? 1 : (Number(p.proporcion)||0)}));
   if (!partes.length){ alert('Elegí al menos un artículo nuestro.'); return; }
+  if (partes.some(p => !(p.cantidad > 0) || !Number.isInteger(p.cantidad))){ alert('"Unid. por pack" tiene que ser un número entero mayor a 0.'); return; }
   const {data: res, error} = await sb.rpc('compras_guardar_equivalencia', {
     p_cuit: enMapeo.cuit, p_codigo: enMapeo.codigo_proveedor,
     p_descripcion: enMapeo.descripcion, p_partes: partes,
   });
   if (error){ alert('No se pudo guardar: ' + error.message); return; }
-  if (enMapeo._editar && res && res.retraducidos) alert(`✓ Equivalencia corregida. ${res.retraducidos} renglón(es) de facturas y remitos pasaron al SKU nuevo.`);
+  if (enMapeo._editar && res && res.retraducidos) alert(`✓ Equivalencia corregida. ${res.retraducidos} renglón(es) de facturas y remitos quedaron con el SKU y la cantidad nuevos.`);
   const desde = enMapeo._desde, docId = enMapeo._docId;
   cerrarMapeo();
   if (desde === 'control' && enControl && enControl.id === docId){
@@ -4310,8 +4329,8 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=1"></script>
-<script src="pedidos.js?v=3"></script>
-<script src="equiv-import.js?v=1"></script>
-<script src="manual.js?v=57"></script>
+<script src="pedidos.js?v=4"></script>
+<script src="equiv-import.js?v=2"></script>
+<script src="manual.js?v=58"></script>
 </body>
 </html>

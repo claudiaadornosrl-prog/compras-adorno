@@ -133,6 +133,8 @@ function _manualSecciones() {
         'Lo que falta queda pendiente hasta que alguien lo cierre: 🔒 Cerrar saldo da por cancelado lo que no llegó (con motivo) y lo saca del listado. ↩ Reabrir lo vuelve a dejar pendiente. ✖ Anular solo se puede si todavía no llegó nada.',
         '⏳ Pendiente de entrega: todo lo pedido y no recibido, filtrable por proveedor, con días de espera y la entrega estimada en rojo si ya pasó. Se baja en Excel o PDF (sirve para reclamarle al proveedor).',
         'Un pedido ya enviado se puede editar (sumar artículos, cambiar cantidades), pero no se puede bajar una cantidad por debajo de lo ya recibido ni sacar un renglón que ya recibió mercadería.',
+        '📦 ARTÍCULOS EN PACK (ej. MINIES, que Espalma vende "PX2", o HOTEL2 "PACK X 3"): llevan el chip 📦 pack ×2. En el catálogo, "Falta p/ mín." dice las unidades y cuántos packs son, y la cantidad se carga en PACKS (4 packs de MINIES = 8 unidades). El sistema no deja pedir medio pack. El pedido guarda las unidades (como el stock y los mínimos) y en el PDF y el Excel para el proveedor sale "4 packs x2", con su código, su descripción y el precio por pack.',
+        'El pack sale de la equivalencia del artículo (🔗 Equivalencias → "Unid. por pack"). Si un artículo que viene en pack no muestra el chip, cargá o corregí su equivalencia y volvé a buscar en el catálogo.',
       ],
     },
     {
@@ -172,6 +174,8 @@ function _manualSecciones() {
         '6) "✓ Guardar": se guarda SOLO lo tildado. Las facturas y remitos pendientes de ese proveedor pasan solos al SKU. Si alguna fila falla (SKU que no existe), el aviso lo dice y esas filas quedan en pantalla para corregirlas.',
         'Si una fila tildada ya tenía otra equivalencia, se reemplaza (antes de guardar se avisa cuántas). Los sets que ustedes fraccionan en varios artículos no se importan: se cargan de a uno con Traducir.',
         '🔗 Equivalencias ya cargadas: ✏️ Editar corrige una traducción mal hecha y 🗑 la borra.',
+        '📦 UNID. POR PACK: si el proveedor vende de a varios (PX2, PACK X 3) y nuestro SKU es la unidad suelta, poné cuántas trae (MINIES = 2, HOTEL2 = 3). Con eso: al stock entran las unidades correctas (10 packs = 20 unidades en el TXT), el precio de la factura se controla por unidad contra la lista, y el pedido sale en packs. Si nuestro SKU ya es el set entero (SET X 2 REPASADOR), va 1. Cuando la descripción del proveedor dice "PACK X 3" o "PX2" el sistema lo avisa, pero no lo pone solo: decidís vos. En el Excel se puede traer en una columna "Unid. por pack".',
+        'Al cambiar el pack de una equivalencia, los remitos de ese proveedor que todavía no se importaron al Dragonfish se rehacen solos con las unidades nuevas; lo ya importado no se toca.',
       ],
     },
     {
