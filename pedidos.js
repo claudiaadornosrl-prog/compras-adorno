@@ -96,6 +96,7 @@ function _pedCondHtml(c, importe, conProximo){
 }
 function _pedPintarLin(){
   const el = document.getElementById('ped-lin'); if (el) el.innerHTML = _pedLineasHtml();
+  const cat = document.getElementById('ped-cat'); if (cat && pedCat.length) cat.innerHTML = _pedCatHtml();
   pedCondRefrescar();
 }
 function pedCondRefrescar(){
@@ -274,6 +275,7 @@ async function pedEditar(id){
            lineas: (data.lineas || []).map(l => ({id: l.id, sku: l.sku || '', codigo_proveedor: l.codigo_proveedor || '',
              descripcion: l.descripcion, cantidad: Number(l.cantidad), precio_unitario: l.precio_unitario,
              recibido: Number(l.recibido || 0), cancelado: Number(l.cantidad_cancelada || 0),
+             cant_guardada: ['borrador','enviado','parcial'].includes(p.estado) ? Number(l.cantidad) : 0,
              pack: _pedPk(l), descripcion_proveedor: l.descripcion_proveedor || ''}))};
   pedCat = [];
   await _pedProvs();
@@ -363,7 +365,20 @@ async function pedBuscarCat(){
 // "Falta" = lo que hay que pedir para volver al mínimo: el depósito cubre lo que les
 // falta a los locales + su propio mínimo; el sobrante de un local no cubre al otro;
 // el stock negativo cuenta como 0; ya descuenta lo pedido y no entregado.
-function _pedFalta(a){ const n = Number(a.falta_minimo); return a.falta_minimo == null ? null : (n > 0 ? n : 0); }
+// (29-sep, JP) La base ya descuenta lo pedido en pedidos GUARDADOS. Lo que está en el editor y todavía no
+// se guardó (o se cambió respecto de lo guardado) se descuenta acá, así el sugerido baja apenas se agrega.
+function _pedDeltaEditor(sku){
+  if (!pedEd) return 0;
+  const k = String(sku||'').toUpperCase();
+  return pedEd.lineas.filter(l => (l.sku||'').toUpperCase() === k)
+    .reduce((t, l) => t + Number(l.cantidad||0) - Number(l.cant_guardada||0), 0);
+}
+function _pedFalta(a){
+  if (a.falta_minimo == null) return null;
+  const n = Number(a.falta_minimo) - _pedDeltaEditor(a.sku);
+  return n > 0 ? n : 0;
+}
+function _pedYaPedido(a){ return Math.max(Number(a.pendiente_pedidos||0) + _pedDeltaEditor(a.sku), 0); }
 function _pedStk(stock, min){
   const s = _pedN(stock);
   if (min == null || !(Number(min) > 0)) return s;
@@ -396,7 +411,7 @@ function _pedCatHtml(){
       <td class="num">${_pedMin(a.min_alcorta)} · ${_pedMin(a.min_unicenter)} · ${_pedMin(a.min_oficina)}</td>
       <td class="num">${f == null ? '<span class="mini">sin mín.</span>' : (f > 0 ? `<b style="color:var(--bad)">${_pedN(f)}</b>${_pedPk(a) > 1 ? `<div class="mini">= ${_pedN(Math.ceil(f/_pedPk(a)))} pack${Math.ceil(f/_pedPk(a))===1?'':'s'}</div>` : ''}` : '<span class="mini ped-ok">OK</span>')}</td>
       <td class="num">${a.precio_compra ? plata(a.precio_compra) : '—'}</td>
-      <td class="num">${Number(a.pendiente_pedidos) ? `<b style="color:var(--warn)">${_pedN(a.pendiente_pedidos)}</b>` : '—'}</td>
+      <td class="num">${_pedYaPedido(a) ? `<b style="color:var(--warn)">${_pedN(_pedYaPedido(a))}</b>` : '—'}</td>
       <td class="num"><input class="ped-in" id="ped-cq-${i}" inputmode="decimal" value="${f > 0 ? Math.ceil(f / _pedPk(a)) : 1}" onkeydown="if(event.key==='Enter')pedAgregarCat(${i})"
             title="${_pedPk(a) > 1 ? 'Cantidad de PACKS (de a ' + _pedPk(a) + ' unidades)' : 'Unidades'}">${_pedPk(a) > 1 ? '<div class="mini">packs</div>' : ''}</td>
       <td>${ya.has(String(a.sku).toUpperCase()) ? '<span class="mini ped-ok">✓ en el pedido</span>'
@@ -454,6 +469,7 @@ function pedCampo(i, k, v){
   else l[k] = v;
   const tot = document.getElementById('ped-tot'); if (tot) tot.innerHTML = _pedTotHtml();
   if (['cantidad','packs','precio_unitario'].includes(k)) pedCondRefrescar();
+  if (['cantidad','packs','sku'].includes(k)){ const cat = document.getElementById('ped-cat'); if (cat && pedCat.length) cat.innerHTML = _pedCatHtml(); }
   const sub = document.getElementById('ped-sub-' + i);
   if (sub) sub.textContent = l.precio_unitario ? plata(Number(l.cantidad||0) * Number(l.precio_unitario)) : '—';
 }
