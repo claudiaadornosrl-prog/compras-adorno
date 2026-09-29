@@ -3591,6 +3591,7 @@ async function vistaMercaderia(){
               onclick="txtRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero},'${esc(r.local_destino||'')}')">${r.txt_generado_at?'⬇ TXT ✓':'⬇ TXT'}</button>`}</td>
         </tr>`).join('')}</tbody></table></div>
     </div>` : ''}
+    <div id="juegos-card"></div>
     ${REM_SIN.length ? `<div class="card">
       <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
         <h3 style="font-size:15px;flex:1">📦 Remitos sin factura asociada · ${REM_SIN.length}</h3>
@@ -3637,6 +3638,7 @@ async function vistaMercaderia(){
       <div id="merc-tabla"></div>
     </div>`;
   renderMercTabla();
+  if (typeof cargarJuegosCard === 'function') cargarJuegosCard();   // juegos.js — carga aparte, no frena la pestaña
 }
 
 async function asociarRemito(cuit, pv, num){
@@ -4503,6 +4505,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="op-pdf.js?v=1"></script>
 <script src="pedidos.js?v=6"></script>
 <script src="equiv-import.js?v=3"></script>
-<script src="manual.js?v=62"></script>
+<script src="juegos.js?v=1"></script>
+<script src="manual.js?v=63"></script>
 </body>
 </html>
