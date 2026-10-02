@@ -3050,6 +3050,7 @@ function _pintarEstudio(){
         <div style="flex:1"></div>
         <button class="act gh" onclick="_bajarFormatoEstudio()" title="Mismas columnas que el Subdiario que le mandás hoy">⬇ Formato estudio</button>
         <button class="act" onclick="_bajarIvaCompras()">⬇ IVA Compras completo</button>
+        <button class="act gh" onclick="libroIvaDigital()" title="Archivos TXT del Libro IVA Digital de ARCA (RG 4597): compras y ventas">📚 Libro IVA Digital</button>
       </div>
       <div class="lp-rangos">
         ${[['ing','Fecha de ingreso','Mes en que se contabilizó (si el comprobante no la tiene, cuenta la emisión)'],
@@ -3273,6 +3274,125 @@ function _bajarRetenciones(){
     _csvTxt(r.certificado_nro), r.editado ? 'SÍ' : '', _csvTxt(r.motivo_edicion),
   ].join(';')));
   _csvBajar(`Retenciones practicadas ${_listRotulo(true)}.csv`, filas);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  📚 LIBRO IVA DIGITAL (ARCA · RG 4597) — 2-oct-2026, JP
+//
+//  Mismo formato de ancho fijo que exporta el Dragonfish.
+//  · COMPRAS: se arma acá con los comprobantes del listado en pantalla
+//    (CBTE de 325 caracteres + ALICUOTAS de 84). Los despachos de
+//    importación (archivo IMPORTACIONES) no están en el módulo.
+//  · VENTAS: las ventas no viven en este módulo. Los TXT los genera
+//    C:\CRM_Adorno\libros_iva\generar_libro_iva_ventas.py desde el Dragonfish
+//    (validado idéntico al export del Dragon, ago-2026) y los publica en
+//    `libros_iva_archivos`; acá solo se bajan.
+// ═══════════════════════════════════════════════════════════════════════
+const LIBRO_CUIT = '30709673110';
+const LIBRO_TIPO = {'FC A':'001','ND A':'002','NC A':'003','FC B':'006','ND B':'007','NC B':'008',
+                    'FC C':'011','ND C':'012','NC C':'013','FC M':'051','ND M':'052','NC M':'053'};
+const _libC = (v, n = 15) => String(Math.abs(Math.round((Number(v) || 0) * 100))).padStart(n, '0');
+const _libAscii = t => String(t || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7E]/g, '?');
+function _libBajar(nombre, lineas){
+  const blob = new Blob([lineas.join('\r\n') + '\r\n'], {type: 'text/plain;charset=us-ascii'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nombre; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+// Período del libro = el mes entero elegido arriba (AAAA-MM), o null si hay un rango a medida.
+function _libPeriodo(){
+  const fila = listPer[_listFila()];
+  return (_listEsMesEntero() && fila.desde) ? fila.desde.slice(0, 7) : null;
+}
+
+function _libroCompras(){
+  const cb = [], al = [], avisos = [];
+  (LIST_IVA || []).forEach(x => {
+    const tipo = LIBRO_TIPO[(x.tipo || '') + ' ' + (x.letra || '')];
+    const ref = `${x.comprobante} ${x.proveedor_nombre || ''}`;
+    if (!tipo){ avisos.push(`${ref}: tipo/letra sin código de ARCA — no se incluyó`); return; }
+    const cuit = String(x.cuit_emisor || '').replace(/\D/g, '');
+    if (cuit.length !== 11) avisos.push(`${ref}: CUIT del proveedor incompleto`);
+    if ((x.moneda || 'ARS') !== 'ARS') avisos.push(`${ref}: está en ${x.moneda} — se informa en pesos con cotización 1, revisarlo`);
+    if (Math.abs(Number(x.iva_otros) || 0) > 0.005) avisos.push(`${ref}: tiene IVA de ajuste (${plata(x.iva_otros)}) que no entra en ninguna alícuota`);
+    const clave = tipo + String(x.punto_venta || 0).padStart(5, '0') + String(x.numero || 0).padStart(20, '0');
+    const prov = '80' + cuit.padStart(20, '0');
+    const noGrav = Math.abs(Number(x.no_gravado) || 0), exento = Math.abs(Number(x.exento) || 0);
+    // alícuotas: una línea por tasa con importe. Los comprobantes C no llevan.
+    let lineas = [];
+    if (x.letra !== 'C'){
+      [['0005', x.neto_21, x.iva_21], ['0004', x.neto_105, x.iva_105], ['0006', x.neto_27, x.iva_27]].forEach(([cod, n, i]) => {
+        if (Math.abs(Number(n) || 0) > 0.005 || Math.abs(Number(i) || 0) > 0.005) lineas.push([cod, n, i]);
+      });
+      // con no gravado/exento (o sin ninguna tasa) el Dragonfish agrega una línea 0 % en cero
+      if (noGrav > 0.005 || exento > 0.005 || !lineas.length) lineas.push(['0003', 0, 0]);
+    }
+    const codOp = x.letra === 'C' ? 'N' : (noGrav > 0.005 ? 'N' : exento > 0.005 ? 'E' : lineas.some(l => l[0] !== '0003') ? ' ' : 'N');
+    const credito = lineas.reduce((a, l) => a + Math.abs(Number(l[2]) || 0), 0);
+    cb.push(String(x.fecha_emision || '').replace(/-/g, '') + clave + ' '.repeat(16) + prov
+      + _libAscii(x.proveedor_nombre).slice(0, 30).padEnd(30) + _libC(x.total) + _libC(noGrav) + _libC(exento)
+      + _libC(x.percep_iva) + _libC(0) + _libC((Number(x.percep_iibb_caba) || 0) + (Number(x.percep_iibb_ba) || 0)) + _libC(0) + _libC(0)
+      + 'PES' + '0001000000' + String(lineas.length) + codOp + _libC(credito) + _libC(x.otros_tributos)
+      + '0'.repeat(11) + ' '.repeat(30) + _libC(0));
+    lineas.forEach(([cod, n, i]) => al.push(clave + prov + _libC(n) + cod + _libC(i)));
+  });
+  return {cb, al, avisos};
+}
+
+async function libroIvaDigital(){
+  const per = _libPeriodo();
+  const {cb, al, avisos} = _libroCompras();
+  let ven = [], errVen = null;
+  if (per){
+    const r = await sb.from('libros_iva_archivos').select('archivo,lineas,comprobantes,total,generado_at,origen').eq('periodo', per).like('archivo', 'VENTAS_%');
+    if (r.error) errVen = r.error.message; else ven = r.data || [];
+  }
+  const v0 = ven[0];
+  openModalP(`
+    <h3 style="margin:0 0 3px">📚 Libro IVA Digital · ${per ? esc(_listRotulo()) : 'elegí un mes'}</h3>
+    <p class="mini" style="margin:0 0 12px">Archivos de texto para importar en ARCA (RG 4597), con el mismo formato que exporta el Dragonfish.</p>
+    ${per ? '' : '<div class="alerta" style="margin-bottom:10px">El libro es por mes entero: elegí un mes arriba (no un rango a medida) y volvé a abrir.</div>'}
+
+    <div class="card" style="margin:0 0 10px">
+      <h4 style="font-size:14px;margin:0 0 4px">Compras</h4>
+      <p class="mini" style="margin:0 0 8px"><b>${cb.length}</b> comprobantes · <b>${al.length}</b> líneas de alícuotas.
+        Son los mismos comprobantes del listado en pantalla (el mes se elige por <b>${listPor === 'ingreso' ? 'fecha de ingreso' : 'fecha de emisión'}</b>).
+        ${MODO_PRUEBA ? '<b style="color:#92400e">🧪 Ambiente de prueba: solo comprobantes de test.</b>' : ''}</p>
+      ${avisos.length ? `<div class="alerta" style="margin-bottom:8px;max-height:120px;overflow:auto"><b>${avisos.length} aviso${avisos.length === 1 ? '' : 's'} para revisar antes de presentar:</b><br>${avisos.slice(0, 40).map(a => '· ' + esc(a)).join('<br>')}</div>` : ''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="act" ${per && cb.length ? '' : 'disabled'} onclick="_libBajarCompras('cb')">⬇ COMPRAS_CBTE</button>
+        <button class="act" ${per && al.length ? '' : 'disabled'} onclick="_libBajarCompras('al')">⬇ COMPRAS_ALICUOTAS</button>
+      </div>
+      <p class="mini" style="margin:8px 0 0">El tercer archivo de compras (IMPORTACIONES, despachos de aduana) no sale de acá: el módulo todavía no carga despachos.</p>
+    </div>
+
+    <div class="card" style="margin:0">
+      <h4 style="font-size:14px;margin:0 0 4px">Ventas</h4>
+      ${errVen ? `<div class="alerta">${esc(errVen)}</div>`
+        : v0 ? `<p class="mini" style="margin:0 0 8px"><b>${v0.comprobantes}</b> comprobantes · total ${plata(v0.total)} (las NC restan).
+              Generado el ${new Date(v0.generado_at).toLocaleString('es-AR', {dateStyle: 'short', timeStyle: 'short'})} desde ${esc(v0.origen || 'Dragonfish')}.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="act" onclick="_libBajarVentas('${per}','VENTAS_CBTE')">⬇ VENTAS_CBTE</button>
+              <button class="act" onclick="_libBajarVentas('${per}','VENTAS_ALICUOTAS')">⬇ VENTAS_ALICUOTAS</button>
+            </div>
+            <p class="mini" style="margin:8px 0 0">El libro de ventas son estos dos archivos (no hay un tercero).</p>`
+        : `<p class="mini" style="margin:0">${per ? 'Todavía no está generado el libro de ventas de este mes. Las ventas salen del Dragonfish: se generan con <code>generar_libro_iva_ventas.py</code> y aparecen acá.' : '—'}</p>`}
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="act gh" onclick="cerrarModalP()">Cerrar</button></div>`);
+}
+function _libBajarCompras(cual){
+  const per = _libPeriodo(); if (!per) return;
+  const {cb, al} = _libroCompras(), pm = per.replace('-', '');
+  if (cual === 'cb') _libBajar(`LIBRO_IVA_DIGITAL_COMPRAS_CBTE_${LIBRO_CUIT}_${pm}${MODO_PRUEBA ? '_PRUEBA' : ''}.txt`, cb);
+  else _libBajar(`LIBRO_IVA_DIGITAL_COMPRAS_ALICUOTAS_${LIBRO_CUIT}_${pm}${MODO_PRUEBA ? '_PRUEBA' : ''}.txt`, al);
+}
+async function _libBajarVentas(per, archivo){
+  const r = await sb.from('libros_iva_archivos').select('contenido').eq('periodo', per).eq('archivo', archivo).single();
+  if (r.error){ alert('No se pudo bajar: ' + r.error.message); return; }
+  const blob = new Blob([r.data.contenido], {type: 'text/plain;charset=us-ascii'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `LIBRO_IVA_DIGITAL_${archivo}_${LIBRO_CUIT}_${per.replace('-', '')}.txt`; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
 function _bajarIvaCompras(){
