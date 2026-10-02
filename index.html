@@ -313,6 +313,7 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 @media (max-width:640px){.fx-cab{grid-template-columns:1fr}.fx-cab>div:last-child{text-align:left}.fx-pie{grid-template-columns:1fr}}
 #ctrl-overlay .c-pie,#map-overlay .c-pie,#res-overlay .c-pie,#merc-overlay .c-pie,#sf-overlay .c-pie{display:flex;gap:8px;align-items:center;padding:12px 17px;border-top:1px solid var(--bd);
   background:#f8fafc;border-radius:0 0 14px 14px;position:sticky;bottom:0;}
+[id$="-overlay"] .c-head{cursor:move}
 .op-tip{position:relative;cursor:help;border-bottom:1px dotted currentColor}
 .op-tip .op-tipbox{display:none;position:absolute;left:0;top:calc(100% + 4px);z-index:60;background:#1f2937;color:#f9fafb;
   border-radius:9px;padding:9px 11px;font-size:12px;line-height:1.45;width:min(420px,80vw);box-shadow:0 8px 24px rgba(0,0,0,.25);white-space:normal;text-align:left;font-weight:400}
@@ -667,16 +668,20 @@ function pintarOrdenes(){
     </div>
 
     <div class="card">
+      <div style="float:right;display:flex;gap:6px">
+        <button class="act gh" style="font-size:12px;padding:5px 9px" onclick="opExportar('pend','xlsx')">⬇ Excel</button>
+        <button class="act gh" style="font-size:12px;padding:5px 9px" onclick="opExportar('pend','pdf')">⬇ PDF</button></div>
       <h3 style="font-size:15px;margin-bottom:4px">Facturas esperando orden de pago</h3>
       <p class="mini" style="margin-bottom:11px">Son los comprobantes ya controlados. Tocá un proveedor para armarle la OP.
         ${MODO_PRUEBA ? '<b style="color:#92400e">🧪 En prueba: las OP llevan punto de venta 9999 y NO generan el pendiente en Tesorería.</b>' : ''}</p>
       ${OP_PROVS.length ? `<div style="overflow-x:auto"><table>
         <thead><tr><th>Proveedor</th><th>CUIT</th><th class="num">Comprob.</th>
-          <th class="num">Total</th><th>Más vieja</th><th></th></tr></thead>
+          <th class="num" title="Sin IVA ni percepciones">Neto</th><th class="num">Total</th><th>Más vieja</th><th></th></tr></thead>
         <tbody>${OP_PROVS.map(p => `<tr>
           <td><b>${esc(p.proveedor||'—')}</b></td>
           <td class="mini">${esc(p.cuit||'')}</td>
           <td class="num">${p.facturas}</td>
+          <td class="num mini">${p.neto != null ? plata(p.neto) : '—'}</td>
           <td class="num"><b>${plata(p.total)}</b></td>
           <td class="mini">${_fecha(p.mas_vieja)}${_diasDesde(p.mas_vieja)}</td>
           <td class="num"><button class="act" style="font-size:12.5px;padding:6px 11px"
@@ -686,12 +691,18 @@ function pintarOrdenes(){
     </div>
 
     <div class="card">
-      <h3 style="font-size:15px;margin-bottom:11px">Órdenes emitidas</h3>
-      ${OP_LISTA.length ? `<div style="overflow-x:auto"><table>
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:11px">
+        <h3 style="font-size:15px;margin:0;flex:1;min-width:160px">Órdenes emitidas</h3>
+        <div><label class="mini">Desde</label><br><input type="date" id="opl-desde" value="${esc(OP_FILTRO.desde)}" onchange="OP_FILTRO.desde=this.value;pintarOrdenes()" style="padding:5px 7px;font-size:12.5px"></div>
+        <div><label class="mini">Hasta</label><br><input type="date" id="opl-hasta" value="${esc(OP_FILTRO.hasta)}" onchange="OP_FILTRO.hasta=this.value;pintarOrdenes()" style="padding:5px 7px;font-size:12.5px"></div>
+        <button class="act gh" style="font-size:12px;padding:5px 9px" onclick="opExportar('emit','xlsx')">⬇ Excel</button>
+        <button class="act gh" style="font-size:12px;padding:5px 9px" onclick="opExportar('emit','pdf')">⬇ PDF</button>
+      </div>
+      ${_opListaFiltrada().length ? `<div style="overflow-x:auto"><table>
         <thead><tr><th>Orden</th><th>Fecha</th><th>Proveedor</th><th class="num">Comp.</th>
           <th class="num">Subtotal</th><th class="num">Retenciones</th><th class="num">A pagar</th>
           <th>Estado</th><th></th></tr></thead>
-        <tbody>${OP_LISTA.map(o => `<tr${o.estado==='anulada' ? ' style="opacity:.5"' : ''}>
+        <tbody>${_opListaFiltrada().map(o => `<tr${o.estado==='anulada' ? ' style="opacity:.5"' : ''}>
           <td><b>${esc(o.comprobante)}</b></td>
           <td class="mini">${_fecha(o.fecha)}</td>
           <td>${esc((o.proveedor||'').slice(0,30))}</td>
@@ -706,8 +717,70 @@ function pintarOrdenes(){
             ${o.estado!=='anulada' ? `<button class="act gh" style="font-size:12px;padding:5px 9px;color:var(--bad)"
                 onclick="anularOP(${o.id}, '${esc(o.comprobante)}')">Anular</button>` : ''}</td>
         </tr>`).join('')}</tbody></table></div>`
-      : '<div class="vacio">Todavía no se emitió ninguna orden de pago.</div>'}
+      : `<div class="vacio">${OP_LISTA.length ? 'No hay órdenes en ese rango de fechas.' : 'Todavía no se emitió ninguna orden de pago.'}</div>`}
     </div>`;
+}
+
+// ── Listados de OP a Excel y PDF (2-oct, JP) ───────────────────────────
+const OP_FILTRO = {desde: '', hasta: ''};
+const _opListaFiltrada = () => (OP_LISTA || []).filter(o =>
+  (!OP_FILTRO.desde || o.fecha >= OP_FILTRO.desde) && (!OP_FILTRO.hasta || o.fecha <= OP_FILTRO.hasta));
+function _cargarScript(src){
+  return new Promise((ok, mal) => { const sc = document.createElement('script'); sc.src = src; sc.onload = ok; sc.onerror = () => mal(new Error('No se pudo cargar ' + src)); document.head.appendChild(sc); });
+}
+async function opExportar(cual, formato){
+  // columnas: [título, valor(fila), 'n' importe / 'e' entero, ancho relativo en el PDF]
+  let titulo, filas, cols;
+  if (cual === 'pend'){
+    titulo = 'Facturas esperando orden de pago'; filas = OP_PROVS || [];
+    cols = [['Proveedor', p => p.proveedor || '', '', 70], ['CUIT', p => p.cuit || '', '', 26], ['Comprob.', p => Number(p.facturas)||0, 'e', 18],
+            ['Neto', p => Number(p.neto)||0, 'n', 32], ['Total', p => Number(p.total)||0, 'n', 32], ['Más vieja', p => _fecha(p.mas_vieja), '', 22]];
+  } else {
+    titulo = 'Órdenes de pago emitidas' + ((OP_FILTRO.desde || OP_FILTRO.hasta) ? (' · ' + (OP_FILTRO.desde ? 'desde ' + _fecha(OP_FILTRO.desde) + ' ' : '') + (OP_FILTRO.hasta ? 'hasta ' + _fecha(OP_FILTRO.hasta) : '')).trimEnd() : '');
+    filas = _opListaFiltrada();
+    cols = [['Orden', o => o.comprobante, '', 36], ['Fecha', o => _fecha(o.fecha), '', 19], ['Proveedor', o => o.proveedor || '', '', 62], ['CUIT', o => o.cuit || '', '', 24],
+            ['Comp.', o => Number(o.comprobantes)||0, 'e', 12], ['Subtotal', o => Number(o.subtotal)||0, 'n', 28], ['Retenciones', o => Number(o.retenciones_total)||0, 'n', 26],
+            ['A pagar', o => Number(o.neto_a_pagar)||0, 'n', 28], ['Estado', o => o.estado === 'pago_parcial' ? 'pago parcial' : o.estado, '', 20], ['Medio de pago', o => o.medio_pago || '', '', 30]];
+  }
+  if (!filas.length){ alert('No hay nada para exportar.'); return; }
+  // los totales no suman las anuladas
+  const suma = c => filas.filter(x => x.estado !== 'anulada').reduce((a, x) => a + (Number(c[1](x)) || 0), 0);
+  const rotTotal = 'TOTAL' + (cual === 'emit' ? ' (sin anuladas)' : '');
+  const nombre = titulo.replace(/[·/]/g, '-').replace(/\s+/g, ' ') + (MODO_PRUEBA ? ' (PRUEBA)' : '');
+  try {
+    if (formato === 'xlsx'){
+      if (!window.XLSX) await _cargarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+      const aoa = [[titulo + (MODO_PRUEBA ? ' — AMBIENTE DE PRUEBA' : '')], [], cols.map(c => c[0])]
+        .concat(filas.map(x => cols.map(c => c[1](x))))
+        .concat([cols.map((c, i) => i === 0 ? rotTotal : c[2] ? suma(c) : '')]);
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = cols.map(c => ({wch: Math.max(10, Math.round(c[3] / 2))}));
+      cols.forEach((c, j) => { if (c[2] !== 'n') return;
+        for (let i = 3; i < aoa.length; i++){ const cel = ws[XLSX.utils.encode_cell({r: i, c: j})]; if (cel && typeof cel.v === 'number') cel.z = '#,##0.00'; } });
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, cual === 'pend' ? 'Esperando OP' : 'Ordenes de pago');
+      XLSX.writeFile(wb, nombre + '.xlsx');
+    } else {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({unit: 'mm', format: 'a4', orientation: 'landscape'});
+      const ancho = cols.reduce((a, c) => a + c[3], 0), k = 269 / ancho, n2 = v => (Number(v)||0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+      let y = 0, pag = 0;
+      const fila = (vals, negrita) => { doc.setFont('helvetica', negrita ? 'bold' : 'normal'); doc.setFontSize(8); let x = 14;
+        cols.forEach((c, j) => { const w = c[3] * k, num = c[2];
+          let t = String(vals[j] ?? ''); const max = Math.floor(w / 1.45); if (!num && t.length > max) t = t.slice(0, max - 1) + '…';
+          if (num) doc.text(t, x + w - 1.5, y, {align: 'right'}); else doc.text(t, x, y);
+          x += w; }); y += 4.6; };
+      const cabecera = () => { pag++; doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text('Claudia Adorno SRL · ' + titulo, 14, 13);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.text(`Emitido el ${_fecha(_hoyISO())}${MODO_PRUEBA ? ' · AMBIENTE DE PRUEBA' : ''} · página ${pag}`, 283, 13, {align: 'right'});
+        y = 21; fila(cols.map(c => c[0]), true); doc.line(14, y - 3.2, 283, y - 3.2); };
+      cabecera();
+      filas.forEach(xf => { if (y > 195){ doc.addPage(); cabecera(); }
+        if (xf.estado === 'anulada') doc.setTextColor(150);
+        fila(cols.map(c => c[2] === 'n' ? n2(c[1](xf)) : c[1](xf))); doc.setTextColor(0); });
+      doc.line(14, y - 3.2, 283, y - 3.2);
+      fila(cols.map((c, i) => i === 0 ? rotTotal : c[2] === 'n' ? n2(suma(c)) : c[2] === 'e' ? suma(c) : ''), true);
+      doc.save(nombre + '.pdf');
+    }
+  } catch (e){ alert('No se pudo generar el listado: ' + e.message); }
 }
 
 const _diasDesde = f => {
@@ -747,7 +820,7 @@ function _pintarModalOP(cands){
 
     <div style="max-height:230px;overflow:auto;border:1px solid var(--bd);border-radius:9px;margin-bottom:12px">
       <table style="font-size:13px"><thead><tr>
-        <th style="width:34px"></th><th>Fecha</th><th>Vence</th><th>Comprobante</th><th>Tipo</th><th title="Remito asociado a la factura y en qué estado está su stock">Remito</th><th class="num">Total</th></tr></thead>
+        <th style="width:34px"></th><th>Fecha</th><th>Vence</th><th>Comprobante</th><th>Tipo</th><th title="Remito asociado a la factura y en qué estado está su stock">Remito</th><th class="num" title="Sin IVA ni percepciones">Neto</th><th class="num">Total</th></tr></thead>
       <tbody>${cands.map(d => `<tr${d.es_nc ? ' style="background:#fef2f2"' : ''}>
         <td style="text-align:center"><input type="checkbox" data-doc="${d.documento_id}" checked
              onchange="_opToggle(${d.documento_id}, this.checked)"></td>
@@ -756,6 +829,7 @@ function _pintarModalOP(cands){
         <td>${esc(d.comprobante)}</td>
         <td class="mini">${esc(d.tipo_gasto||'')}${d.moneda!=='ARS' ? ' · '+esc(d.moneda) : ''}</td>
         <td style="white-space:nowrap;font-size:12px">${d.es_nc ? '<span class="mini">—</span>' : celdaRemitos({id: d.documento_id, tipo_gasto: d.tipo_gasto})}</td>
+        <td class="num mini"${d.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(d.neto)}</td>
         <td class="num"${d.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(d.total)}</td>
       </tr>`).join('')}</tbody></table>
     </div>
@@ -767,7 +841,7 @@ function _pintarModalOP(cands){
       <div><label>Vence <span class="mini" title="Se propone el vencimiento más cercano de las facturas marcadas. Es la fecha de pago del pendiente en Tesorería.">(fecha de pago)</span></label><input type="date" id="op-venc" value="${_opVencDefault(cands)}" onchange="opVencManual=true"></div>
     </div>
     <datalist id="dl-medios"><option>Transferencia</option><option>Cheque</option>
-      <option>Echeq</option><option>Efectivo</option><option>Mercado Pago</option></datalist>
+      <option>Echeq</option><option>Efectivo</option><option>Mercado Pago</option><option>Débito automático</option></datalist>
     <label>Observaciones</label>
     <input id="op-obs" placeholder="opcional" style="margin-bottom:12px">
 
@@ -829,7 +903,8 @@ async function _opCalcular(){
   if (!opPagos.length) opPagos = [{medio: '', importe: 0, cuenta_id: null, cheque_numero: '', cheque_banco: '', cheque_fecha: '', cheque_emision: '', dias_diferimiento: '', notas: ''}];
   if (opPagos.length === 1) opPagos[0].importe = Math.round(_opNeto() * 100) / 100;
   if (OP_CUENTAS === null){
-    const cu = await sb.from('tesoreria_cuentas').select('id,nombre,tipo,moneda,local').eq('activa', true).order('orden_display');
+    // (2-oct, JP) solo las cuentas PAGADORAS (tesoreria_cuentas.pagadora): no se paga desde un plazo fijo o un fondo
+    const cu = await sb.from('tesoreria_cuentas').select('id,nombre,tipo,moneda,local,pagadora').eq('activa', true).eq('pagadora', true).order('orden_display');
     OP_CUENTAS = cu.error ? [] : (cu.data || []);
   }
   const av = data.avisos || [], pp = data.pagos_posibles || [];
@@ -884,6 +959,27 @@ function _opFechaPago(p){
 // Título con mayúscula inicial para mostrar (lo guardado se normaliza igual)
 const _opCap = m => { m = String(m||'').trim(); return m ? m.charAt(0).toUpperCase() + m.slice(1) : m; };
 
+// (2-oct, JP) Qué cuentas pagadoras sirven para cada medio: efectivo sale de una caja, Mercado Pago de MP,
+// cheque/echeq del banco; transferencia y débito automático, del banco o de MP. Medio sin reconocer → todas.
+function _opCuentasPara(medio){
+  const todas = OP_CUENTAS || [], m = String(medio||'').toLowerCase();
+  let tipos = null;
+  if (/efect/.test(m)) tipos = ['caja'];
+  else if (/mercado|^mp\b/.test(m)) tipos = ['mp'];
+  else if (/cheq/.test(m)) tipos = ['banco_cc'];
+  else if (/transf|d[eé]bito/.test(m)) tipos = ['banco_cc', 'mp'];
+  const l = tipos ? todas.filter(c => tipos.includes(c.tipo)) : todas;
+  return l.length ? l : todas;
+}
+// Al terminar de elegir el medio: se re-dibuja para que la lista de cuentas sea la de ese medio.
+function _opPagoMedioFin(i){
+  const p = opPagos[i]; if (!p) return;
+  const l = _opCuentasPara(p.medio);
+  if (p.cuenta_id && !l.some(c => c.id === p.cuenta_id)) p.cuenta_id = null;
+  if (!p.cuenta_id && l.length === 1 && (p.medio||'').trim()) p.cuenta_id = l[0].id;
+  _opPintarPagos();
+}
+
 function _opPintarPagos(){
   const cont = document.getElementById('op-pagos'); if (!cont) return;
   const neto = _opNeto(), suma = _opSumPagos(), dif = Math.round((neto - suma)*100)/100;
@@ -893,15 +989,15 @@ function _opPintarPagos(){
     ${opPagos.map((p,i) => `
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px;padding:6px 8px;border:1px solid var(--bd);border-radius:9px">
         <div style="flex:1;min-width:130px"><label>Medio</label>
-          <input list="dl-medios" value="${esc(p.medio||'')}" placeholder="Transferencia / Cheque / Echeq / Efectivo"
-                 oninput="_opPagoSet(${i},'medio',this.value)" style="font-size:12.5px;padding:5px 7px"></div>
+          <input list="dl-medios" value="${esc(p.medio||'')}" placeholder="Transferencia / Cheque / Echeq / Efectivo / Débito automático"
+                 oninput="_opPagoSet(${i},'medio',this.value)" onchange="_opPagoMedioFin(${i})" style="font-size:12.5px;padding:5px 7px"></div>
         <div style="width:140px"><label>Importe</label>
           <input type="number" step="0.01" min="0" value="${Number(p.importe)||0}" ${opPagos.length===1 ? 'readonly title="Con un solo medio, el importe es el neto a pagar"' : ''}
                  oninput="_opPagoSet(${i},'importe',this.value)" style="text-align:right;font-size:12.5px;padding:5px 7px"></div>
-        ${ctas.length ? `<div style="min-width:150px"><label>Cuenta</label>
+        ${ctas.length ? `<div style="min-width:150px"><label title="Solo las cuentas desde las que se puede pagar, según el medio elegido">Cuenta pagadora</label>
           <select onchange="_opPagoSet(${i},'cuenta_id',this.value)" style="font-size:12.5px;padding:5px 7px">
             <option value="">—</option>
-            ${ctas.map(c => `<option value="${c.id}" ${String(p.cuenta_id||'')===String(c.id)?'selected':''}>${esc(c.nombre)}</option>`).join('')}
+            ${_opCuentasPara(p.medio).map(c => `<option value="${c.id}" ${String(p.cuenta_id||'')===String(c.id)?'selected':''}>${esc(c.nombre)}</option>`).join('')}
           </select></div>` : ''}
         ${_opEsCheque(p.medio) ? `
           ${_opEsEcheq(p.medio) ? '' : `<div style="width:110px"><label>N° cheque</label><input value="${esc(p.cheque_numero||'')}" oninput="_opPagoSet(${i},'cheque_numero',this.value)" style="font-size:12.5px;padding:5px 7px"></div>`}
@@ -973,6 +1069,11 @@ function _opPintarRets(){
     <table style="font-size:13px"><tbody>
       ${opRets.length ? opRets.map((r,i) => {
         const ed = _opEditada(r);
+        if (r.eliminada) return `<tr style="opacity:.6">
+        <td style="padding-right:10px"><s>${esc(r.codigo + ' · ' + (r.nombre||'').slice(0,42))}</s>
+          <span class="chip" style="background:#fee2e2;color:#991b1b">eliminada</span>
+          <br><span class="mini">calculado: ${plata(r.calculado)} · ${esc(r.motivo_edicion||'')}</span></td>
+        <td class="num" style="white-space:nowrap">— <button class="act gh" onclick="_opRetRestaurar(${i})" title="Volver a aplicar la retención calculada" style="padding:2px 7px;margin-left:3px">↺</button></td></tr>`;
         return `<tr>
         <td style="padding-right:10px">${_opTip(r.calculo, r.codigo + ' · ' + (r.nombre||'').slice(0,42))}
           ${r.propuesto ? ' <span class="chip" style="background:#fef3c7;color:#92400e">propuesto</span>' : ''}
@@ -992,7 +1093,7 @@ function _opPintarRets(){
                  style="width:118px;text-align:right;display:inline-block;padding:4px 7px">
           ${r.agregada
             ? `<button class="act gh" onclick="_opRetQuitar(${i})" title="Quitar" style="padding:2px 7px;margin-left:3px">✕</button>`
-            : `<button class="act gh" onclick="_opRetReset(${i})" title="Volver a lo calculado" style="padding:2px 7px;margin-left:3px">↺</button>`}
+            : `<button class="act gh" onclick="_opRetReset(${i})" title="Volver a lo calculado" style="padding:2px 7px;margin-left:3px">↺</button><button class="act gh" onclick="_opRetEliminar(${i})" title="Eliminar esta retención de la orden" style="padding:2px 7px;margin-left:3px;color:var(--bad)">✕</button>`}
         </td></tr>`; }).join('')
         : '<tr><td class="mini">Sin retenciones para este proveedor.</td><td></td></tr>'}
       ${libres.length ? `<tr><td colspan="2" style="padding-top:6px">
@@ -1042,7 +1143,30 @@ function _opRetAgregar(cod){
 }
 
 function _opRetMotivo(i, val){ if (opRets[i]) opRets[i].motivo_edicion = val; }
-function _opRetQuitar(i){ opRets.splice(i,1); _opPintarRets(); }
+// (2-oct, JP) Eliminar una retención propuesta. Si el sistema había calculado un importe, queda registrada
+// en $0 con el motivo (el certificado tiene que poder explicar por qué NO se retuvo); si ya daba $0, se quita.
+function _opRetEliminar(i){
+  const r = opRets[i]; if (!r) return;
+  if (Number(r.calculado) > 0){
+    const m = prompt(`Eliminar la retención ${r.codigo} (${plata(r.calculado)}) de esta orden.\n\n¿Por qué no se retiene? Queda guardado en la orden.`);
+    if (m === null) return;
+    if (!m.trim()){ alert('El motivo es obligatorio.'); return; }
+    r.eliminada = true; r.importe = 0; r.motivo_edicion = 'Retención eliminada: ' + m.trim();
+  } else {
+    opRets.splice(i, 1);
+  }
+  _opRetsCambio();
+}
+function _opRetRestaurar(i){
+  const r = opRets[i]; if (!r) return;
+  r.eliminada = false; r.importe = Number(r.calculado) || 0; r.motivo_edicion = '';
+  _opRetsCambio();
+}
+function _opRetsCambio(){
+  if (opPagos.length === 1) opPagos[0].importe = Math.round(_opNeto()*100)/100;
+  _opPintarRets(); _opPintarPagos();
+}
+function _opRetQuitar(i){ opRets.splice(i,1); _opRetsCambio(); }
 
 async function emitirOP(){
   if (!opPrep){ alert('Todavía no se calculó la orden.'); return; }
@@ -1129,11 +1253,12 @@ async function verOP(id){
     <table style="font-size:13px;margin-bottom:12px"><tbody>${f.map(x => `<tr>
       <td class="mini">${_fecha(x.fecha)}</td>
       <td>${esc(x.comprobante)}${x.archivo_path ? ` <a href="${_pdfUrl(x.archivo_path)}" target="_blank" rel="noopener">📄</a>` : ''}</td>
+      <td class="num mini" title="Neto, sin IVA ni percepciones"${x.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(x.neto)}</td>
       <td class="num"${x.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(x.total)}</td></tr>`).join('')}
-      <tr style="font-weight:700"><td colspan="2">Subtotal</td><td class="num">${plata(o.subtotal)}</td></tr>
+      <tr style="font-weight:700"><td colspan="2">Subtotal</td><td class="num mini">${plata(f.reduce((a,x) => a + Number(x.neto||0), 0))} neto</td><td class="num">${plata(o.subtotal)}</td></tr>
     </tbody></table>
-    <h4 style="font-size:13px;margin:0 0 5px">Retenciones practicadas</h4>
-    <table style="font-size:13px"><tbody>${r.length ? r.map(x => `<tr>
+    <h4 style="font-size:13px;margin:0 0 5px">${o.estado==='anulada' ? 'Retenciones <span style="color:var(--bad)">ANULADAS con la orden</span> (no se practicaron)' : 'Retenciones practicadas'}</h4>
+    <table style="font-size:13px${o.estado==='anulada' ? ';text-decoration:line-through;opacity:.6' : ''}"><tbody>${r.length ? r.map(x => `<tr>
       <td>${_opTip(x.calculo, x.codigo + ' · ' + (x.nombre||'').slice(0,38))}
         ${x.editado ? ' <span class="chip" style="background:#fee2e2;color:#991b1b">a mano</span>' : ''}
         ${x.aviso ? `<br><span class="mini" style="color:#b45309">${esc(x.aviso)}</span>` : ''}
@@ -1163,13 +1288,14 @@ async function verOP(id){
 }
 
 async function anularOP(id, comp){
-  const motivo = prompt(`Anular ${comp}\n\nLas facturas vuelven a quedar disponibles para armar otra OP` +
+  const motivo = prompt(`Anular ${comp}\n\nLas facturas vuelven a quedar disponibles para armar otra OP, se anulan sus retenciones` +
     (MODO_PRUEBA ? '.' : ' y se cancela el pendiente en Tesorería.') + '\n\n¿Por qué la anulás?');
   if (motivo === null) return;
   if (!motivo.trim()){ alert('El motivo es obligatorio.'); return; }
   const {data, error} = await sb.rpc('compras_op_anular', {p_op: id, p_motivo: motivo.trim()});
   if (error){ alert('No se pudo anular: ' + error.message); return; }
-  alert(`Anulada. ${data.comprobantes_liberados} comprobante(s) volvieron a "controlado sin OP".`);
+  alert(`Anulada. ${data.comprobantes_liberados} comprobante(s) volvieron a "controlado sin OP".` +
+        (data.retenciones_anuladas ? `\n${data.retenciones_anuladas} retención(es) anulada(s): no entran en los listados ni en el acumulado del mes.` : ''));
   vistaOrdenes();
 }
 
@@ -1545,7 +1671,8 @@ function openModalP(html){
   if (!m){ m = document.createElement('div'); m.id = 'prov-modal';
     m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
     m.onclick = e => { if (e.target === m) cerrarModalP(); }; document.body.appendChild(m); }
-  m.innerHTML = `<div style="background:#fff;border-radius:12px;padding:20px;width:min(880px,96vw);max-height:92vh;overflow:auto;">${html}</div>`;
+  m.innerHTML = `<div style="background:#fff;border-radius:12px;padding:20px;width:min(880px,96vw);max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);">${html}</div>`;
+  const h3 = m.querySelector('h3'); if (h3){ h3.style.cursor = 'move'; h3.title = 'Arrastrá desde acá para mover la ventana'; }
   m.querySelectorAll('input,select,textarea').forEach(el => {
     el.style.cssText += 'width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:13.5px;font-family:inherit;box-sizing:border-box;';
     if (el.type === 'checkbox') el.style.cssText = 'width:17px;height:17px;margin-top:2px;';
@@ -1553,6 +1680,48 @@ function openModalP(html){
   m.querySelectorAll('label').forEach(l => { l.style.cssText += 'display:block;font-size:12px;color:var(--mut);font-weight:600;'; });
 }
 function cerrarModalP(){ document.getElementById('prov-modal')?.remove(); }
+
+// (2-oct, JP) Ventanas MOVIBLES: se arrastran desde la franja de arriba (el título) por toda la pantalla.
+// Vale para el modal de proveedores/OP (#prov-modal) y para todos los *-overlay con .c-head.
+(function(){
+  let box = null, x0 = 0, y0 = 0, dx0 = 0, dy0 = 0;
+  const punto = e => e.touches ? e.touches[0] : e;
+  function empezar(e){
+    const ov = e.target.closest && e.target.closest('#prov-modal,[id$="-overlay"]'); if (!ov) return;
+    if (e.target.closest('input,select,textarea,button,a,label,.op-tip')) return;
+    let b = null;
+    const cab = e.target.closest('.c-head');
+    if (cab) b = cab.closest('.c-box') || ov.firstElementChild;
+    else if (ov.id === 'prov-modal'){
+      b = ov.firstElementChild;
+      if (!b || !b.contains(e.target) || punto(e).clientY - b.getBoundingClientRect().top > 58) return;
+    }
+    if (!b) return;
+    box = b; x0 = punto(e).clientX; y0 = punto(e).clientY; dx0 = b._dx || 0; dy0 = b._dy || 0;
+    document.body.style.userSelect = 'none';
+    if (!e.touches) e.preventDefault();
+  }
+  function mover(e){
+    if (!box) return;
+    const p = punto(e), r = box.getBoundingClientRect();
+    let dx = dx0 + p.clientX - x0, dy = dy0 + p.clientY - y0;
+    // que siempre quede un pedazo agarrable a la vista
+    const izq = r.left - (box._dx || 0) + dx, arr = r.top - (box._dy || 0) + dy;
+    if (izq > innerWidth - 80) dx -= izq - (innerWidth - 80);
+    if (izq + r.width < 80) dx += 80 - (izq + r.width);
+    if (arr < 0) dy -= arr;
+    if (arr > innerHeight - 50) dy -= arr - (innerHeight - 50);
+    box._dx = dx; box._dy = dy; box.style.transform = `translate(${dx}px,${dy}px)`;
+    if (e.cancelable && e.touches) e.preventDefault();
+  }
+  function soltar(){ box = null; document.body.style.userSelect = ''; }
+  document.addEventListener('mousedown', empezar);
+  document.addEventListener('mousemove', mover);
+  document.addEventListener('mouseup', soltar);
+  document.addEventListener('touchstart', empezar, {passive: true});
+  document.addEventListener('touchmove', mover, {passive: false});
+  document.addEventListener('touchend', soltar);
+})();
 
 // ═══════════════════════════════════════════════════════════════════════
 //  📥 BANDEJA · el control humano de la contabilización
@@ -4637,7 +4806,7 @@ async function editarContabilizacion(docId){
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="op-pdf.js?v=1"></script>
+<script src="op-pdf.js?v=2"></script>
 <script src="pedidos.js?v=6"></script>
 <script src="equiv-import.js?v=3"></script>
 <script src="juegos.js?v=2"></script>

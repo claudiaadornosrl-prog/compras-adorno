@@ -105,7 +105,7 @@ async function descargarOpPdf(opId){
   // valores
   doc.setFont(fnt, 'bold'); doc.text('Detalle de valores otorgados', 14, y); doc.setFont(fnt, 'normal'); y += 2; doc.line(14, y, 196, y); y += 3.5;
   doc.text('Valor', 14, y); doc.text('Descripción', 34, y); doc.text('Monto', 196, y, {align: 'right'}); y += 1.5; doc.line(14, y, 196, y); y += 4;
-  const cod = m => /transf/i.test(m) ? 'TRANS' : /echeq/i.test(m) ? 'ECHEQ' : /cheq/i.test(m) ? 'CHEQ' : /efect/i.test(m) ? 'EFEC' : /mercado/i.test(m) ? 'MP' : String(m||'').slice(0,6).toUpperCase();
+  const cod = m => /transf/i.test(m) ? 'TRANS' : /echeq/i.test(m) ? 'ECHEQ' : /cheq/i.test(m) ? 'CHEQ' : /efect/i.test(m) ? 'EFEC' : /mercado/i.test(m) ? 'MP' : /d[eé]bito/i.test(m) ? 'DEBAUT' : String(m||'').slice(0,6).toUpperCase();
   const desc = m => /transf/i.test(m) ? 'Transferencias Bancarias' : m;
   pg.forEach(p => {
     let d = desc(p.medio);

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v85-miles-en-vivo';
+const CACHE_VERSION = 'compras-v86-ajustes-op';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
