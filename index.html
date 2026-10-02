@@ -3323,14 +3323,10 @@ function _libroCompras(){
       [['0005', x.neto_21, x.iva_21, 0.21], ['0004', x.neto_105, x.iva_105, 0.105], ['0006', x.neto_27, x.iva_27, 0.27]].forEach(([cod, n, i, t]) => {
         if (Math.abs(Number(n) || 0) > 0.005 || Math.abs(Number(i) || 0) > 0.005) lineas.push([cod, n, i, t]);
       });
-      // Con más de una tasa, el módulo guarda un solo neto gravado y el listado lo reparte a prorrata (centavos
-      // de diferencia). El Dragonfish arma cada neto como IVA ÷ tasa: se hace igual, y el residuo va a la tasa mayor.
-      if (lineas.length > 1){
-        const tot = lineas.reduce((a, l) => a + Math.abs(Number(l[1]) || 0), 0);
-        lineas.forEach(l => { l[1] = Math.round(Math.abs(Number(l[2]) || 0) / l[3] * 100) / 100; });
-        const may = lineas.reduce((m, l) => l[1] > m[1] ? l : m, lineas[0]);
-        may[1] = Math.round((may[1] + tot - lineas.reduce((a, l) => a + l[1], 0)) * 100) / 100;
-      }
+      // Con más de una tasa, el módulo guarda un solo neto gravado y el listado lo reparte a prorrata, que deja
+      // centavos que no cierran con el IVA. Para ARCA lo que importa es que neto × tasa = IVA de cada línea:
+      // se informa cada neto como IVA ÷ tasa (puede diferir centavos del comprobante papel).
+      if (lineas.length > 1) lineas.forEach(l => { l[1] = Math.round(Math.abs(Number(l[2]) || 0) / l[3] * 100) / 100; });
       // con no gravado/exento (o sin ninguna tasa) el Dragonfish agrega una línea 0 % en cero
       if (noGrav > 0.005 || exento > 0.005 || !lineas.length) lineas.push(['0003', 0, 0]);
     }
