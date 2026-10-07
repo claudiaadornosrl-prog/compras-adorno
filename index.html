@@ -3682,7 +3682,16 @@ async function vistaEquivalencias(){
     (grupos[k] = grupos[k] || {cuit: h.cuit_proveedor, codigo_proveedor: h.codigo_proveedor || '',
       descripcion: h.descripcion_proveedor || '', creada_at: h.creada_at, creada_por: h.creada_por, partes: []}).partes.push(h);
   });
-  EQUIV_HECHAS = Object.values(grupos);
+  // (7-oct, JP) Un mismo artículo nuestro puede venir con VARIOS códigos del proveedor (blíster / granel…):
+  // se muestran juntos. Familia = mismo proveedor + mismas partes (sku, pack, proporción).
+  const familias = {};
+  Object.values(grupos).forEach(g => {
+    const firma = g.cuit + '|' + g.partes.map(p => `${p.sku}:${Number(p.cantidad_por_unidad)||1}:${Number(p.proporcion_costo)||1}`).sort().join('+');
+    const fam = familias[firma] = familias[firma] || {...g, codigos: []};
+    fam.codigos.push({codigo: g.codigo_proveedor, descripcion: g.descripcion, ids: g.partes.map(p => p.id), creada_at: g.creada_at});
+    if (g.creada_at > fam.creada_at) fam.creada_at = g.creada_at;
+  });
+  EQUIV_HECHAS = Object.values(familias).map(fm => { fm.codigos.sort((a, b) => String(a.creada_at).localeCompare(String(b.creada_at))); return fm; });
   const cuits = [...new Set(EQUIV_HECHAS.map(g => g.cuit))];
   if (cuits.length){
     const {data: pv} = await sb.from('tesoreria_proveedores').select('cuit,nombre').in('cuit', cuits);
@@ -3728,14 +3737,15 @@ async function vistaEquivalencias(){
     ${HECHAS.length ? `<div class="card">
       <h3 style="font-size:15px;margin-bottom:4px">Equivalencias ya cargadas</h3>
       <p class="mini" style="margin-bottom:11px">Con ✏️ se corrige una traducción mal hecha: los renglones de facturas y
-        los remitos que todavía no se importaron pasan solos al SKU nuevo. Lo que ya se importó al Dragonfish no se toca.</p>
+        los remitos que todavía no se importaron pasan solos al SKU nuevo. Lo que ya se importó al Dragonfish no se toca.
+        Si el proveedor factura el mismo artículo con más de un código (en blíster, a granel…), desde ✏️ se le agregan los otros códigos.</p>
       <div style="overflow-x:auto"><table>
         <thead><tr><th>Proveedor</th><th>Su código</th><th>Cómo lo llama él</th><th>Nuestro SKU</th>
           <th>Cargada</th><th></th></tr></thead>
         <tbody>${HECHAS.map((g,i) => `<tr>
           <td>${esc(g.prov || g.cuit)}</td>
-          <td><code>${esc(g.codigo_proveedor || '—')}</code></td>
-          <td>${esc(g.descripcion || '')}</td>
+          <td>${g.codigos.map(k => `<code>${esc(k.codigo || '—')}</code>`).join('<br>')}${g.codigos.length > 1 ? ` <span class="chip" style="background:#e0f2fe;color:#075985" title="El proveedor factura este mismo artículo con ${g.codigos.length} códigos distintos">${g.codigos.length} códigos</span>` : ''}</td>
+          <td>${g.codigos.map(k => esc(k.descripcion || '')).join('<br>')}</td>
           <td>${g.partes.map(h => `<b>${esc(h.sku)}</b>${Number(h.cantidad_por_unidad) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="1 unidad del proveedor = ${Number(h.cantidad_por_unidad)} de este SKU">📦 ×${Number(h.cantidad_por_unidad)}</span>` : ''}${g.partes.length > 1 ? ' <span class="mini">' + Math.round((h.proporcion_costo || 1) * 100) + ' %</span>' : ''}`).join('<br>')}</td>
           <td class="mini" title="${esc(g.creada_por || '')}">${_fechaTs(g.creada_at)}</td>
           <td class="num" style="white-space:nowrap">
@@ -3784,7 +3794,9 @@ async function abrirMapeo(i){
 async function editarEquivalencia(i){
   const g = EQUIV_HECHAS[i]; if (!g) return;
   enMapeo = {cuit: g.cuit, codigo_proveedor: g.codigo_proveedor, descripcion: g.descripcion, prov: g.prov,
-             veces: 0, _editar: true, _skusViejos: g.partes.map(p => p.sku)};
+             veces: 0, _editar: true, _skusViejos: g.partes.map(p => p.sku),
+             _codigos: (g.codigos || [{codigo: g.codigo_proveedor, descripcion: g.descripcion}]).map(k => ({codigo: k.codigo || '', descripcion: k.descripcion || '', ids: k.ids || []})),
+             _codigosOrig: (g.codigos || []).map(k => ({codigo: k.codigo || '', descripcion: k.descripcion || ''}))};
   partesMapeo = g.partes.map(p => ({sku: p.sku, cantidad: Number(p.cantidad_por_unidad) || 1, proporcion: Number(p.proporcion_costo) || 1}));
   candidatos = []; pintarMapeo(true);
   const {data, error} = await sb.rpc('compras_resolver_articulo', {
@@ -3794,9 +3806,11 @@ async function editarEquivalencia(i){
 }
 async function borrarEquivalencia(i){
   const g = EQUIV_HECHAS[i]; if (!g) return;
-  if (!confirm(`¿Borrar la equivalencia ${g.codigo_proveedor || g.descripcion} → ${g.partes.map(p => p.sku).join(' + ')}?\n\n`
-    + 'Las facturas ya traducidas no cambian. Las próximas que traigan este código van a volver a aparecer como "sin traducir".')) return;
-  const {error} = await sb.from('compras_equivalencias').delete().in('id', g.partes.map(p => p.id));
+  const cods = (g.codigos || []).map(k => k.codigo || k.descripcion).join(', ');
+  if (!confirm(`¿Borrar la equivalencia ${cods} → ${g.partes.map(p => p.sku).join(' + ')}?\n\n`
+    + 'Las facturas ya traducidas no cambian. Las próximas que traigan ' + (g.codigos.length > 1 ? 'estos códigos' : 'este código') + ' van a volver a aparecer como "sin traducir".')) return;
+  const ids = (g.codigos || []).flatMap(k => k.ids || []);
+  const {error} = await sb.from('compras_equivalencias').delete().in('id', ids.length ? ids : g.partes.map(p => p.id));
   if (error){ alert('No se pudo borrar: ' + error.message); return; }
   vistaEquivalencias();
 }
@@ -3873,6 +3887,19 @@ function pintarMapeo(cargando){
       <p class="mini" style="margin-top:9px">
         Si ellos venden un set que ustedes fraccionan, agregá una fila por cada artículo nuestro
         y repartí el costo. Por ejemplo 0,6 y 0,4 si uno vale más que el otro.</p>
+
+      <h4 style="font-size:14px;margin:16px 0 4px">Códigos del proveedor para este mismo artículo</h4>
+      <p class="mini" style="margin:0 0 7px">Si el proveedor lo factura con más de un código (por ejemplo en blíster y a granel),
+        agregalos acá: todos se traducen a lo mismo.</p>
+      ${_mapeoCodigos().map((k, i) => `<div class="c-linea">
+        <input value="${esc(k.codigo)}" placeholder="código del proveedor" style="width:170px" ${i === 0 && !m._editar ? 'readonly title="Es el código que estás traduciendo"' : ''}
+               oninput="enMapeo._codigos[${i}].codigo=this.value.trim()">
+        <input value="${esc(k.descripcion)}" placeholder="cómo lo llama él (opcional)" style="flex:1;min-width:160px"
+               oninput="enMapeo._codigos[${i}].descripcion=this.value">
+        ${_mapeoCodigos().length > 1 ? `<button class="act gh" onclick="enMapeo._codigos.splice(${i},1); pintarMapeo()" title="Sacar este código">✕</button>` : ''}
+      </div>`).join('')}
+      <button class="act gh" style="font-size:12.5px;padding:5px 10px"
+              onclick="enMapeo._codigos.push({codigo:'',descripcion:'',ids:[]}); pintarMapeo()">+ Otro código del proveedor</button>
       `}
     </div>
     <div class="c-pie">
@@ -3894,6 +3921,11 @@ function pintarMapeo(cargando){
   ov.innerHTML = html;
 }
 
+// Códigos del proveedor que se traducen a estas mismas partes: el que se está traduciendo + los alternativos.
+function _mapeoCodigos(){
+  if (!enMapeo._codigos) enMapeo._codigos = [{codigo: enMapeo.codigo_proveedor || '', descripcion: enMapeo.descripcion || '', ids: []}];
+  return enMapeo._codigos;
+}
 function pintarSumaMapeo(){
   const suma = partesMapeo.reduce((a,p) => a + (Number(p.proporcion)||0), 0);
   const el = document.getElementById('map-suma');
@@ -3917,12 +3949,33 @@ async function guardarMapeo(){
     .map(p => ({sku: p.sku.trim(), cantidad: Number(p.cantidad)||1, proporcion: partesMapeo.length === 1 ? 1 : (Number(p.proporcion)||0)}));
   if (!partes.length){ alert('Elegí al menos un artículo nuestro.'); return; }
   if (partes.some(p => !(p.cantidad > 0) || !Number.isInteger(p.cantidad))){ alert('"Unid. por pack" tiene que ser un número entero mayor a 0.'); return; }
-  const {data: res, error} = await sb.rpc('compras_guardar_equivalencia', {
-    p_cuit: enMapeo.cuit, p_codigo: enMapeo.codigo_proveedor,
-    p_descripcion: enMapeo.descripcion, p_partes: partes,
-  });
-  if (error){ alert('No se pudo guardar: ' + error.message); return; }
-  if (enMapeo._editar && res && res.retraducidos) alert(`✓ Equivalencia corregida. ${res.retraducidos} renglón(es) de facturas y remitos quedaron con el SKU y la cantidad nuevos.`);
+  // (7-oct, JP) varios códigos del proveedor → mismo artículo: se guarda una equivalencia por código
+  const codigos = _mapeoCodigos().filter(k => (k.codigo || '').trim() || (k.descripcion || '').trim());
+  if (!codigos.length) codigos.push({codigo: enMapeo.codigo_proveedor || '', descripcion: enMapeo.descripcion || '', ids: []});
+  const vistos = new Set();
+  for (const k of codigos){
+    const clave = (k.codigo || '').trim().toUpperCase() || ('~' + (k.descripcion || '').trim().toUpperCase());
+    if (vistos.has(clave)){ alert(`El código ${k.codigo || k.descripcion} está repetido.`); return; }
+    vistos.add(clave);
+  }
+  let res = null, retraducidos = 0;
+  for (const k of codigos){
+    const r = await sb.rpc('compras_guardar_equivalencia', {
+      p_cuit: enMapeo.cuit, p_codigo: (k.codigo || '').trim() || null,
+      p_descripcion: (k.descripcion || '').trim() || enMapeo.descripcion || null, p_partes: partes,
+    });
+    if (r.error){ alert(`No se pudo guardar el código ${k.codigo || k.descripcion}: ` + r.error.message); return; }
+    res = r.data; retraducidos += Number(r.data?.retraducidos) || 0;
+  }
+  // al editar: los códigos que se sacaron de la lista se borran
+  if (enMapeo._editar){
+    const quedan = new Set(codigos.map(k => (k.codigo || '').trim().toUpperCase() || ('~' + (k.descripcion || '').trim().toUpperCase())));
+    const sobrantes = (EQUIV_HECHAS.flatMap(g => g.codigos || []))
+      .filter(k => k.ids && k.ids.length && !quedan.has((k.codigo || '').trim().toUpperCase() || ('~' + (k.descripcion || '').trim().toUpperCase())))
+      .filter(k => (enMapeo._codigosOrig || []).some(o => o.codigo === k.codigo && o.descripcion === k.descripcion));
+    for (const k of sobrantes){ await sb.from('compras_equivalencias').delete().in('id', k.ids); }
+  }
+  if (enMapeo._editar && retraducidos) alert(`✓ Equivalencia corregida. ${retraducidos} renglón(es) de facturas y remitos quedaron con el SKU y la cantidad nuevos.`);
   const desde = enMapeo._desde, docId = enMapeo._docId;
   cerrarMapeo();
   if (desde === 'control' && enControl && enControl.id === docId){

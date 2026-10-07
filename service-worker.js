@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v89-libro-iva-digital';
+const CACHE_VERSION = 'compras-v90-equivalencias-varios-codigos';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
