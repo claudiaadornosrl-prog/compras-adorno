@@ -3698,7 +3698,17 @@ async function vistaEquivalencias(){
     const nom = {}; (pv || []).forEach(x => { if (!nom[x.cuit]) nom[x.cuit] = x.nombre; });
     EQUIV_HECHAS.forEach(g => g.prov = nom[g.cuit] || '');
   }
-  const HECHAS = EQUIV_HECHAS;
+  _pintarEquivalencias();
+}
+
+// (7-oct, JP) buscador: filtra las dos tablas por proveedor, código, descripción o SKU nuestro
+let EQ_BUSCA = '';
+function _eqCoincide(txt){ const q = EQ_BUSCA.trim().toLowerCase(); return !q || q.split(/\s+/).every(p => txt.includes(p)); }
+function _pintarEquivalencias(){
+  const c = document.getElementById('cont'); if (!c) return;
+  const PEND = PENDIENTES.filter(p => _eqCoincide([p.prov, p.cuit, p.codigo_proveedor, p.descripcion].join(' ').toLowerCase()));
+  const HECHAS = EQUIV_HECHAS.filter(g => _eqCoincide([g.prov, g.cuit, ...(g.codigos || []).map(k => k.codigo + ' ' + k.descripcion), ...g.partes.map(p => p.sku)].join(' ').toLowerCase()));
+  const hayFiltro = !!EQ_BUSCA.trim();
 
   c.innerHTML = `<div class="kpis">
       <div class="kpi" style="border-left-color:var(--warn)"><div class="lbl">Códigos sin traducir</div>
@@ -3713,6 +3723,13 @@ async function vistaEquivalencias(){
       <button class="act" onclick="abrirImportarEquiv()">📥 Importar desde Excel</button>
     </div>
 
+    <div class="card" style="padding:10px 14px;display:flex;gap:8px;align-items:center">
+      <input id="eq-busca" type="search" value="${esc(EQ_BUSCA)}" placeholder="🔍 Buscar por proveedor, código, descripción o SKU nuestro…"
+             style="flex:1;padding:9px 11px;border:1px solid var(--bd);border-radius:9px;font-size:14px;font-family:inherit"
+             oninput="EQ_BUSCA=this.value; clearTimeout(window._eqT); window._eqT=setTimeout(()=>{const p=this.selectionStart; _pintarEquivalencias(); const i=document.getElementById('eq-busca'); if(i){i.focus(); try{i.setSelectionRange(p,p);}catch(_){}}}, 350)">
+      ${hayFiltro ? `<span class="mini">${PEND.length} sin traducir · ${HECHAS.length} cargadas</span><button class="act gh" style="padding:6px 10px" onclick="EQ_BUSCA='';_pintarEquivalencias()">✕</button>` : ''}
+    </div>
+
     <div class="card">
       <h3 style="font-size:15px;margin-bottom:4px">Artículos que el proveedor nombra distinto</h3>
       <p class="mini" style="margin-bottom:11px">
@@ -3720,29 +3737,29 @@ async function vistaEquivalencias(){
         el código de ellos ya es nuestro SKU. Los que sí aparecen son los del resto de los proveedores.
         Cada código se resuelve <b>una sola vez</b> y de ahí en más el sistema lo traduce solo.
       </p>
-      ${!PENDIENTES.length
-        ? '<div class="vacio">✅ No hay artículos esperando traducción.</div>'
+      ${!PEND.length
+        ? `<div class="vacio">${hayFiltro ? 'Nada sin traducir que coincida con la búsqueda.' : '✅ No hay artículos esperando traducción.'}</div>'
         : `<div style="overflow-x:auto"><table>
             <thead><tr><th>Proveedor</th><th>Su código</th><th>Cómo lo llama él</th>
               <th class="num">Veces</th><th></th></tr></thead>
-            <tbody>${PENDIENTES.slice(0,200).map((p,i) => `<tr>
+            <tbody>${PEND.slice(0,200).map(p => { const i = PENDIENTES.indexOf(p); return `<tr>
               <td>${esc(p.prov || p.cuit || '—')}</td>
               <td><code>${esc(p.codigo_proveedor || '—')}</code></td>
               <td>${esc(p.descripcion || '')}</td>
               <td class="num">${p.veces}</td>
               <td class="num"><button class="act" onclick="abrirMapeo(${i})">Traducir</button></td>
-            </tr>`).join('')}</tbody></table></div>`}
+            </tr>`; }).join('')}</tbody></table></div>`}
     </div>
 
-    ${HECHAS.length ? `<div class="card">
-      <h3 style="font-size:15px;margin-bottom:4px">Equivalencias ya cargadas</h3>
+    ${HECHAS.length || hayFiltro ? `<div class="card">
+      <h3 style="font-size:15px;margin-bottom:4px">Equivalencias ya cargadas${hayFiltro ? ` <span class="mini">(${HECHAS.length} de ${EQUIV_HECHAS.length})</span>` : ''}</h3>
       <p class="mini" style="margin-bottom:11px">Con ✏️ se corrige una traducción mal hecha: los renglones de facturas y
         los remitos que todavía no se importaron pasan solos al SKU nuevo. Lo que ya se importó al Dragonfish no se toca.
         Si el proveedor factura el mismo artículo con más de un código (en blíster, a granel…), desde ✏️ se le agregan los otros códigos.</p>
       <div style="overflow-x:auto"><table>
         <thead><tr><th>Proveedor</th><th>Su código</th><th>Cómo lo llama él</th><th>Nuestro SKU</th>
           <th>Cargada</th><th></th></tr></thead>
-        <tbody>${HECHAS.map((g,i) => `<tr>
+        <tbody>${HECHAS.map(g => { const i = EQUIV_HECHAS.indexOf(g); return `<tr>
           <td>${esc(g.prov || g.cuit)}</td>
           <td>${g.codigos.map(k => `<code>${esc(k.codigo || '—')}</code>`).join('<br>')}${g.codigos.length > 1 ? ` <span class="chip" style="background:#e0f2fe;color:#075985" title="El proveedor factura este mismo artículo con ${g.codigos.length} códigos distintos">${g.codigos.length} códigos</span>` : ''}</td>
           <td>${g.codigos.map(k => esc(k.descripcion || '')).join('<br>')}</td>
@@ -3751,7 +3768,8 @@ async function vistaEquivalencias(){
           <td class="num" style="white-space:nowrap">
             <button class="act gh" style="padding:4px 9px;font-size:12.5px" onclick="editarEquivalencia(${i})">✏️ Editar</button>
             <button class="act gh" style="padding:4px 9px;font-size:12.5px" onclick="borrarEquivalencia(${i})" title="Borrar esta equivalencia">🗑</button></td>
-        </tr>`).join('')}</tbody></table></div>
+        </tr>`; }).join('')}</tbody></table></div>
+      ${!HECHAS.length ? '<div class="vacio">Ninguna equivalencia coincide con la búsqueda.</div>' : ''}
     </div>` : ''}`;
 }
 

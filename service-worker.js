@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v90-equivalencias-varios-codigos';
+const CACHE_VERSION = 'compras-v91-equivalencias-buscador';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
