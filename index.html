@@ -1483,6 +1483,7 @@ async function buscarProveedores(){
       <th>Última</th><th>Condición de pago</th><th class="ctr">Contacto</th><th class="ctr" title="Ficha completa">Ficha</th></tr></thead><tbody>
     ${_provCache.map((p,i) => `<tr onclick="fichaProveedor(${i})" title="Abrir la ficha del proveedor">
       <td class="prov" style="white-space:nowrap"><span class="prov-nom"><strong>${_mEscP(p.nombre)}</strong></span>
+        ${(p.compra_mercaderia === true || (p.compra_mercaderia == null && p.mercaderia_auto)) ? `<span class="eico" style="background:#dcfce7;color:#166534" title="Le compramos mercadería${p.compra_mercaderia == null ? ' (automático)' : ''}: aparece al armar pedidos">${ico('camion','s')}</span>` : ''}
         ${p.es_exterior ? `<span class="eico" style="background:#ede9fe;color:#5b21b6" title="Proveedor del exterior">${ico('mundo','s')}</span>` : ''}
         ${p.origen === 'manual' ? `<span class="eico" style="color:#475569" title="Creado a mano en el módulo">${ico('lapiz','s')}</span>` : ''}
         ${!p.activo ? `<span class="eico" style="background:#fee2e2;color:#991b1b" title="Inactivo">${ico('apagado','s')}</span>` : ''}
@@ -1617,6 +1618,12 @@ async function fichaProveedor(i){
         <span>Proveedor del exterior
           <div class="hint">No lleva CUIT ni IVA discriminado. Las compras al exterior van aparte en el Libro IVA.</div></span></label>
       <label id="pf-pais-wrap" style="grid-column:1/-1;${p.es_exterior?'':'display:none;'}">País<input id="pf-pais" value="${_mEscP(p.pais||'')}" placeholder="Estados Unidos"></label>
+      <label title="Define si aparece en la lista de proveedores al armar un pedido. En automático lo decide el sistema: facturas de mercadería, remitos o artículos del stock a su nombre.">Le compramos mercadería
+        <select id="pf-merc">
+          <option value="" ${p.compra_mercaderia == null ? 'selected' : ''}>Automático (${p.mercaderia_auto ? 'sí' : 'no'})</option>
+          <option value="si" ${p.compra_mercaderia === true ? 'selected' : ''}>Sí</option>
+          <option value="no" ${p.compra_mercaderia === false ? 'selected' : ''}>No</option>
+        </select></label>
     </div>
 
     ${_h4P('Contacto de la empresa')}
@@ -1666,6 +1673,7 @@ async function guardarFichaProveedor(codigo, cuit){
   const datos = { condicion_pago:g('pf-cond'), cond_iva:g('pf-iva'), cbu:g('pf-cbu'), alias_cbu:g('pf-alias'),
     email_op:g('pf-mail'), moneda_habitual:g('pf-moneda'), domicilio:g('pf-dom'), notas:g('pf-notas'),
     pais:g('pf-pais'), es_exterior: !!document.getElementById('pf-ext')?.checked,
+    compra_mercaderia: g('pf-merc') === 'si' ? true : g('pf-merc') === 'no' ? false : null,
     telefono:g('pf-tel'), whatsapp:g('pf-wa'), email:g('pf-email'), web:g('pf-web'),
     contactos: _fContactos.filter(c => c.nombre || c.telefono || c.whatsapp || c.email),
     descuentos: _fDescuentos.filter(d => d.descripcion || d.porcentaje),
@@ -5080,7 +5088,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=3"></script>
-<script src="pedidos.js?v=8"></script>
+<script src="pedidos.js?v=9"></script>
 <script src="equiv-import.js?v=3"></script>
 <script src="juegos.js?v=3"></script>
 <script src="manual.js?v=64"></script>

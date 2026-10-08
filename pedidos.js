@@ -243,17 +243,35 @@ function _pedVistaPendientes(){
 }
 
 // ── Proveedores (para elegir en el pedido) ────────────────────────────
+// (8-oct, JP) Por defecto solo los proveedores a los que les compramos mercadería
+// (marca manual en la ficha, o regla automática: facturas de mercadería, remitos,
+// artículos del stock a su nombre). Con PED_PROVS_TODOS se traen todos.
+let PED_PROVS_TODOS = false, PED_PROVS_CACHE = {};
 async function _pedProvs(){
-  if (PED_PROVS) return PED_PROVS;
-  let out = [], d = 0;
-  while (true){
-    const {data, error} = await sb.from('tesoreria_proveedores').select('codigo,nombre,cuit_norm,activo')
-      .order('nombre').range(d, d + 999);
-    if (error){ console.warn(error.message); break; }
-    out = out.concat(data || []); if ((data||[]).length < 1000) break; d += 1000;
+  const k = PED_PROVS_TODOS ? 'todos' : 'merc';
+  if (PED_PROVS_CACHE[k]){ PED_PROVS = PED_PROVS_CACHE[k]; return PED_PROVS; }
+  let out = [];
+  if (!PED_PROVS_TODOS){
+    const {data, error} = await sb.rpc('compras_proveedores_mercaderia');
+    if (error) console.warn(error.message); else out = data || [];
+  } else {
+    let d = 0;
+    while (true){
+      const {data, error} = await sb.from('tesoreria_proveedores').select('codigo,nombre,cuit_norm,activo')
+        .order('nombre').range(d, d + 999);
+      if (error){ console.warn(error.message); break; }
+      out = out.concat(data || []); if ((data||[]).length < 1000) break; d += 1000;
+    }
   }
   PED_PROVS = out.filter(p => p.activo !== false);
+  PED_PROVS_CACHE[k] = PED_PROVS;
   return PED_PROVS;
+}
+async function pedProvsTodos(on){
+  PED_PROVS_TODOS = !!on; await _pedProvs();
+  const dl = document.getElementById('ped-dl-provs');
+  if (dl) dl.innerHTML = (PED_PROVS||[]).map(p => `<option value="${esc(_pedProvTxt(p))}">`).join('');
+  const i = document.getElementById('ped-prov'); if (i) i.focus();
 }
 const _pedProvTxt = p => `${p.nombre}${p.cuit_norm ? ' · ' + p.cuit_norm : ''} · [${p.codigo}]`;
 
@@ -297,7 +315,8 @@ function _pedEditor(){
     <div class="c-body">
       <div class="ped-grid">
         <label>Proveedor
-          <input id="ped-prov" list="ped-dl-provs" value="${esc(provVal)}" placeholder="Escribí el nombre o el CUIT…" onchange="pedElegirProv(this.value)">
+          <div style="display:flex;gap:6px;align-items:center"><input id="ped-prov" list="ped-dl-provs" value="${esc(provVal)}" placeholder="Escribí el nombre o el CUIT…" onchange="pedElegirProv(this.value)" style="flex:1">
+          <label class="c-tog" title="La lista trae solo los proveedores a los que les compramos mercadería. Naranja = ver todos los proveedores"><input type="checkbox" ${PED_PROVS_TODOS ? 'checked' : ''} onchange="pedProvsTodos(this.checked)"><span class="eico">${ico('edificio')}</span></label></div>
           <datalist id="ped-dl-provs">${(PED_PROVS||[]).map(p => `<option value="${esc(_pedProvTxt(p))}">`).join('')}</datalist></label>
         <label>Fecha del pedido <input type="date" id="ped-fecha" value="${esc(e.fecha||'')}" onchange="pedEd.fecha=this.value"></label>
         <label>Entrega estimada <input type="date" id="ped-entrega" value="${esc(e.entrega_estimada||'')}" onchange="pedEd.entrega_estimada=this.value"></label>
@@ -401,6 +420,8 @@ function _pedCatHtml(){
   if (!filas.length) return '<div class="mini" style="padding:8px">Ningún artículo de la lista está por debajo de su mínimo.</div>';
   return `<div class="ped-cat"><table>
     <thead><tr><th>SKU</th><th>Descripción</th><th class="num" title="Stock Alcorta / Unicenter / Oficina (en rojo: por debajo de su mínimo)">Stock A · U · O</th>
+      <th class="num" title="Stock total: la suma de los tres puntos">Total</th>
+      <th class="num" title="Unidades vendidas en los últimos 6 meses entre todos los puntos de venta (facturas menos notas de crédito; se actualiza todas las mañanas)">Vend. 6 m</th>
       <th class="num" title="Mínimo de reposición (umbral) Alcorta / Unicenter / Oficina — sale del Dragonfish">Mín. A · U · O</th>
       <th class="num" title="Lo que hay que pedir para volver al mínimo: lo que les falta a los locales + el mínimo del depósito, menos lo que ya hay en Oficina y lo ya pedido">Falta p/ mín.</th>
       <th class="num">$ compra</th><th class="num" title="Ya pedido y todavía no entregado (otros pedidos abiertos)">Ya pedido</th>
@@ -409,6 +430,8 @@ function _pedCatHtml(){
       <td title="${a.codigo_proveedor ? 'Código del proveedor: ' + esc(a.codigo_proveedor) : ''}"><b>${esc(a.sku)}</b></td>
       <td>${esc(a.descripcion||'')}${_pedPackChip(_pedPk(a))}</td>
       <td class="num">${_pedStk(a.stock_alcorta, a.min_alcorta)} · ${_pedStk(a.stock_unicenter, a.min_unicenter)} · ${_pedStk(a.stock_oficina, a.min_oficina)}</td>
+      <td class="num"><b>${_pedN(a.stock_total)}</b></td>
+      <td class="num">${a.vendido_6m == null ? '<span class="mini" title="Todavía no hay ventas cargadas para este SKU">—</span>' : _pedN(a.vendido_6m)}</td>
       <td class="num">${_pedMin(a.min_alcorta)} · ${_pedMin(a.min_unicenter)} · ${_pedMin(a.min_oficina)}</td>
       <td class="num">${f == null ? '<span class="mini">sin mín.</span>' : (f > 0 ? `<b style="color:var(--bad)">${_pedN(f)}</b>${_pedPk(a) > 1 ? ` <span class="mini">= ${_pedN(Math.ceil(f/_pedPk(a)))} pk</span>` : ''}` : '<span class="mini ped-ok">OK</span>')}</td>
       <td class="num">${a.precio_compra ? plata(a.precio_compra) : '—'}</td>
