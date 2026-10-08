@@ -337,13 +337,15 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarManual
   document.head.appendChild(css);
 
   const poner = () => {
-    const hdr = document.querySelector('header');
-    if (!hdr || document.getElementById('btn-manual')) return;
-    const b = document.createElement('button');
-    b.id = 'btn-manual'; b.className = 'hbtn'; b.textContent = '📖';
-    b.title = 'Manual de uso';
-    b.onclick = abrirManual;
-    hdr.insertBefore(b, hdr.querySelector('.hbtn'));
+    // (8-oct, JP) mismo concepto que el resto de la cabecera: ícono, nombre al pasar el mouse
+    const nav = document.getElementById('hnav');
+    if (!nav || document.getElementById('btn-manual') || !nav.children.length) return;
+    const bt = document.createElement('button');
+    bt.id = 'btn-manual'; bt.title = 'Manual de uso'; bt.setAttribute('aria-label', 'Manual de uso');
+    bt.innerHTML = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><span class="lb">Manual</span>';
+    bt.onclick = abrirManual;
+    const sep = nav.querySelector('.sep');
+    if (sep) nav.insertBefore(bt, sep.nextSibling); else nav.appendChild(bt);
   };
   poner();
   new MutationObserver(poner).observe(document.body, { childList: true, subtree: true });

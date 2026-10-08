@@ -254,6 +254,9 @@ table.tb-band td.ctr{text-align:center}
 table.tb-band a.nro{color:var(--tx);font-weight:600;text-decoration:none;border-bottom:1px dotted var(--mut)}
 table.tb-band a.nro:hover{color:var(--primary);border-bottom-color:var(--primary)}
 .cdot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:1px;cursor:help}
+.op-fila3{display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end}.op-fila3>div{display:flex;flex-direction:column;gap:3px}.op-fila3 label{font-size:12px;color:var(--mut)}
+.op-mas{display:inline-flex;align-items:center;gap:6px;margin-left:6px;vertical-align:middle}
+.aviso-amb{background:#fef3c7;color:#92400e;border-left:4px solid #d97706;border-radius:8px;padding:8px 11px;font-size:13px}.aviso-amb div{display:flex;gap:6px;align-items:flex-start;margin:2px 0}
 button.act.mini-ico{padding:5px 7px;border-radius:8px;display:inline-flex}
 details.plegable summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;font-size:13.5px}
 details.plegable summary::-webkit-details-marker{display:none}
@@ -546,6 +549,12 @@ const ICONOS = {
   frasco: '<path d="M9 3h6M10 3v6.3L4.6 18a2 2 0 0 0 1.7 3h11.4a2 2 0 0 0 1.7-3L14 9.3V3"/>',
   docmas: '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>',
   reloj: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  anular: '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
+  ojo: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+  excel: '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13l8 6M16 13l-8 6"/>',
+  pdf: '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/>',
+  mas: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
   ok: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
   archivo: '<rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
 };
@@ -735,67 +744,56 @@ async function vistaOrdenes(){
 function pintarOrdenes(){
   const c = document.getElementById('cont'); if (!c) return;
   const pend = OP_PROVS.reduce((a,p) => a + Number(p.total||0), 0);
+  // (8-oct, JP) sin tarjetas de números: título + ⓘ con la explicación, exportar como íconos, la fila arma la OP
   c.innerHTML = `
-    <div class="kpis">
-      <div class="kpi"><div class="lbl">Proveedores a pagar</div><div class="val">${OP_PROVS.length}</div>
-        <div class="sub">${OP_PROVS.reduce((a,p)=>a+Number(p.facturas||0),0)} comprobantes controlados</div></div>
-      <div class="kpi"><div class="lbl">Total pendiente de OP</div><div class="val">${platac(pend)}</div>
-        <div class="sub">antes de retenciones</div></div>
-      <div class="kpi" style="border-left-color:var(--info)"><div class="lbl">Órdenes emitidas</div>
-        <div class="val">${OP_LISTA.filter(o=>o.estado!=='anulada').length}</div>
-        <div class="sub">${OP_LISTA.filter(o=>o.estado==='anulada').length} anuladas</div></div>
-    </div>
-
     <div class="card">
-      <div style="float:right;display:flex;gap:6px">
-        <button class="act gh" style="font-size:12px;padding:5px 9px" onclick="opExportar('pend','xlsx')">⬇ Excel</button>
-        <button class="act gh" style="font-size:12px;padding:5px 9px" onclick="opExportar('pend','pdf')">⬇ PDF</button></div>
-      <h3 style="font-size:15px;margin-bottom:4px">Facturas esperando orden de pago</h3>
-      <p class="mini" style="margin-bottom:11px">Son los comprobantes ya controlados. Tocá un proveedor para armarle la OP.
-        ${MODO_PRUEBA ? '<b style="color:#92400e">🧪 En prueba: las OP llevan punto de venta 9999 y NO generan el pendiente en Tesorería.</b>' : ''}</p>
-      ${OP_PROVS.length ? `<div style="overflow-x:auto"><table>
-        <thead><tr><th>Proveedor</th><th>CUIT</th><th class="num">Comprob.</th>
+      <div class="abar" style="margin-bottom:8px">
+        <h3 style="font-size:15px;margin:0">Facturas esperando orden de pago <span class="mini">· ${OP_PROVS.length} proveedores · ${platac(pend)}</span></h3>
+        <span class="mini" style="cursor:help;color:var(--mut)" title="Son los comprobantes ya controlados, agrupados por proveedor. Tocá un proveedor para armarle la orden de pago. El total es antes de retenciones.${MODO_PRUEBA ? ' En prueba: las OP llevan punto de venta 9999 y NO generan el pendiente en Tesorería.' : ''}">${ico('info','s')}</span>
+        <span style="flex:1"></span>
+        <button class="act gh mini-ico" onclick="opExportar('pend','xlsx')" title="Bajar este listado en Excel">${ico('excel','s')}</button>
+        <button class="act gh mini-ico" onclick="opExportar('pend','pdf')" title="Bajar este listado en PDF">${ico('pdf','s')}</button>
+      </div>
+      ${OP_PROVS.length ? `<div style="overflow-x:auto"><table class="tb-band">
+        <thead><tr><th>Proveedor</th><th class="num">Comprob.</th>
           <th class="num" title="Sin IVA ni percepciones">Neto</th><th class="num">Total</th><th>Más vieja</th><th></th></tr></thead>
-        <tbody>${OP_PROVS.map(p => `<tr>
-          <td><b>${esc(p.proveedor||'—')}</b></td>
-          <td class="mini">${esc(p.cuit||'')}</td>
+        <tbody>${OP_PROVS.map(p => `<tr onclick="abrirOP('${esc(p.cuit)}')" title="Armar la orden de pago de ${esc(p.proveedor||'')}">
+          <td class="prov"><span class="prov-nom" title="${esc(p.proveedor||'')} · CUIT ${esc(p.cuit||'')}"><b>${esc(p.proveedor||'—')}</b></span></td>
           <td class="num">${p.facturas}</td>
           <td class="num mini">${p.neto != null ? plata(p.neto) : '—'}</td>
           <td class="num"><b>${plata(p.total)}</b></td>
-          <td class="mini">${_fecha(p.mas_vieja)}${_diasDesde(p.mas_vieja)}</td>
-          <td class="num"><button class="act" style="font-size:12.5px;padding:6px 11px"
-              onclick="abrirOP('${esc(p.cuit)}')">Armar OP</button></td>
+          <td class="mini" style="white-space:nowrap">${_fecha(p.mas_vieja)}${_diasDesde(p.mas_vieja)}</td>
+          <td class="num"><button class="act mini-ico" onclick="event.stopPropagation();abrirOP('${esc(p.cuit)}')" title="Armar orden de pago">${ico('pago','s')}</button></td>
         </tr>`).join('')}</tbody></table></div>`
       : '<div class="vacio">No hay comprobantes controlados esperando orden de pago.</div>'}
     </div>
 
     <div class="card">
-      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:11px">
-        <h3 style="font-size:15px;margin:0;flex:1;min-width:160px">Órdenes emitidas</h3>
-        <div><label class="mini">Desde</label><br><input type="date" id="opl-desde" value="${esc(OP_FILTRO.desde)}" onchange="OP_FILTRO.desde=this.value;pintarOrdenes()" style="padding:5px 7px;font-size:12.5px"></div>
-        <div><label class="mini">Hasta</label><br><input type="date" id="opl-hasta" value="${esc(OP_FILTRO.hasta)}" onchange="OP_FILTRO.hasta=this.value;pintarOrdenes()" style="padding:5px 7px;font-size:12.5px"></div>
-        <button class="act gh" style="font-size:12px;padding:5px 9px" onclick="opExportar('emit','xlsx')">⬇ Excel</button>
-        <button class="act gh" style="font-size:12px;padding:5px 9px" onclick="opExportar('emit','pdf')">⬇ PDF</button>
+      <div class="abar" style="margin-bottom:8px">
+        <h3 style="font-size:15px;margin:0">Órdenes emitidas <span class="mini">· ${OP_LISTA.filter(o=>o.estado!=='anulada').length}${OP_LISTA.some(o=>o.estado==='anulada') ? ` · ${OP_LISTA.filter(o=>o.estado==='anulada').length} anuladas` : ''}</span></h3>
+        <span style="flex:1"></span>
+        <input type="date" id="opl-desde" value="${esc(OP_FILTRO.desde)}" onchange="OP_FILTRO.desde=this.value;pintarOrdenes()" style="padding:5px 7px;font-size:12.5px" title="Desde">
+        <input type="date" id="opl-hasta" value="${esc(OP_FILTRO.hasta)}" onchange="OP_FILTRO.hasta=this.value;pintarOrdenes()" style="padding:5px 7px;font-size:12.5px" title="Hasta">
+        <button class="act gh mini-ico" onclick="opExportar('emit','xlsx')" title="Bajar este listado en Excel">${ico('excel','s')}</button>
+        <button class="act gh mini-ico" onclick="opExportar('emit','pdf')" title="Bajar este listado en PDF">${ico('pdf','s')}</button>
       </div>
-      ${_opListaFiltrada().length ? `<div style="overflow-x:auto"><table>
+      ${_opListaFiltrada().length ? `<div style="overflow-x:auto"><table class="tb-band">
         <thead><tr><th>Orden</th><th>Fecha</th><th>Proveedor</th><th class="num">Comp.</th>
-          <th class="num">Subtotal</th><th class="num">Retenciones</th><th class="num">A pagar</th>
-          <th>Estado</th><th></th></tr></thead>
-        <tbody>${_opListaFiltrada().map(o => `<tr${o.estado==='anulada' ? ' style="opacity:.5"' : ''}>
-          <td><b>${esc(o.comprobante)}</b></td>
+          <th class="num">Subtotal</th><th class="num">Retenc.</th><th class="num">A pagar</th>
+          <th class="ctr">Estado</th><th></th></tr></thead>
+        <tbody>${_opListaFiltrada().map(o => { const E = {anulada:['anular','#fee2e2','#991b1b','Anulada'], pago_parcial:['reloj','#fef3c7','#92400e','Pago parcial'], pagada:['ok','#dcfce7','#166534','Pagada'], emitida:['pago','#e0e7ff','#3730a3','Emitida']}[o.estado] || ['pago','#e0e7ff','#3730a3',o.estado];
+          return `<tr onclick="verOP(${o.id})" title="Ver la orden"${o.estado==='anulada' ? ' style="opacity:.55"' : ''}>
+          <td style="white-space:nowrap"><b>${esc(o.comprobante)}</b></td>
           <td class="mini">${_fecha(o.fecha)}</td>
-          <td>${esc((o.proveedor||'').slice(0,30))}</td>
+          <td class="prov"><span class="prov-nom" title="${esc(o.proveedor||'')}">${esc(o.proveedor||'')}</span></td>
           <td class="num">${o.comprobantes}</td>
           <td class="num">${plata(o.subtotal)}</td>
           <td class="num">${Number(o.retenciones_total) ? plata(o.retenciones_total) : '—'}</td>
           <td class="num"><b>${plata(o.neto_a_pagar)}</b></td>
-          <td><span class="chip" style="background:${o.estado==='anulada'?'#fee2e2;color:#991b1b':o.estado==='pago_parcial'?'#fef3c7;color:#92400e':o.estado==='pagada'?'#dcfce7;color:#166534':'#e0e7ff;color:#3730a3'}">${esc(o.estado==='pago_parcial'?'pago parcial':o.estado)}</span>${o.medio_pago ? ` <span class="mini">${esc(o.medio_pago)}</span>` : ''}
-            ${(o.avisos && o.avisos.length) ? ` <span title="${esc((o.avisos||[]).join(' · '))}">⚠</span>` : ''}</td>
+          <td class="ctr" style="white-space:nowrap"><span class="eico" style="background:${E[1]};color:${E[2]}" title="${E[3]}${o.medio_pago ? ' · ' + esc(o.medio_pago) : ''}${(o.avisos && o.avisos.length) ? ' · ⚠ ' + esc((o.avisos||[]).join(' · ')) : ''}">${ico(E[0],'s')}</span>${(o.avisos && o.avisos.length) ? ` <span title="${esc((o.avisos||[]).join(' · '))}" style="color:var(--warn)">${ico('alerta','s')}</span>` : ''}</td>
           <td class="num" style="white-space:nowrap">
-            <button class="act gh" style="font-size:12px;padding:5px 9px" onclick="verOP(${o.id})">Ver</button>
-            ${o.estado!=='anulada' ? `<button class="act gh" style="font-size:12px;padding:5px 9px;color:var(--bad)"
-                onclick="anularOP(${o.id}, '${esc(o.comprobante)}')">Anular</button>` : ''}</td>
-        </tr>`).join('')}</tbody></table></div>`
+            ${o.estado!=='anulada' ? `<button class="act gh mini-ico" style="color:var(--bad);border-color:#fecaca" onclick="event.stopPropagation();anularOP(${o.id}, '${esc(o.comprobante)}')" title="Anular esta orden">${ico('anular','s')}</button>` : ''}</td>
+        </tr>`; }).join('')}</tbody></table></div>`
       : `<div class="vacio">${OP_LISTA.length ? 'No hay órdenes en ese rango de fechas.' : 'Todavía no se emitió ninguna orden de pago.'}</div>`}
     </div>`;
 }
@@ -894,19 +892,19 @@ async function abrirOP(cuit){
 function _pintarModalOP(cands){
   const prov = OP_PROVS.find(p => p.cuit === opSel) || {};
   openModalP(`
-    <h3 style="margin:0 0 3px">💸 Orden de pago · ${esc(prov.proveedor || opSel)}</h3>
-    <p class="mini" style="margin:0 0 12px">CUIT ${esc(opSel)}${MODO_PRUEBA ? ' · 🧪 prueba (PV 9999, sin pendiente en Tesorería)' : ''}</p>
+    <h3 style="margin:0 0 3px">${ico('pago')} Orden de pago · ${esc(prov.proveedor || opSel)}</h3>
+    <p class="mini" style="margin:0 0 12px">CUIT ${esc(opSel)}${MODO_PRUEBA ? ` <span class="hchip" style="margin-left:4px" title="Ambiente de prueba: la OP lleva punto de venta 9999 y no genera el pendiente en Tesorería">${ico('frasco','s')} prueba</span>` : ''}</p>
 
     <div style="max-height:230px;overflow:auto;border:1px solid var(--bd);border-radius:9px;margin-bottom:12px">
       <table style="font-size:13px"><thead><tr>
-        <th style="width:34px"></th><th>Fecha</th><th>Vence</th><th>Comprobante</th><th>Tipo</th><th title="Remito asociado a la factura y en qué estado está su stock">Remito</th><th class="num" title="Sin IVA ni percepciones">Neto</th><th class="num">Total</th></tr></thead>
+        <th style="width:34px;text-align:center"><input type="checkbox" checked title="Marcar / desmarcar todos" onchange="_opToggleTodos(this.checked)"></th><th>Fecha</th><th>Vence</th><th>Comprobante</th><th>Tipo</th><th title="Remito asociado a la factura y en qué estado está su stock">Remito</th><th class="num" title="Sin IVA ni percepciones">Neto</th><th class="num">Total</th></tr></thead>
       <tbody>${cands.map(d => `<tr${d.es_nc ? ' style="background:#fef2f2"' : ''}>
         <td style="text-align:center"><input type="checkbox" data-doc="${d.documento_id}" checked
              onchange="_opToggle(${d.documento_id}, this.checked)"></td>
         <td class="mini">${_fecha(d.fecha_emision)}</td>
         <td class="mini">${d.fecha_vto ? _fecha(d.fecha_vto) : '<span style="color:var(--bad)" title="La factura no tiene vencimiento cargado: se carga en el control del comprobante">sin vto</span>'}</td>
-        <td>${esc(d.comprobante)}</td>
-        <td class="mini">${esc(d.tipo_gasto||'')}${d.moneda!=='ARS' ? ' · '+esc(d.moneda) : ''}</td>
+        <td style="white-space:nowrap">${d.archivo_path ? `<a class="nro" href="${_pdfUrl(d.archivo_path)}" target="_blank" rel="noopener" title="Abrir el PDF" style="color:var(--tx);font-weight:600;text-decoration:none;border-bottom:1px dotted var(--mut)">${esc(d.comprobante)}</a>` : esc(d.comprobante)}</td>
+        <td class="ctr">${letraTipo(d.tipo_gasto)}${d.moneda!=='ARS' ? ` <span class="mini">${esc(d.moneda)}</span>` : ''}</td>
         <td style="white-space:nowrap;font-size:12px">${d.es_nc ? '<span class="mini">—</span>' : celdaRemitos({id: d.documento_id, tipo_gasto: d.tipo_gasto})}</td>
         <td class="num mini"${d.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(d.neto)}</td>
         <td class="num"${d.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(d.total)}</td>
@@ -915,23 +913,20 @@ function _pintarModalOP(cands){
 
     ${(() => { const n = cands.filter(d => !d.es_nc && d.tipo_gasto === 'mercaderia' && !(REMITOS_DOC[d.documento_id]||[]).length).length;
       return n ? `<div class="alerta" style="margin:-4px 0 12px;font-size:13px">⚠ ${n} factura${n>1?'s':''} de mercadería sin remito asociado: la mercadería todavía no tiene cómo entrar al stock. Se puede pagar igual; conviene resolver el remito en 🚚 Mercadería.</div>` : ''; })()}
-    <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:12px">
+    <div class="op-fila3" style="margin-bottom:12px">
       <div><label>Fecha de la OP</label><input type="date" id="op-fecha" value="${_hoyISO()}"></div>
-      <div><label>Vence <span class="mini" title="Se propone el vencimiento más cercano de las facturas marcadas. Es la fecha de pago del pendiente en Tesorería.">(fecha de pago)</span></label><input type="date" id="op-venc" value="${_opVencDefault(cands)}" onchange="opVencManual=true"></div>
+      <div><label title="Se propone el vencimiento más cercano de las facturas marcadas. Es la fecha de pago del pendiente en Tesorería.">Vence (fecha de pago)</label><input type="date" id="op-venc" value="${_opVencDefault(cands)}" onchange="opVencManual=true"></div>
+      <div style="flex:1;min-width:180px"><label>Observaciones</label><input id="op-obs" placeholder="opcional"></div>
     </div>
     <datalist id="dl-medios"><option>Transferencia</option><option>Cheque</option>
       <option>Echeq</option><option>Efectivo</option><option>Mercado Pago</option><option>Débito automático</option></datalist>
-    <label>Observaciones</label>
-    <input id="op-obs" placeholder="opcional" style="margin-bottom:12px">
 
     <div id="op-calc"><div class="vacio">Calculando retenciones…</div></div>
-    <p class="mini" style="margin:8px 0 0">Los importes de retención se pueden editar. Si ponés uno
-      distinto al calculado, el sistema te va a pedir el motivo: es lo que explica el número en el
-      certificado que se le entrega al proveedor.</p>
 
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+    <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:14px">
+      <span class="mini" id="op-nro-prox" style="margin-right:auto"></span>
       <button class="act gh" onclick="cerrarModalP()">Cancelar</button>
-      <button class="act" id="op-emitir" onclick="emitirOP()">Emitir orden de pago</button>
+      <button class="act" id="op-emitir" onclick="emitirOP()" title="Los importes de retención se pueden editar: si ponés uno distinto al calculado, el sistema te pide el motivo, que va al certificado del proveedor.">Emitir orden de pago</button>
     </div>`);
   _opCalcular();
 }
@@ -947,6 +942,13 @@ function _opVencDefault(cands){
   return v[0] || _hoyISO();
 }
 
+function _opToggleTodos(on){
+  document.querySelectorAll('#prov-modal input[data-doc]').forEach(c => { c.checked = on; });
+  opDocs = on ? opCands.map(c => c.documento_id) : [];
+  const vi = document.getElementById('op-venc');
+  if (vi && !opVencManual) vi.value = _opVencDefault();
+  _opCalcular();
+}
 function _opToggle(id, on){
   opDocs = on ? Array.from(new Set(opDocs.concat([id]))) : opDocs.filter(x => x !== id);
   const vi = document.getElementById('op-venc');
@@ -993,16 +995,15 @@ async function _opCalcular(){
        Hay ${pp.length} egreso${pp.length===1?'':'s'} del banco por este mismo importe sin conciliar:<br>
        ${pp.map(m => `· ${_fecha(m.fecha)} · ${esc(m.cuenta||'')} · ${plata(Math.abs(m.importe))} · ${esc((m.descripcion||'').slice(0,50))} <span class="mini">(${esc(m.evidencia)})</span>`).join('<br>')}
        <br><span class="mini">Si emitís igual, Tesorería lo vincula sola en vez de duplicar el pago.</span></div>` : ''}
-    ${av.length ? `<div class="alerta" style="margin-bottom:10px"><b>Antes de emitir, mirá esto:</b><br>
-       ${av.map(a => '· ' + esc(a)).join('<br>')}</div>` : ''}
+    ${av.length ? `<div class="aviso-amb" style="margin-bottom:10px">${av.map(a => `<div>${ico('alerta','s')} ${esc(a)}</div>`).join('')}</div>` : ''}
     <table style="font-size:13px"><tbody>
-      <tr><td>Comprobantes (${data.comprobantes})</td><td class="num"><b>${plata(data.subtotal)}</b></td></tr>
-      <tr><td class="mini" style="padding-left:14px">neto sobre el que se calcula</td>
-          <td class="num mini">${plata(data.neto)}</td></tr>
+      <tr><td>Comprobantes (${data.comprobantes}) <span class="mini">· neto</span></td>
+          <td class="num" title="Neto sin IVA ni percepciones, base de las retenciones. Total con impuestos: ${plata(data.subtotal)}"><b>${plata(data.neto)}</b></td></tr>
     </tbody></table>
     <div id="op-rets"></div>
-    <div id="op-pagos" style="margin-top:12px"></div>
-    <p class="mini" style="margin-top:8px">Se va a emitir como <b>OP X ${String(data.punto_venta).padStart(4,'0')}-${String(data.proximo_numero).padStart(8,'0')}</b>.</p>`;
+    <div id="op-pagos" style="margin-top:12px"></div>`;
+  const np = document.getElementById('op-nro-prox');
+  if (np) np.innerHTML = `Se emite como <b>OP X ${String(data.punto_venta).padStart(4,'0')}-${String(data.proximo_numero).padStart(8,'0')}</b>`;
   _opPintarRets();
   _opPintarPagos();
 }
@@ -1066,14 +1067,14 @@ function _opPintarPagos(){
   cont.innerHTML = `
     <h4 style="font-size:13px;margin:0 0 5px">Medio de pago${opPagos.length>1 ? 's' : ''}</h4>
     ${opPagos.map((p,i) => `
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px;padding:6px 8px;border:1px solid var(--bd);border-radius:9px">
-        <div style="flex:1;min-width:130px"><label>Medio</label>
-          <input list="dl-medios" value="${esc(p.medio||'')}" placeholder="Transferencia / Cheque / Echeq / Efectivo / Débito automático"
+      <div class="op-fila3" style="margin-bottom:6px;padding:6px 8px;border:1px solid var(--bd);border-radius:9px">
+        <div style="flex:1;min-width:150px"><label>Medio</label>
+          <input list="dl-medios" value="${esc(p.medio||'')}" placeholder="Transferencia / Cheque / Efectivo…"
                  oninput="_opPagoSet(${i},'medio',this.value)" onchange="_opPagoMedioFin(${i})" style="font-size:12.5px;padding:5px 7px"></div>
-        <div style="width:140px"><label>Importe</label>
+        <div style="width:150px"><label>Importe</label>
           <input type="number" step="0.01" min="0" value="${Number(p.importe)||0}" ${opPagos.length===1 ? 'readonly title="Con un solo medio, el importe es el neto a pagar"' : ''}
                  oninput="_opPagoSet(${i},'importe',this.value)" style="text-align:right;font-size:12.5px;padding:5px 7px"></div>
-        ${ctas.length ? `<div style="min-width:150px"><label title="Solo las cuentas desde las que se puede pagar, según el medio elegido">Cuenta pagadora</label>
+        ${ctas.length ? `<div style="min-width:160px"><label title="Solo las cuentas desde las que se puede pagar, según el medio elegido">Cuenta</label>
           <select onchange="_opPagoSet(${i},'cuenta_id',this.value)" style="font-size:12.5px;padding:5px 7px">
             <option value="">—</option>
             ${_opCuentasPara(p.medio).map(c => `<option value="${c.id}" ${String(p.cuenta_id||'')===String(c.id)?'selected':''}>${esc(c.nombre)}</option>`).join('')}
@@ -1088,7 +1089,7 @@ function _opPintarPagos(){
         ${opPagos.length>1 ? `<button class="act gh" onclick="_opPagoQuitar(${i})" title="Quitar este medio" style="padding:4px 8px">✕</button>` : ''}
       </div>`).join('')}
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
-      <button class="act gh" style="font-size:12px;padding:5px 9px" onclick="_opPagoAgregar()">➕ Otro medio de pago</button>
+      <button class="act gh mini-ico" onclick="_opPagoAgregar()" title="Agregar otro medio de pago (parte por transferencia, parte con cheque…)">${ico('mas','s')}</button>
       <span class="mini" id="op-pagos-dif" style="${Math.abs(dif) > 0.005 ? 'color:var(--bad);font-weight:700' : 'color:var(--ok,#166534)'}">
         ${opPagos.length>1 ? (Math.abs(dif) > 0.005
             ? (dif > 0 ? `faltan asignar ${plata(dif)}` : `sobran ${plata(-dif)}`) + ` · asignado ${plata(suma)} de ${plata(neto)}`
@@ -1107,7 +1108,13 @@ function _opPagoSet(i, campo, val){
   }
   if (campo === 'medio' || campo === 'importe'){
     // el medio decide si aparecen los campos del cheque; el importe mueve el "faltan"
-    if (campo === 'medio'){ const era = !!p._chq, es = _opEsCheque(val), eraE = !!p._echq, esE = _opEsEcheq(val); p._chq = es; p._echq = esE; if (era !== es || eraE !== esE) { _opPintarPagos(); return; } }
+    if (campo === 'medio'){
+      const era = !!p._chq, es = _opEsCheque(val), eraE = !!p._echq, esE = _opEsEcheq(val); p._chq = es; p._echq = esE;
+      // (8-oct, JP) si para ese medio hay una sola cuenta posible (Mercado Pago → MP Locales), queda elegida sola
+      const l = _opCuentasPara(val);
+      if ((val||'').trim() && l.length === 1 && p.cuenta_id !== l[0].id){ p.cuenta_id = l[0].id; _opPintarPagos(); return; }
+      if (era !== es || eraE !== esE) { _opPintarPagos(); return; }
+    }
     const d = document.getElementById('op-pagos-dif');
     if (d && opPagos.length > 1){
       const neto = _opNeto(), suma = _opSumPagos(), dif = Math.round((neto - suma)*100)/100;
@@ -1155,10 +1162,11 @@ function _opPintarRets(){
         <td class="num" style="white-space:nowrap">— <button class="act gh" onclick="_opRetRestaurar(${i})" title="Volver a aplicar la retención calculada" style="padding:2px 7px;margin-left:3px">↺</button></td></tr>`;
         return `<tr>
         <td style="padding-right:10px">${_opTip(r.calculo, r.codigo + ' · ' + (r.nombre||'').slice(0,42))}
-          ${r.propuesto ? ' <span class="chip" style="background:#fef3c7;color:#92400e">propuesto</span>' : ''}
+          ${r.alicuota ? ` <span class="mini">${Number(r.alicuota)}%</span>` : ''}
+          ${r.propuesto ? ` <span class="mini" title="Propuesta por el sistema según el régimen del proveedor" style="cursor:help">${ico('info','s')}</span>` : ''}
           ${r.agregada ? ' <span class="chip" style="background:#e0e7ff;color:#3730a3">agregada</span>' : ''}
           <span class="chip" id="op-mano-${i}" style="background:#fee2e2;color:#991b1b;${ed?'':'display:none'}">a mano</span>
-          ${r.alicuota ? ` <span class="mini">${Number(r.alicuota)}%</span>` : ''}
+          ${i === opRets.length - 1 && libres.length ? `<span class="op-mas"><button class="act gh mini-ico" title="Agregar otra retención" onclick="this.nextElementSibling.style.display='';this.style.display='none'">${ico('mas','s')}</button><select style="display:none;font-size:12px;padding:4px 7px;max-width:260px" onchange="_opRetAgregar(this.value)"><option value="">Régimen…</option>${libres.map(x => `<option value="${esc(x.codigo)}">${esc(x.codigo)} · ${esc(x.nombre)}</option>`).join('')}</select></span>` : ''}
           ${r.aviso ? `<br><span class="mini" style="color:#b45309">${esc(r.aviso)}</span>` : ''}
           <div id="op-motivo-${i}" style="${ed?'':'display:none'};margin-top:4px">
             <input id="op-motivo-in-${i}" placeholder="¿Por qué este importe? (va al certificado)"
@@ -1174,13 +1182,7 @@ function _opPintarRets(){
             ? `<button class="act gh" onclick="_opRetQuitar(${i})" title="Quitar" style="padding:2px 7px;margin-left:3px">✕</button>`
             : `<button class="act gh" onclick="_opRetReset(${i})" title="Volver a lo calculado" style="padding:2px 7px;margin-left:3px">↺</button><button class="act gh" onclick="_opRetEliminar(${i})" title="Eliminar esta retención de la orden" style="padding:2px 7px;margin-left:3px;color:var(--bad)">✕</button>`}
         </td></tr>`; }).join('')
-        : '<tr><td class="mini">Sin retenciones para este proveedor.</td><td></td></tr>'}
-      ${libres.length ? `<tr><td colspan="2" style="padding-top:6px">
-        <select onchange="_opRetAgregar(this.value); this.value='';"
-                style="font-size:12px;padding:4px 7px;max-width:100%">
-          <option value="">➕ Agregar otra retención…</option>
-          ${libres.map(r => `<option value="${esc(r.codigo)}">${esc(r.codigo)} · ${esc(r.nombre)}</option>`).join('')}
-        </select></td></tr>` : ''}
+        : `<tr><td class="mini">Sin retenciones para este proveedor.${libres.length ? ` <span class="op-mas"><button class="act gh mini-ico" title="Agregar una retención" onclick="this.nextElementSibling.style.display='';this.style.display='none'">${ico('mas','s')}</button><select style="display:none;font-size:12px;padding:4px 7px;max-width:260px" onchange="_opRetAgregar(this.value)"><option value="">Régimen…</option>${libres.map(x => `<option value="${esc(x.codigo)}">${esc(x.codigo)} · ${esc(x.nombre)}</option>`).join('')}</select></span>` : ''}</td><td></td></tr>`}
       <tr style="font-weight:700;border-top:2px solid var(--bd)">
         <td>Neto a pagar</td>
         <td class="num" style="font-size:16px" id="op-neto">${plata(_opNeto())}</td></tr>
@@ -5082,6 +5084,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=6"></script>
 <script src="equiv-import.js?v=3"></script>
 <script src="juegos.js?v=2"></script>
-<script src="manual.js?v=63"></script>
+<script src="manual.js?v=64"></script>
 </body>
 </html>
