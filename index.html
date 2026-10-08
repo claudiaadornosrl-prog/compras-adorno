@@ -1017,8 +1017,8 @@ async function _opCalcular(){
        <br><span class="mini">Si emitís igual, Tesorería lo vincula sola en vez de duplicar el pago.</span></div>` : ''}
     ${av.length ? `<div class="aviso-amb" style="margin-bottom:10px">${av.map(a => `<div>${ico('alerta','s')} ${esc(a)}</div>`).join('')}</div>` : ''}
     <table style="font-size:13px"><tbody>
-      <tr><td>Comprobantes (${data.comprobantes}) <span class="mini">· neto</span></td>
-          <td class="num" title="Neto sin IVA ni percepciones, base de las retenciones. Total con impuestos: ${plata(data.subtotal)}"><b>${plata(data.neto)}</b></td></tr>
+      <tr><td>Comprobantes (${data.comprobantes}) <span class="mini">(neto)</span></td>
+          <td class="num" title="Total con impuestos; entre paréntesis el neto sin IVA ni percepciones, base de las retenciones"><b>${plata(data.subtotal)}</b> <span class="mini">(${plata(data.neto)})</span></td></tr>
     </tbody></table>
     <div id="op-rets"></div>
     <div id="op-pagos" style="margin-top:12px"></div>`;
@@ -1085,7 +1085,10 @@ function _opPintarPagos(){
   const neto = _opNeto(), suma = _opSumPagos(), dif = Math.round((neto - suma)*100)/100;
   const ctas = OP_CUENTAS || [];
   cont.innerHTML = `
-    <h4 style="font-size:13px;margin:0 0 5px">Medio de pago${opPagos.length>1 ? 's' : ''}</h4>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 5px">
+      <h4 style="font-size:13px;margin:0">Medio de pago${opPagos.length>1 ? 's' : ''}</h4>
+      <button class="act gh mini-ico" style="padding:3px 5px" onclick="_opPagoAgregar()" title="Agregar otro medio de pago (parte por transferencia, parte con cheque…)">${ico('mas','s')}</button>
+    </div>
     ${opPagos.map((p,i) => `
       <div class="op-fila3" style="margin-bottom:6px;padding:6px 8px;border:1px solid var(--bd);border-radius:9px">
         <div style="flex:1;min-width:150px"><label>Medio</label>
@@ -1108,8 +1111,7 @@ function _opPintarPagos(){
           ${_opEsEcheq(p.medio) ? `<div class="mini" style="width:100%;color:#64748b">El número del Echeq lo asigna el banco al emitirlo: no se carga acá.</div>` : ''}` : ''}
         ${opPagos.length>1 ? `<button class="act gh" onclick="_opPagoQuitar(${i})" title="Quitar este medio" style="padding:4px 8px">✕</button>` : ''}
       </div>`).join('')}
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
-      <button class="act gh mini-ico" onclick="_opPagoAgregar()" title="Agregar otro medio de pago (parte por transferencia, parte con cheque…)">${ico('mas','s')}</button>
+    <div style="display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:6px">
       <span class="mini" id="op-pagos-dif" style="${Math.abs(dif) > 0.005 ? 'color:var(--bad);font-weight:700' : 'color:var(--ok,#166534)'}">
         ${opPagos.length>1 ? (Math.abs(dif) > 0.005
             ? (dif > 0 ? `faltan asignar ${plata(dif)}` : `sobran ${plata(-dif)}`) + ` · asignado ${plata(suma)} de ${plata(neto)}`

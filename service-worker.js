@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v102-ux-retenciones';
+const CACHE_VERSION = 'compras-v103-op-modal-ajustes';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
