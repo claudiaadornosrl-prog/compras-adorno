@@ -914,8 +914,8 @@ async function abrirOP(cuit){
 function _pintarModalOP(cands){
   const prov = OP_PROVS.find(p => p.cuit === opSel) || {};
   openModalP(`
-    <h3 style="margin:0 0 3px">${ico('pago')} Orden de pago · ${esc(prov.proveedor || opSel)}</h3>
-    <p class="mini" style="margin:0 0 12px">CUIT ${esc(opSel)}${MODO_PRUEBA ? ` <span class="hchip" style="margin-left:4px" title="Ambiente de prueba: la OP lleva punto de venta 9999 y no genera el pendiente en Tesorería">${ico('frasco','s')} prueba</span>` : ''}</p>
+    <h3 style="margin:0 0 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">${ico('pago')} Orden de pago · <span class="prov-nom" style="display:inline-block;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom" title="${esc(prov.proveedor || opSel)}">${esc(prov.proveedor || opSel)}</span>
+      <span class="mini" style="font-weight:400">CUIT ${esc(opSel)}</span>${MODO_PRUEBA ? ` <span class="hchip" style="margin:0" title="Ambiente de prueba: la OP lleva punto de venta 9999 y no genera el pendiente en Tesorería">${ico('frasco','s')} prueba</span>` : ''}</h3>
 
     <div style="max-height:230px;overflow:auto;border:1px solid var(--bd);border-radius:9px;margin-bottom:12px">
       <table style="font-size:13px"><thead><tr>
