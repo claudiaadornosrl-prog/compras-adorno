@@ -366,6 +366,8 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 .fx-tbl{width:100%;font-size:12.5px;border-collapse:collapse;margin-bottom:4px;}
 .fx-tbl th{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.3px;padding:4px 6px;text-align:left;}
 .fx-tbl td{padding:5px 6px;border-top:1px solid var(--bd);vertical-align:top;}
+.fx-tbl .fx-desc,.fx-tbl .fx-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px}
+.fx-tbl .fx-sub{line-height:1.6}
 .fx-tbl tfoot td{border-top:2px solid var(--bd);}
 .fx-tbl .chip{font-size:11px;padding:2px 7px;white-space:nowrap;}
 .fx-pie{display:grid;grid-template-columns:1fr 280px;gap:16px;margin:10px 0 4px;padding-top:10px;border-top:2px solid var(--bd);}
@@ -2343,7 +2345,7 @@ function _facturaRenglones(d, reng, opts = {}){
       <tbody>${reng.map((r, i) => { const est = _rengEstado(r), pun = _rengPun(r);
         return `<tr>
         <td class="num">${ed ? inp(i, 'cantidad', r.cantidad, 54) : Number(r.cantidad||0).toLocaleString('es-AR')}</td>
-        <td>${esc(r.descripcion || '')}${r.sku && r.descripcion_nuestra ? `<br><span class="mini" style="color:#0f766e" title="Nuestra descripción (Dragonfish) del SKU ${esc(r.sku)}">🏷 ${esc(r.descripcion_nuestra)}</span>` : ''}<br><span class="mini">${r.sku ? `<code>${esc(r.sku)}</code>${Number(r.pack) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="El proveedor lo vende en pack de ${Number(r.pack)}: al stock entran ${_rengN(Number(r.cantidad||0) * Number(r.pack))} unidades">📦 ×${Number(r.pack)} = ${_rengN(Number(r.cantidad||0) * Number(r.pack))} u.</span>` : ''}` : (r.estado === 'desglosado' ? `<span style="color:#6d28d9">🎨 desglosado por color en el remito</span>` : `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>`)}${(!r.sku && !r.sin_stock && r.estado !== 'desglosado' && opts.desde) ? ` <button class="act op-ico" title="Asignar SKU: traducir el código del proveedor a un artículo nuestro. Se guarda como equivalencia y las próximas facturas de este proveedor lo reconocen solas." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${i})">${ico('link','s')}</button>` : ''}${r.lista_compra != null ? ` · lista ${plata(r.lista_compra)}` : ''}${r.lista_costo != null ? ` · costo ${plata(r.lista_costo)}` : ''}</span></td>
+        <td style="max-width:300px"><div class="fx-desc" title="${esc(r.descripcion || '')}">${esc(r.descripcion || '')}</div><div class="mini fx-sub" title="${r.sku ? esc(r.sku) + (r.descripcion_nuestra ? ' · ' + esc(r.descripcion_nuestra) + ' (nuestra descripción en el Dragonfish)' : '') : ''}${r.lista_compra != null ? ' · lista ' + plata(r.lista_compra) : ''}${r.lista_costo != null ? ' · costo ' + plata(r.lista_costo) : ''}">${r.sku ? `<code>${esc(r.sku)}</code>${r.descripcion_nuestra ? ` <span style="color:#0f766e">${esc(r.descripcion_nuestra)}</span>` : ''}${Number(r.pack) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="El proveedor lo vende en pack de ${Number(r.pack)}: al stock entran ${_rengN(Number(r.cantidad||0) * Number(r.pack))} unidades">×${Number(r.pack)} = ${_rengN(Number(r.cantidad||0) * Number(r.pack))} u.</span>` : ''}` : (r.estado === 'desglosado' ? `<span style="color:#6d28d9">desglosado por color en el remito</span>` : `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>`)}${(!r.sku && !r.sin_stock && r.estado !== 'desglosado' && opts.desde) ? ` <button class="act op-ico" title="Asignar SKU: traducir el código del proveedor a un artículo nuestro. Se guarda como equivalencia y las próximas facturas de este proveedor lo reconocen solas." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${i})">${ico('link','s')}</button>` : ''}${r.lista_compra != null ? ` · lista ${plata(r.lista_compra)}` : ''}${r.lista_costo != null ? ` · costo ${plata(r.lista_costo)}` : ''}</div></td>
         <td class="num">${ed ? inp(i, 'precio_unitario', r.precio_unitario, 96) : (r.precio_unitario != null ? plata(r.precio_unitario) : '—')}</td>
         <td class="num">${ed ? inp(i, 'descuento_pct', r.descuento_pct, 46) + ' %' : (Number(r.descuento_pct) ? Number(r.descuento_pct).toLocaleString('es-AR') + ' %' : '—')}</td>
         <td class="num" id="fx-pun-${i}">${pun != null ? plata(pun) : '—'}</td>
@@ -4893,7 +4895,7 @@ async function abrirResumenDoc(docId){
   ov.innerHTML = `<div class="c-box fx-box">
     <div class="c-head fx-cabhead">
       <div style="flex:1">${_facturaCabecera(doc, {enHead: true})}</div>
-      <button class="hbtn" title="Modificar la contabilización" onclick="editarContabilizacion(${docId})">✏️</button>
+      <button class="hbtn" title="Modificar la contabilización" onclick="editarContabilizacion(${docId})" style="display:inline-flex">${ico('lapiz','s')}</button>
       <button class="m-x" onclick="document.getElementById('res-overlay').remove()">✕</button>
     </div>
     <div class="c-body">
@@ -4904,39 +4906,39 @@ async function abrirResumenDoc(docId){
             💵 Factura en ${esc(doc.moneda)}: ${esc(doc.moneda)} ${Number(doc.importe_moneda).toLocaleString('es-AR',{minimumFractionDigits:2})}
             × $${Number(doc.cotizacion).toLocaleString('es-AR',{minimumFractionDigits:2})} = ${plata(doc.total)}
             · ${esc(doc.cotizacion_fuente || 'cotización aplicada')}</div>` : ''}
-      <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:11px">
-        ${doc.tipo_gasto ? `<span class="chip c-${doc.tipo_gasto}">${TIPOS[doc.tipo_gasto]||doc.tipo_gasto}</span>`
-          : '<span class="chip" style="background:#fee2e2;color:#991b1b">sin tipo</span>'}
-        <span class="chip" style="background:#f1f5f9;color:#475569" title="CUIT del proveedor">CUIT ${esc(doc.cuit_emisor)}</span>
-        ${doc.archivo_path ? '' : '<span class="chip" style="background:#f1f5f9;color:#94a3b8">sin PDF</span>'}
-        <select onchange="cambiarEstadoPago(${docId}, this.value)" onclick="event.stopPropagation()"
+      ${(() => {
+        // (8-oct, JP) marcas como íconos con el detalle en tooltip; el estado de pago sigue siendo un selector
+        const planTip = doc.computa_gestion ? (Array.isArray(doc.gestion_reparto) && doc.gestion_reparto.length > 1
+          ? 'Va a la planilla de gastos, repartido en ' + doc.gestion_reparto.length + ' partes · ' + plata(doc.gestion_importe) + ': ' + doc.gestion_reparto.map(x => MESES_G[Number(String(x.periodo).slice(5,7))-1]+' '+String(x.periodo).slice(0,4)+' · '+x.unidad+' · '+x.categoria+' · '+plata(x.importe)).join(' | ')
+          : 'Va a la planilla de gastos: ' + (doc.gestion_unidad||'?') + ' · ' + (doc.gestion_categoria||'?') + ' · ' + (doc.gestion_periodo ? MESES_G[Number(String(doc.gestion_periodo).slice(5,7))-1]+' '+String(doc.gestion_periodo).slice(0,4) : '?')) : 'No va a la planilla de gastos';
+        const tog = (on, icon, tip) => `<span class="eico" style="width:30px;height:30px;border:1px solid var(--bd);${on ? 'background:var(--primary);color:#fff;border-color:var(--primary)' : 'background:#fff;color:#cbd5e1'}" title="${esc(tip)}">${ico(icon)}</span>`;
+        return `<div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:11px">
+        ${letraTipo(doc.tipo_gasto)}
+        <select onchange="cambiarEstadoPago(${docId}, this.value)" onclick="event.stopPropagation()" title="Estado de pago"
           style="font-size:12px;padding:4px 8px;border-radius:20px;font-weight:700;border:1px solid var(--bd);
                  background:${(EPAGO[doc.estado_pago]||EPAGO.sin_definir).bg};color:${(EPAGO[doc.estado_pago]||EPAGO.sin_definir).col}">
           ${Object.entries(EPAGO).filter(([k])=>k!=='sin_definir'||doc.estado_pago==='sin_definir').map(([k,v]) =>
             `<option value="${k}" ${doc.estado_pago===k?'selected':''}>${v.tx}</option>`).join('')}
         </select>
-        ${doc.corregida ? '<span class="chip" style="background:#fef3c7;color:#92400e">✏️ corregida</span>' : ''}
-        ${doc.computa_formal ? '<span class="chip" style="background:#f1f5f9;color:#475569">Libro IVA</span>' : '<span class="chip" style="background:#fee2e2;color:#991b1b">Fuera del Libro IVA</span>'}
-        ${doc.computa_gestion ? (Array.isArray(doc.gestion_reparto) && doc.gestion_reparto.length > 1
-          ? `<span class="chip" style="background:#f1f5f9;color:#475569" title="${esc(doc.gestion_reparto.map(x => MESES_G[Number(String(x.periodo).slice(5,7))-1]+' '+String(x.periodo).slice(0,4)+' · '+x.unidad+' · '+x.categoria+' · '+plata(x.importe)).join('\n'))}">📒 Planilla: ✂ repartido en ${doc.gestion_reparto.length} partes · ${plata(doc.gestion_importe)}</span>`
-          : `<span class="chip" style="background:#f1f5f9;color:#475569">📒 Planilla: ${esc(doc.gestion_unidad||'?')} · ${esc(doc.gestion_categoria||'?')} · ${doc.gestion_periodo ? MESES_G[Number(String(doc.gestion_periodo).slice(5,7))-1]+' '+String(doc.gestion_periodo).slice(0,4) : '?'}</span>`) : '<span class="chip" style="background:#fee2e2;color:#991b1b">No va a la planilla</span>'}
-      </div>
-      <p class="mini" style="margin:4px 0 10px">Las retenciones no van en la factura: se practican al pagar y las vas a ver en la orden de pago.</p>
-      <h4 style="font-size:14px;margin:4px 0 7px">Imputación contable</h4>
-      ${lineas.length ? `<table>
-        <thead><tr><th>Concepto</th><th>Alíc.</th><th class="num">Neto</th></tr></thead>
-        <tbody>${lineas.map(l => `<tr>
-          <td><b>${esc(l.concepto_codigo||'—')}</b> <span class="mini">${esc(cMap[l.concepto_codigo]||l.descripcion||'')}</span></td>
-          <td>${esc(l.alicuota==='0'?'No grav.':(l.alicuota||'')+'%')}</td>
-          <td class="num">${plata(l.monto_neto)}</td>
-        </tr>`).join('')}</tbody></table>`
+        ${doc.corregida ? `<span class="eico" style="background:#fef3c7;color:#92400e" title="Importes corregidos a mano">${ico('lapiz','s')}</span>` : ''}
+        ${doc.archivo_path ? '' : `<span class="eico" style="background:#f1f5f9;color:#94a3b8" title="Sin PDF">${ico('clip','s')}</span>`}
+        <span style="flex:1"></span>
+        ${tog(doc.computa_formal, 'iva', doc.computa_formal ? 'Va al Libro IVA (contabilidad formal)' : 'No va al Libro IVA')}
+        ${tog(doc.computa_gestion, 'hoja', planTip)}
+      </div>`; })()}
+      <div class="c-linea fx-lin-hd" style="margin:4px 0 2px"><span style="flex:1;display:inline-flex;align-items:center;gap:8px">Concepto ${ayuda('Imputación contable de la factura. Las retenciones no van acá: se practican al pagar y se ven en la orden de pago.')}</span><span style="width:72px;text-align:right">IVA %</span><span style="width:140px;text-align:right">Neto</span></div>
+      ${lineas.length ? lineas.map(l => `<div class="c-linea" style="align-items:center;margin-bottom:4px">
+          <b style="width:150px;flex:none">${esc(l.concepto_codigo||'—')}</b>
+          <span class="prov-nom" style="flex:1;max-width:none;color:#166534;font-size:13.5px" title="${esc(cMap[l.concepto_codigo]||l.descripcion||'')}">${esc(cMap[l.concepto_codigo]||l.descripcion||'')}</span>
+          <span style="width:72px;text-align:right">${esc(l.alicuota==='0'?'No grav.':(l.alicuota||'')+'%')}</span>
+          <span class="num" style="width:140px;text-align:right"><b>${plata(l.monto_neto)}</b></span>
+        </div>`).join('')
         : '<div class="vacio">Sin líneas de contabilización.</div>'}
-      ${doc.aprobada_por ? `<p class="mini" style="margin-top:9px">Contabilizada por ${esc(doc.aprobada_por)}
-        el ${_fechaTs(doc.aprobada_at)}</p>`
-        : '<p class="mini" style="margin-top:9px">Contabilización migrada del Dragonfish.</p>'}
-      <p class="mini" style="margin-top:6px">Nº interno <b>${doc.numero_interno ?? '—'}</b> · Fecha de ingreso <b>${doc.fecha_ingreso ? fechaCorta(doc.fecha_ingreso) : '—'}</b></p>
-      <p class="mini" style="margin-top:9px">CAE <b>${esc(doc.cae || (doc.extraido_json||{}).cae || '—')}</b> · vto ${(doc.cae_vto || (doc.extraido_json||{}).cae_vto) ? fechaCorta(doc.cae_vto || doc.extraido_json.cae_vto) : '—'}</p>
-      ${doc.archivo_path ? `<p class="mini" style="word-break:break-all">📎 ${esc(doc.archivo_path)}</p>` : ''}
+      <p class="mini" style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <span title="${doc.aprobada_por ? 'Contabilizada por ' + esc(doc.aprobada_por) + ' el ' + _fechaTs(doc.aprobada_at) : 'Contabilización migrada del Dragonfish'}" style="cursor:help">${ico('ok','s')} ${doc.aprobada_por ? esc(String(doc.aprobada_por).split('@')[0]) + ' · ' + _fechaTs(doc.aprobada_at) : 'migrada del Dragonfish'}</span>
+        · Nº interno <b>${doc.numero_interno ?? '—'}</b> · ingreso <b>${doc.fecha_ingreso ? fechaCorta(doc.fecha_ingreso) : '—'}</b>
+        · CAE <b>${esc(doc.cae || (doc.extraido_json||{}).cae || '—')}</b> <span class="mini">vto ${(doc.cae_vto || (doc.extraido_json||{}).cae_vto) ? fechaCorta(doc.cae_vto || doc.extraido_json.cae_vto) : '—'}</span>
+      </p>
     </div>
   </div>`;
 }
