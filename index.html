@@ -561,6 +561,8 @@ const ICONOS = {
   mail: '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>',
   telefono: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"/>',
   lupa: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  basura: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  traducir: '<path d="M5 8l6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/>',
   apagado: '<path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>',
   bajar: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
   ajustes: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
@@ -3003,13 +3005,10 @@ document.addEventListener('focusout', e => {
 }, true);
 
 function vistaListados(){
-  const subs = [['gestion','📈 Gestión'],['estudio','🧾 Para el estudio']];
+  const subs = [['gestion','barras','Gestión','Cuánto se compró: por tipo de gasto, mes a mes y por proveedor'],['estudio','factura','Para el estudio','Libro IVA compras, percepciones, retenciones y Libro IVA Digital']];
   setTimeout(() => { if (listSub === 'estudio') cargarListadosEstudio(); }, 0);
-  return `<div class="card" style="padding:10px 12px">
-      <div style="display:flex;gap:7px;flex-wrap:wrap">${subs.map(([k,t]) =>
-        `<button class="act ${listSub===k?'':'gh'}" style="font-size:13px;padding:7px 13px"
-                 onclick="listSub='${k}'; render()">${t}</button>`).join('')}</div>
-    </div>
+  return `<div class="abar">${subs.map(([k,i,t,tip]) =>
+        `<button class="fchip ${listSub===k?'on':''}" title="${tip}" onclick="listSub='${k}'; render()">${ico(i,'s')} ${t}</button>`).join('')}</div>
     ${listSub === 'gestion' ? _listGestion()
       : `<div id="list-estudio"><div class="vacio">Cargando…</div></div>`}`;
 }
@@ -3151,9 +3150,9 @@ function _pintarEstudio(){
             <option value="emision" ${listPor==='emision'?'selected':''}>Emisión</option>
           </select></div>
         <div style="flex:1"></div>
-        <button class="act gh" onclick="_bajarFormatoEstudio()" title="Mismas columnas que el Subdiario que le mandás hoy">⬇ Formato estudio</button>
-        <button class="act" onclick="_bajarIvaCompras()">⬇ IVA Compras completo</button>
-        <button class="act gh" onclick="libroIvaDigital()" title="Archivos TXT del Libro IVA Digital de ARCA (RG 4597): compras y ventas">📚 Libro IVA Digital</button>
+        <button class="act gh" style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;font-size:12.5px" onclick="_bajarFormatoEstudio()" title="Bajar en Excel con las mismas columnas que el Subdiario que le mandás hoy al estudio">${ico('excel','s')} Formato estudio</button>
+        <button class="act" style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;font-size:12.5px" onclick="_bajarIvaCompras()" title="Bajar en Excel el IVA Compras completo: una columna por alícuota, descuadre y alertas">${ico('excel','s')} IVA Compras</button>
+        <button class="act gh" style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;font-size:12.5px" onclick="libroIvaDigital()" title="Archivos TXT del Libro IVA Digital de ARCA (RG 4597): compras y ventas">${ico('archivo','s')} Libro IVA Digital</button>
       </div>
       <div class="lp-rangos">
         ${[['ing','Fecha de ingreso','Mes en que se contabilizó (si el comprobante no la tiene, cuenta la emisión)'],
@@ -3164,10 +3163,8 @@ function _pintarEstudio(){
             ${listPer[k].desde || listPer[k].hasta ? `<button class="act gh" style="padding:3px 8px;font-size:12px" onclick="_listLimpiar('${k}')" title="Sacar este filtro">✕</button>` : '<span class="mini">sin filtro</span>'}
           </div>`).join('')}
       </div>
-      <p class="mini" style="margin-top:9px">Entran solo los comprobantes marcados <b>“computa en el Libro IVA”</b>.
-        Las notas de crédito restan. Los dos filtros se combinan (se tienen que cumplir ambos); un “Desde” vacío es
-        <b>desde el principio</b> y un “Hasta” vacío, sin tope. Siempre ordenado por <b>fecha de emisión</b>, de la más vieja a la más nueva. ${MODO_PRUEBA
-          ? '<b style="color:#92400e">🧪 Ambiente de prueba: se listan SOLO los comprobantes de test.</b>'
+      <p class="mini" style="margin-top:9px;display:flex;align-items:center;gap:6px">${ayuda('Entran solo los comprobantes marcados "computa en el Libro IVA". Las notas de crédito restan. Los dos filtros se combinan (se tienen que cumplir ambos); un "Desde" vacío es desde el principio y un "Hasta" vacío, sin tope. Siempre ordenado por fecha de emisión, de la más vieja a la más nueva.')} Qué entra en el listado${MODO_PRUEBA
+          ? ` · <span class="hchip" style="margin:0" title="Ambiente de prueba: se listan SOLO los comprobantes de test">${ico('frasco','s')} prueba</span>`
           : ''}</p>
     </div>
 
@@ -3213,9 +3210,8 @@ function _pintarEstudio(){
     </div>` : ''}
 
     <div class="card">
-      <h3 style="font-size:15px;margin-bottom:4px">🧾 IVA Compras · ${esc(mesTxt)}</h3>
-      <p class="mini" style="margin-bottom:10px">Un renglón por comprobante, con el neto abierto por alícuota.
-        Es lo que va al Libro IVA Compras.</p>
+      <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('factura','s')} IVA Compras · ${esc(mesTxt)}
+        ${ayuda('Un renglón por comprobante, con el neto abierto por alícuota. Es lo que va al Libro IVA Compras.')}</h3>
       <div style="overflow-x:auto;max-height:520px"><table style="font-size:12.5px">
         <thead><tr><th>Fecha</th><th>Comprobante</th><th>CUIT</th><th>Proveedor</th><th>IVA</th>
           <th class="num">Neto 21%</th><th class="num">Neto 10,5%</th><th class="num">Neto 27%</th>
@@ -3247,11 +3243,9 @@ function _pintarEstudio(){
 
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
-        <div><h3 style="font-size:15px;margin-bottom:4px">📥 Percepciones sufridas</h3>
-          <p class="mini" style="margin-bottom:10px">Lo que los proveedores le percibieron a la empresa. Son crédito
-            contra el impuesto correspondiente, igual que el IVA. Abajo, el detalle por comprobante y jurisdicción —
-            el mismo corte del listado que se manda hoy.</p></div>
-        ${LIST_PDET && LIST_PDET.length ? '<button class="act gh" onclick="_bajarPercepciones()">⬇ Detalle</button>' : ''}
+        <div><h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('inbox','s')} Percepciones sufridas
+          ${ayuda('Lo que los proveedores le percibieron a la empresa. Son crédito contra el impuesto correspondiente, igual que el IVA. Abajo, el detalle por comprobante y jurisdicción: el mismo corte del listado que se manda hoy.')}</h3></div>
+        ${LIST_PDET && LIST_PDET.length ? `<button class="act gh mini-ico" title="Bajar el detalle en Excel" onclick="_bajarPercepciones()">${ico('excel','s')}</button>` : ''}
       </div>
       ${LIST_PERC && LIST_PERC.length ? `<table><tbody>${LIST_PERC.map(p=>`<tr>
         <td>${esc(p.impuesto)}</td><td class="mini">${p.comprobantes} comprobantes</td>
@@ -3271,9 +3265,8 @@ function _pintarEstudio(){
     </div>
 
     <div class="card">
-      <h3 style="font-size:15px;margin-bottom:4px">📤 Retenciones practicadas</h3>
-      <p class="mini" style="margin-bottom:10px">Lo que la empresa le retuvo a sus proveedores al pagarles, agrupado
-        por quincena (que es como se declara). Se llena solo con las órdenes de pago que emita el módulo.</p>
+      <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('porcentaje','s')} Retenciones practicadas
+        ${ayuda('Lo que la empresa le retuvo a sus proveedores al pagarles, agrupado por quincena (que es como se declara). Se llena solo con las órdenes de pago que emita el módulo.')}</h3>
       ${LIST_RET && LIST_RET.length ? `<div style="overflow-x:auto"><table>
         <thead><tr><th>Quincena</th><th>Fecha</th><th>OP</th><th>Proveedor</th><th>Régimen</th>
           <th class="num">Base</th><th class="num">Alíc.</th><th class="num">Retenido</th><th>Certificado</th></tr></thead>
@@ -3593,20 +3586,15 @@ async function vistaConfig(){
   const inactivos = REGIMENES.filter(r => !r.activo).length;
 
   c.innerHTML = `
-    ${faltan ? `<div class="alerta">⚠ Hay ${faltan} régimen(es) sin alícuota cargada. Hasta que los completes,
-      el módulo no calcula esas retenciones solo — te las va a dejar en cero para que las pongas a mano.</div>` : ''}
+    ${faltan ? `<div class="aviso-amb" style="margin-bottom:10px"><div>${ico('alerta','s')} Hay ${faltan} régimen(es) sin alícuota cargada. Hasta que los completes,
+      el módulo no calcula esas retenciones solo: te las va a dejar en cero para que las pongas a mano.</div></div>` : ''}
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-        <h3 style="font-size:16px;margin-bottom:4px">Regímenes de retención y percepción</h3>
-        <button class="act" onclick="nuevoRegimenForm()">➕ Nuevo régimen</button>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <h3 style="font-size:15px;flex:1;display:flex;align-items:center;gap:8px">${ico('porcentaje','s')} Regímenes de retención y percepción
+          ${ayuda('Parámetros tomados del Dragonfish (los que aplica hoy administración, RG 830). Si el estudio informa un cambio, se corrige acá. El mínimo no imponible se computa sobre el acumulado del mes por proveedor cuando la casilla "Acum. mes" está tildada: si le pagás tres facturas en el mes, el mínimo se descuenta una sola vez.' + (inactivos ? ' Los regímenes atenuados están inactivos: el Dragonfish no los practica hace años y no se proponen en ninguna orden de pago.' : ''))}</h3>
+        <button class="act mini-ico" title="Nuevo régimen" onclick="nuevoRegimenForm()">${ico('mas')}</button>
       </div>
       <div id="reg-nuevo"></div>
-      <p class="mini" style="margin-bottom:12px">
-        Parámetros tomados del Dragonfish (los que aplica hoy administración, RG 830). Si el estudio informa
-        un cambio, se corrige acá. <b>El mínimo no imponible se computa sobre el acumulado del mes por proveedor</b>
-        cuando la casilla está tildada — así, si le pagás tres facturas en el mes, el mínimo se descuenta una sola vez.
-        ${inactivos ? `Los regímenes atenuados están <b>inactivos</b>: el Dragonfish no los practica hace años y no se proponen en ninguna orden de pago.` : ''}
-      </p>
       <div style="overflow-x:auto"><table>
         <thead><tr>
           <th>Código</th><th>Régimen</th><th class="num">Alícuota %</th>
@@ -3614,10 +3602,9 @@ async function vistaConfig(){
           <th>Base</th><th style="text-align:center">Acum. mes</th><th style="text-align:center">Activo</th><th></th>
         </tr></thead>
         <tbody>${REGIMENES.map(r => `<tr style="${r.activo ? '' : 'opacity:.5'}">
-          <td><b>${esc(r.codigo)}</b><br><span class="mini">${esc(r.jurisdiccion||'')}</span>
-              ${r.activo ? '' : '<br><span class="mini" style="color:#b91c1c">inactivo</span>'}</td>
+          <td style="white-space:nowrap"><b>${esc(r.codigo)}</b>${r.activo ? '' : ` <span class="eico" style="background:#fee2e2;color:#991b1b" title="Inactivo: no se propone en ninguna orden de pago">${ico('apagado','s')}</span>`}<br><span class="mini">${esc(r.jurisdiccion||'')}</span></td>
           <td style="max-width:280px">${esc(r.nombre)}
-              ${r.notas ? `<br><span class="mini">${esc(r.notas)}</span>` : ''}
+              ${r.notas ? ` ${ayuda(r.notas)}` : ''}
               ${tieneEscala(r) ? `<details style="margin-top:4px"><summary class="mini" style="cursor:pointer">
                   Escala progresiva · ${r.escala.length} tramos (sobre el neto menos el mínimo)</summary>
                   <table style="font-size:12px;margin-top:4px"><thead><tr>
@@ -3643,13 +3630,13 @@ async function vistaConfig(){
           <td style="text-align:center"><input type="checkbox" id="ac-${r.id}" ${r.acumula_mensual?'checked':''}></td>
           <td style="text-align:center"><input type="checkbox" id="av-${r.id}" ${r.activo?'checked':''}
                  title="Desactivado: no se propone en ninguna orden de pago"></td>
-          <td class="num"><button class="act" onclick="guardarRegimen(${r.id})">Guardar</button></td>
+          <td class="num"><button class="act gh mini-ico" title="Guardar los cambios de este régimen" onclick="guardarRegimen(${r.id})">${ico('guardar','s')}</button></td>
         </tr>`).join('')}</tbody>
       </table></div>
     </div>
-    <div class="card">
-      <h3 style="font-size:16px;margin-bottom:4px">Cómo se aplica</h3>
-      <ul style="font-size:13.5px;line-height:1.8;margin-left:18px;color:#334155">
+    <details class="card plegable">
+      <summary style="font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px">${ico('info','s')} Cómo se aplica</summary>
+      <ul style="font-size:13.5px;line-height:1.8;margin:10px 0 0 18px;color:#334155">
         <li>Al emitir una orden de pago, el módulo mira qué regímenes le corresponden al proveedor y calcula cada retención.</li>
         <li>Te muestra el detalle —base, alícuota, importe— <b>antes</b> de emitir, y podés pisar cualquier número a mano.</li>
         <li>Si lo pisás, queda guardado lo que propuso el sistema y lo que pusiste vos, con el motivo. Nada se pierde.</li>
@@ -3657,7 +3644,7 @@ async function vistaConfig(){
         <li><b>IIBB provincia</b>: la alícuota sale del padrón de ARBA y cambia por proveedor y por mes,
             así que se carga por proveedor y pisa la del régimen.</li>
       </ul>
-    </div>`;
+    </details>`;
 }
 
 async function guardarRegimen(id){
@@ -3813,64 +3800,49 @@ function _pintarEquivalencias(){
   const HECHAS = EQUIV_HECHAS.filter(g => _eqCoincide([g.prov, g.cuit, ...(g.codigos || []).map(k => k.codigo + ' ' + k.descripcion), ...g.partes.map(p => p.sku)].join(' ').toLowerCase()));
   const hayFiltro = !!EQ_BUSCA.trim();
 
-  c.innerHTML = `<div class="kpis">
-      <div class="kpi" style="border-left-color:var(--warn)"><div class="lbl">Códigos sin traducir</div>
-        <div class="val">${PENDIENTES.length}</div><div class="sub">se resuelven una sola vez</div></div>
-      <div class="kpi" style="border-left-color:var(--ok)"><div class="lbl">Equivalencias cargadas</div>
-        <div class="val">${HECHAS.length}</div><div class="sub">ya funcionan solas</div></div>
-    </div>
-
-    <div class="card" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-      <div style="flex:1;min-width:240px"><b>📥 ¿Tenés la lista de artículos del proveedor en Excel?</b>
-        <div class="mini">Cargá todas las equivalencias de una vez: el sistema propone nuestro SKU fila por fila y vos revisás antes de guardar.</div></div>
-      <button class="act" onclick="abrirImportarEquiv()">📥 Importar desde Excel</button>
-    </div>
-
-    <div class="card" style="padding:10px 14px;display:flex;gap:8px;align-items:center">
-      <input id="eq-busca" type="search" value="${esc(EQ_BUSCA)}" placeholder="🔍 Buscar por proveedor, código, descripción o SKU nuestro…"
-             style="flex:1;padding:9px 11px;border:1px solid var(--bd);border-radius:9px;font-size:14px;font-family:inherit"
+  // (8-oct, JP) resumen en chips, buscador en la misma barra, importación como ícono, ayudas en tooltip
+  c.innerHTML = `<div class="abar">
+      <span class="fchip" style="cursor:default;color:#92400e" title="Códigos del proveedor que todavía no tienen nuestro SKU: se resuelven una sola vez">${ico('alerta','s')} <b>${PENDIENTES.length}</b> sin traducir</span>
+      <span class="fchip" style="cursor:default;color:#166534" title="Equivalencias cargadas: ya funcionan solas">${ico('ok','s')} <b>${EQUIV_HECHAS.length}</b> cargadas</span>
+      <input id="eq-busca" type="search" value="${esc(EQ_BUSCA)}" placeholder="Buscar por proveedor, código, descripción o SKU nuestro…"
+             style="flex:1;min-width:220px;padding:8px 11px;border:1px solid var(--bd);border-radius:999px;font-size:13.5px;font-family:inherit"
              oninput="EQ_BUSCA=this.value; clearTimeout(window._eqT); window._eqT=setTimeout(()=>{const p=this.selectionStart; _pintarEquivalencias(); const i=document.getElementById('eq-busca'); if(i){i.focus(); try{i.setSelectionRange(p,p);}catch(_){}}}, 350)">
-      ${hayFiltro ? `<span class="mini">${PEND.length} sin traducir · ${HECHAS.length} cargadas</span><button class="act gh" style="padding:6px 10px" onclick="EQ_BUSCA='';_pintarEquivalencias()">✕</button>` : ''}
+      ${hayFiltro ? `<span class="mini">${PEND.length} · ${HECHAS.length}</span><button class="act gh mini-ico" title="Limpiar la búsqueda" onclick="EQ_BUSCA='';_pintarEquivalencias()">${ico('anular','s')}</button>` : ''}
+      <button class="act mini-ico" title="Importar desde Excel: cargá la lista de artículos del proveedor de una vez; el sistema propone nuestro SKU fila por fila y vos revisás antes de guardar" onclick="abrirImportarEquiv()">${ico('excel')}</button>
     </div>
 
     <div class="card">
-      <h3 style="font-size:15px;margin-bottom:4px">Artículos que el proveedor nombra distinto</h3>
-      <p class="mini" style="margin-bottom:11px">
-        Familia García Regueira comparte catálogo con nosotros, así que sus facturas no aparecen acá:
-        el código de ellos ya es nuestro SKU. Los que sí aparecen son los del resto de los proveedores.
-        Cada código se resuelve <b>una sola vez</b> y de ahí en más el sistema lo traduce solo.
-      </p>
+      <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('traducir','s')} Artículos que el proveedor nombra distinto
+        ${ayuda('Familia García Regueira comparte catálogo con nosotros, así que sus facturas no aparecen acá: el código de ellos ya es nuestro SKU. Los que sí aparecen son los del resto de los proveedores. Cada código se resuelve una sola vez y de ahí en más el sistema lo traduce solo.')}</h3>
       ${!PEND.length
-        ? `<div class="vacio">${hayFiltro ? 'Nada sin traducir que coincida con la búsqueda.' : '✅ No hay artículos esperando traducción.'}</div>`
-        : `<div style="overflow-x:auto"><table>
+        ? `<div class="vacio">${hayFiltro ? 'Nada sin traducir que coincida con la búsqueda.' : 'No hay artículos esperando traducción.'}</div>`
+        : `<div style="overflow-x:auto"><table class="tb-band">
             <thead><tr><th>Proveedor</th><th>Su código</th><th>Cómo lo llama él</th>
               <th class="num">Veces</th><th></th></tr></thead>
-            <tbody>${PEND.slice(0,200).map(p => { const i = PENDIENTES.indexOf(p); return `<tr>
-              <td>${esc(p.prov || p.cuit || '—')}</td>
+            <tbody>${PEND.slice(0,200).map(p => { const i = PENDIENTES.indexOf(p); return `<tr onclick="abrirMapeo(${i})" title="Traducir a nuestro SKU">
+              <td class="prov"><span class="prov-nom">${esc(p.prov || p.cuit || '—')}</span></td>
               <td><code>${esc(p.codigo_proveedor || '—')}</code></td>
               <td>${esc(p.descripcion || '')}</td>
               <td class="num">${p.veces}</td>
-              <td class="num"><button class="act" onclick="abrirMapeo(${i})">Traducir</button></td>
+              <td class="num"><button class="act mini-ico" title="Traducir a nuestro SKU" onclick="event.stopPropagation(); abrirMapeo(${i})">${ico('traducir','s')}</button></td>
             </tr>`; }).join('')}</tbody></table></div>`}
     </div>
 
     ${HECHAS.length || hayFiltro ? `<div class="card">
-      <h3 style="font-size:15px;margin-bottom:4px">Equivalencias ya cargadas${hayFiltro ? ` <span class="mini">(${HECHAS.length} de ${EQUIV_HECHAS.length})</span>` : ''}</h3>
-      <p class="mini" style="margin-bottom:11px">Con ✏️ se corrige una traducción mal hecha: los renglones de facturas y
-        los remitos que todavía no se importaron pasan solos al SKU nuevo. Lo que ya se importó al Dragonfish no se toca.
-        Si el proveedor factura el mismo artículo con más de un código (en blíster, a granel…), desde ✏️ se le agregan los otros códigos.</p>
-      <div style="overflow-x:auto"><table>
+      <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('link','s')} Equivalencias ya cargadas${hayFiltro ? ` <span class="mini">(${HECHAS.length} de ${EQUIV_HECHAS.length})</span>` : ''}
+        ${ayuda('Con el lápiz se corrige una traducción mal hecha: los renglones de facturas y los remitos que todavía no se importaron pasan solos al SKU nuevo. Lo que ya se importó al Dragonfish no se toca. Si el proveedor factura el mismo artículo con más de un código (en blíster, a granel…), desde el lápiz se le agregan los otros códigos.')}</h3>
+      <div style="overflow-x:auto"><table class="tb-band">
         <thead><tr><th>Proveedor</th><th>Su código</th><th>Cómo lo llama él</th><th>Nuestro SKU</th>
           <th>Cargada</th><th></th></tr></thead>
-        <tbody>${HECHAS.map(g => { const i = EQUIV_HECHAS.indexOf(g); return `<tr>
-          <td>${esc(g.prov || g.cuit)}</td>
+        <tbody>${HECHAS.map(g => { const i = EQUIV_HECHAS.indexOf(g); return `<tr onclick="editarEquivalencia(${i})" title="Editar la equivalencia">
+          <td class="prov"><span class="prov-nom">${esc(g.prov || g.cuit)}</span></td>
           <td>${g.codigos.map(k => `<code>${esc(k.codigo || '—')}</code>`).join('<br>')}${g.codigos.length > 1 ? ` <span class="chip" style="background:#e0f2fe;color:#075985" title="El proveedor factura este mismo artículo con ${g.codigos.length} códigos distintos">${g.codigos.length} códigos</span>` : ''}</td>
           <td>${g.codigos.map(k => esc(k.descripcion || '')).join('<br>')}</td>
           <td>${g.partes.map(h => `<b>${esc(h.sku)}</b>${Number(h.cantidad_por_unidad) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="1 unidad del proveedor = ${Number(h.cantidad_por_unidad)} de este SKU">📦 ×${Number(h.cantidad_por_unidad)}</span>` : ''}${g.partes.length > 1 ? ' <span class="mini">' + Math.round((h.proporcion_costo || 1) * 100) + ' %</span>' : ''}`).join('<br>')}</td>
           <td class="mini" title="${esc(g.creada_por || '')}">${_fechaTs(g.creada_at)}</td>
-          <td class="num" style="white-space:nowrap">
-            <button class="act gh" style="padding:4px 9px;font-size:12.5px" onclick="editarEquivalencia(${i})">✏️ Editar</button>
-            <button class="act gh" style="padding:4px 9px;font-size:12.5px" onclick="borrarEquivalencia(${i})" title="Borrar esta equivalencia">🗑</button></td>
+          <td class="num" style="white-space:nowrap" onclick="event.stopPropagation()">
+            <button class="act gh mini-ico" title="Editar: corregir el SKU o agregar otro código del proveedor" onclick="editarEquivalencia(${i})">${ico('lapiz','s')}</button>
+            <button class="act gh mini-ico" title="Borrar esta equivalencia" onclick="borrarEquivalencia(${i})">${ico('basura','s')}</button></td>
         </tr>`; }).join('')}</tbody></table></div>
       ${!HECHAS.length ? '<div class="vacio">Ninguna equivalencia coincide con la búsqueda.</div>' : ''}
     </div>` : ''}`;
