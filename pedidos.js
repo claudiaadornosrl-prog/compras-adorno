@@ -192,9 +192,9 @@ function _pedVistaLista(){
         <th class="num">$ pendiente</th><th>Entrega est.</th></tr></thead>
       <tbody>${rows.map(p => {
         const venc = ['enviado','parcial'].includes(p.estado) && p.entrega_estimada && p.entrega_estimada < _hoyAR();
-        return `<tr onclick="pedAbrir(${p.id})" title="Abrir el pedido">
+        return `<tr onclick="pedAbrir(${p.id})" title="${p.notas ? 'Nota: ' + esc(p.notas) : 'Abrir el pedido'}">
           <td><b>${_pedNro(p.numero)}</b></td><td>${fechaCorta(p.fecha)}</td>
-          <td class="prov"><span class="prov-nom">${esc(p.proveedor_nombre)}</span>${p.notas ? `<div class="mini prov-nom" title="${esc(p.notas)}">${esc(p.notas)}</div>` : ''}</td>
+          <td class="prov" style="white-space:nowrap"><span class="prov-nom">${esc(p.proveedor_nombre)}</span>${p.notas ? ` <span class="eico" style="width:22px;height:22px;color:var(--mut)" title="${esc(p.notas)}">${ico('hoja','s')}</span>` : ''}</td>
           <td class="ctr" style="white-space:nowrap">${_pedEico(p.estado)}${Number(p.descuento_extra_pct) ? ` <span class="eico" style="background:#dcfce7;color:#166534" title="Descuento extra por volumen: −${_pedN(p.descuento_extra_pct)} %">${ico('regalo','s')}</span>` : ''}${p.condiciones?.minimo && !p.condiciones.minimo.cumple && p.estado !== 'anulado' ? ` <span class="eico" style="background:#fee2e2;color:#991b1b" title="No llega a la compra mínima del proveedor">${ico('alerta','s')}</span>` : ''}</td><td class="num">${p.renglones}</td>
           <td class="num">${_pedN(p.unidades)}</td><td class="num">${_pedN(p.recibido)}</td>
           <td class="num"><b>${_pedN(p.pendiente)}</b>${Number(p.cancelado) ? `<div class="mini">${_pedN(p.cancelado)} cancel.</div>` : ''}</td>
