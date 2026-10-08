@@ -218,7 +218,8 @@ function _manualSecciones() {
       icon: '📇', titulo: 'Conceptos',
       desc: 'El catálogo contable: cada concepto es un SKU + su descripción, como los artículos del Dragonfish.',
       pasos: [
-        'Buscá por SKU o descripción; se puede editar la descripción, la alícuota de IVA y dar de baja (desmarcar Activo).',
+        'Buscá por SKU o descripción (busca solo cuando dejás de escribir). La descripción, la alícuota de IVA y Activo se editan en la misma fila y SE GUARDAN SOLOS al salir del campo: aparece un "✓ guardado" verde. No hay botón de guardar.',
+        'Los conceptos dados de baja (Activo desmarcado) están ocultos por defecto: el chip "Ocultar inactivos" arriba los muestra u oculta, y el navegador recuerda la elección. La manito al lado del SKU marca los conceptos creados desde el módulo; el resto vino del histórico del Dragonfish.',
         '➕ Nuevo concepto: solo para un tipo de gasto genuinamente nuevo — no para variantes de nombre. Cada concepto de más parte los listados.',
         '🚨 Mientras el Dragonfish siga en uso, todo concepto creado acá hay que darlo de alta también allá como artículo, sino la exportación lo rechaza.',
         '✏ SKU: cambia el código del concepto y arrastra TODO lo ya contabilizado al código nuevo, en una sola operación. Antes de hacerlo te muestra cuántos renglones, comprobantes y proveedores se van a reescribir. El SKU viejo queda guardado en el historial, así que los asientos anteriores se siguen pudiendo rastrear.',

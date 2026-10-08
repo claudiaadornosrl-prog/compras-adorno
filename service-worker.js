@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v130-desgloses-txt';
+const CACHE_VERSION = 'compras-v131-conceptos-ux';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

@@ -570,6 +570,7 @@ const ICONOS = {
   pdf: '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/>',
   mas: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
   lapiz: '<path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+  mano: '<path d="M18 11V6a2 2 0 0 0-4 0v1a2 2 0 0 0-4 0v2a2 2 0 0 0-4 0v6"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>',
   guardar: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
   mundo: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
   chat: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
@@ -4694,7 +4695,9 @@ async function abrirDetalleMerc(docId, numero){
 //  concepto creado acá tiene que existir también como artículo allá, sino
 //  el .txt de exportación lo va a rechazar.
 // ═══════════════════════════════════════════════════════════════════════
-let CONC_LISTA = [], concBusca = '';
+let CONC_LISTA = [], concBusca = '', _concTimer = null;
+// (8-oct, JP · v131) ocultar inactivos por defecto, recordado en el navegador
+let CONC_OCULTAR_INACTIVOS = localStorage.getItem('conc_ocultar_inactivos') !== '0';
 
 async function vistaConceptos(){
   const c = document.getElementById('cont');
@@ -4707,22 +4710,42 @@ async function vistaConceptos(){
   pintarConceptos();
 }
 
+function conceptosFiltrados(){
+  const t = concBusca.toLowerCase();
+  return CONC_LISTA.filter(x => (!CONC_OCULTAR_INACTIVOS || x.activo) && (!t ||
+    (x.codigo + ' ' + (x.descripcion||'')).toLowerCase().includes(t)));
+}
+
+// (v131) La barra y la cabecera se dibujan una vez; el buscador solo redibuja las
+// filas (0,6 s después de la última tecla, o con Enter), así no pierde el foco.
+function buscarConcepto(v, inmediato){
+  concBusca = v;
+  clearTimeout(_concTimer);
+  if (inmediato) pintarConceptosFilas(); else _concTimer = setTimeout(pintarConceptosFilas, 600);
+}
+function toggleInactivosConceptos(){
+  CONC_OCULTAR_INACTIVOS = !CONC_OCULTAR_INACTIVOS;
+  localStorage.setItem('conc_ocultar_inactivos', CONC_OCULTAR_INACTIVOS ? '1' : '0');
+  pintarConceptos();
+}
+
 function pintarConceptos(){
   const c = document.getElementById('cont');
-  const t = concBusca.toLowerCase();
-  const lista = CONC_LISTA.filter(x => !t ||
-    (x.codigo + ' ' + (x.descripcion||'')).toLowerCase().includes(t));
+  const activos = CONC_LISTA.filter(x=>x.activo).length, inactivos = CONC_LISTA.length - activos;
   // (8-oct, JP) resumen en chips, ayuda en tooltip, alta con "+"
   c.innerHTML = `<div class="abar">
-      <span class="fchip" style="cursor:default" title="${CONC_LISTA.filter(x=>x.activo).length} activos"><b>${CONC_LISTA.length}</b> conceptos</span>
-      <span class="fchip" style="cursor:default" title="Creados desde el módulo; el resto vino del histórico del Dragonfish">${ico('lapiz','s')} <b>${CONC_LISTA.filter(x=>x.origen==='manual').length}</b> a mano</span>
+      <span class="fchip" style="cursor:default"><b>${CONC_LISTA.length}</b> conceptos <span class="mini">· ${activos} activos · ${inactivos} inactivos</span></span>
+      <span class="fchip" style="cursor:default" title="Creados desde el módulo; el resto vino del histórico del Dragonfish">${ico('mano','s')} <b>${CONC_LISTA.filter(x=>x.origen==='manual').length}</b> a mano</span>
+      <button class="fchip ${CONC_OCULTAR_INACTIVOS?'on':''}" type="button" onclick="toggleInactivosConceptos()"
+        title="${CONC_OCULTAR_INACTIVOS ? 'Los conceptos dados de baja están ocultos. Tocá para verlos.' : 'Se ven también los dados de baja (al 50 %). Tocá para ocultarlos.'}">${ico('ojo','s')} ${CONC_OCULTAR_INACTIVOS ? 'Ocultar inactivos' : 'Mostrando inactivos'}</button>
+      <span class="mini" id="conc-recorte"></span>
     </div>
     <div class="card">
       <div class="filtros">
         <h3 style="font-size:15px;display:flex;align-items:center;gap:8px;margin-right:4px">${ico('etiquetas','s')} Catálogo
-          ${ayuda('Cada concepto es un SKU + su descripción, igual que los artículos del Dragonfish. Mientras el Dragonfish siga en uso, todo concepto creado acá hay que darlo de alta también allá como artículo; si no, la exportación lo rechaza.')}</h3>
+          ${ayuda('Cada concepto es un SKU + su descripción, igual que los artículos del Dragonfish. Mientras el Dragonfish siga en uso, todo concepto creado acá hay que darlo de alta también allá como artículo; si no, la exportación lo rechaza. Los cambios en cada renglón se guardan solos al salir del campo.')}</h3>
         <input type="search" placeholder="Buscar por SKU o descripción…" value="${esc(concBusca)}" style="flex:1"
-               oninput="concBusca=this.value; pintarConceptos()">
+               oninput="buscarConcepto(this.value)" onkeydown="if(event.key==='Enter')buscarConcepto(this.value,true)">
         <button class="act mini-ico" title="Nuevo concepto" onclick="toggleAltaConcepto()">${ico('mas')}</button>
       </div>
       <div id="alta-conc" style="display:none;background:#fff7ed;border:1px solid var(--primary);border-radius:9px;padding:11px;margin-bottom:11px;">
@@ -4737,23 +4760,38 @@ function pintarConceptos(){
       <div style="overflow-x:auto"><table>
         <thead><tr><th>SKU</th><th>Descripción</th><th>Alíc.</th><th class="num">Usos</th>
           <th style="text-align:center">Activo</th><th></th></tr></thead>
-        <tbody>${lista.slice(0,150).map(x => `<tr class="${x.activo ? '' : 'dim'}" style="${x.activo?'':'opacity:.5'}">
-          <td style="white-space:nowrap"><b>${esc(x.codigo)}</b>${x.origen==='manual' ? ` <span class="mini" title="Creado a mano en el módulo" style="color:#1e40af">${ico('lapiz','s')}</span>` : ''}</td>
-          <td><input value="${esc(x.descripcion||'')}" id="cd-${esc(x.codigo)}" style="width:100%;min-width:200px;font-size:13px;padding:6px 8px"></td>
-          <td><select id="ca-${esc(x.codigo)}" style="font-size:13px;padding:6px" onchange="if(this.value==='__otra'){const v=prompt('Alícuota de IVA (%)','');if(v===null||isNaN(Number(v.replace(',','.')))){this.value='21';return;}const o=document.createElement('option');o.value=String(Number(v.replace(',','.')));o.textContent=o.value+'%';this.insertBefore(o,this.lastElementChild);this.value=o.value;}">
-            ${['21','10.5','27','0'].concat(x.alicuota && !['21','10.5','27','0'].includes(String(x.alicuota)) ? [String(x.alicuota)] : []).map(al=>`<option value="${al}" ${String(x.alicuota)===al?'selected':''}>${al==='0'?'No grav.':al+'%'}</option>`).join('')}
-            <option value="__otra">Otra…</option>
-          </select></td>
-          <td class="num">${x.usos_historicos||0}</td>
-          <td style="text-align:center"><input type="checkbox" id="cx-${esc(x.codigo)}" ${x.activo?'checked':''}></td>
-          <td class="num" style="white-space:nowrap">
-            <button class="act gh mini-ico" title="Cambiar el SKU y arrastrar todo lo ya contabilizado"
-              onclick="abrirRenombreSKU('${esc(x.codigo)}')">${ico('lapiz','s')}</button>
-            <button class="act gh mini-ico" title="Guardar los cambios de este renglón"
-              onclick="guardarConcepto('${esc(x.codigo)}')">${ico('guardar','s')}</button></td>
-        </tr>`).join('')}</tbody></table></div>
-      ${lista.length>150 ? `<p class="mini" style="margin-top:8px">Mostrando 150 de ${lista.length} — afiná la búsqueda.</p>` : ''}
+        <tbody id="conc-tbody"></tbody></table></div>
     </div>`;
+  pintarConceptosFilas();
+}
+
+function pintarConceptosFilas(){
+  const tb = document.getElementById('conc-tbody'), rec = document.getElementById('conc-recorte');
+  if (!tb) return;
+  const lista = conceptosFiltrados();
+  tb.innerHTML = lista.slice(0,150).map(filaConcepto).join('') ||
+    `<tr><td colspan="6" class="mini" style="text-align:center;padding:18px">Sin resultados${CONC_OCULTAR_INACTIVOS ? ' entre los activos' : ''}.</td></tr>`;
+  if (rec) rec.textContent = lista.length > 150 ? `Mostrando 150 de ${lista.length} — afiná la búsqueda.` : '';
+}
+
+// (v131) Autoguardado: descripción al salir del campo, alícuota y activo al cambiarlos.
+function filaConcepto(x){
+  const cod = esc(x.codigo);
+  return `<tr id="cr-${cod}" style="${x.activo?'':'opacity:.5'}">
+    <td style="white-space:nowrap"><b>${cod}</b>${x.origen==='manual' ? ` <span class="mini" title="Creado a mano en el módulo" style="color:#1e40af">${ico('mano','s')}</span>` : ''}</td>
+    <td><input value="${esc(x.descripcion||'')}" id="cd-${cod}" style="width:100%;min-width:200px;font-size:13px;padding:6px 8px"
+          onchange="guardarConcepto('${cod}')"></td>
+    <td><select id="ca-${cod}" style="font-size:13px;padding:6px" onchange="if(this.value==='__otra'){const v=prompt('Alícuota de IVA (%)','');if(v===null||isNaN(Number(v.replace(',','.')))){this.value='21';return;}const o=document.createElement('option');o.value=String(Number(v.replace(',','.')));o.textContent=o.value+'%';this.insertBefore(o,this.lastElementChild);this.value=o.value;} guardarConcepto('${cod}')">
+      ${['21','10.5','27','0'].concat(x.alicuota && !['21','10.5','27','0'].includes(String(x.alicuota)) ? [String(x.alicuota)] : []).map(al=>`<option value="${al}" ${String(x.alicuota)===al?'selected':''}>${al==='0'?'No grav.':al+'%'}</option>`).join('')}
+      <option value="__otra">Otra…</option>
+    </select></td>
+    <td class="num">${x.usos_historicos||0}</td>
+    <td style="text-align:center"><input type="checkbox" id="cx-${cod}" ${x.activo?'checked':''} onchange="guardarConcepto('${cod}')"></td>
+    <td class="num" style="white-space:nowrap">
+      <span id="cok-${cod}" class="mini" style="color:#16a34a;font-weight:700;opacity:0;transition:opacity .3s;margin-right:4px">✓ guardado</span>
+      <button class="act gh mini-ico" title="Cambiar el SKU y arrastrar todo lo ya contabilizado"
+        onclick="abrirRenombreSKU('${cod}')">${ico('lapiz','s')}</button></td>
+  </tr>`;
 }
 
 function toggleAltaConcepto(){
@@ -4767,20 +4805,23 @@ async function altaConcepto(){
   const {error} = await sb.rpc('compras_crear_concepto',
     {p_codigo: cod, p_descripcion: desc, p_alicuota: document.getElementById('ac-alic').value});
   if (error){ alert('No se pudo crear: ' + error.message); return; }
+  // (v131) el nuevo tiene 0 usos y quedaría al final: lo dejamos buscado para que se vea
+  concBusca = cod;
   vistaConceptos();
 }
 async function guardarConcepto(cod){
-  const {error} = await sb.from('compras_conceptos').update({
-    descripcion: document.getElementById('cd-'+cod).value.trim(),
-    alicuota:    document.getElementById('ca-'+cod).value,
-    activo:      document.getElementById('cx-'+cod).checked,
-  }).eq('codigo', cod);
+  const desc = document.getElementById('cd-'+cod).value.trim(),
+        alic = document.getElementById('ca-'+cod).value,
+        act  = document.getElementById('cx-'+cod).checked;
+  const {error} = await sb.from('compras_conceptos').update({descripcion: desc, alicuota: alic, activo: act}).eq('codigo', cod);
   if (error){ alert('No se pudo guardar: ' + error.message); return; }
   const x = CONC_LISTA.find(y=>y.codigo===cod);
-  if (x){ x.descripcion=document.getElementById('cd-'+cod).value.trim();
-          x.alicuota=document.getElementById('ca-'+cod).value;
-          x.activo=document.getElementById('cx-'+cod).checked; }
-  pintarConceptos();
+  if (x){ x.descripcion=desc; x.alicuota=alic; x.activo=act; }
+  const tr = document.getElementById('cr-'+cod); if (tr) tr.style.opacity = act ? '' : '.5';
+  const ok = document.getElementById('cok-'+cod);
+  if (ok){ ok.style.opacity = '1'; setTimeout(()=>{ ok.style.opacity = '0'; }, 1500); }
+  // si lo dio de baja y los inactivos están ocultos, la fila desaparece al redibujar
+  if (!act && CONC_OCULTAR_INACTIVOS) setTimeout(pintarConceptosFilas, 1600);
 }
 
 // ── ✏ Cambiar el SKU de un concepto ───────────────────────────────────
@@ -5085,6 +5126,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=3"></script>
 <script src="juegos.js?v=5"></script>
-<script src="manual.js?v=64"></script>
+<script src="manual.js?v=65"></script>
 </body>
 </html>
