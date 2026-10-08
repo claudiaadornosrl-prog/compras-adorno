@@ -259,7 +259,9 @@ table.tb-band a.nro:hover{color:var(--primary);border-bottom-color:var(--primary
 button.act.op-ico{background:var(--primary);color:#fff;border:none;padding:2px 4px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;margin-left:3px;vertical-align:middle}
 button.act.op-ico svg{width:11px;height:11px}
 label.c-tog{cursor:pointer;display:inline-flex}label.c-tog input{display:none}
-label.c-tog .eico{width:30px;height:30px;color:#cbd5e1;border:1px solid var(--bd);background:#fff;cursor:pointer}
+label.c-tog .eico{width:38px;height:38px;color:#cbd5e1;border:1px solid var(--bd);background:#fff;cursor:pointer}
+#ctrl-overlay .c-fila label.c-tog{flex-direction:row;align-self:flex-end}
+.g-imp{font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;text-align:right;background:#fff;width:150px}
 label.c-tog input:checked + .eico{color:#fff;background:var(--primary);border-color:var(--primary)}
 .aviso-amb{background:#fef3c7;color:#92400e;border-left:4px solid #d97706;border-radius:8px;padding:8px 11px;font-size:13px}.aviso-amb div{display:flex;gap:6px;align-items:flex-start;margin:2px 0}
 button.act.mini-ico{padding:5px 7px;border-radius:8px;display:inline-flex}
@@ -1906,11 +1908,13 @@ function _gRepartoHTML(){
         ${G_UNIDADES.map(u => `<option value="${u.clave}" ${x.unidad===u.clave?'selected':''}>${esc(u.nombre)}</option>`).join('')}</select></td>
       <td><select onchange="_gPartSet(${i},'categoria',this.value)">
         ${G_CATEGORIAS.map(c => `<option value="${c.clave}" ${x.categoria===c.clave?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select></td>
-      <td class="num"><input type="text" inputmode="decimal" id="g-imp-${i}" class="fx-in" style="width:130px" value="${x.importe == null ? '' : nmShow(x.importe)}" oninput="_gPartImp(${i}, this.value)"></td>
+      <td class="num"><input type="text" inputmode="decimal" id="g-imp-${i}" class="g-imp" value="${x.importe == null ? '' : nmShow(x.importe)}" oninput="_gPartImp(${i}, this.value)"></td>
       <td style="white-space:nowrap">${i === 0 ? `<button class="act op-ico" type="button" title="Agregar un renglón: otro local, otro mes o las dos cosas. Arranca con lo que falta repartir." onclick="_gPartAgregar()">${ico('mas','s')}</button>` : ''}${varias ? `<button class="act op-ico" type="button" style="background:var(--bad)" title="Quitar este renglón" onclick="_gPartQuitar(${i})">${ico('anular','s')}</button>` : ''}</td>
     </tr>`;
-  return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:2px 0 6px">
-      <label class="mini" title="Si el gasto va a más de un local o a más de un mes, agregá un renglón por cada parte con el + y poné el importe de cada una">Total a la planilla <input type="text" inputmode="decimal" id="g-base" class="fx-in" style="width:130px" value="${nmShow(base)}" oninput="_gBaseSet(this.value)"></label>
+  const gs = d.gestion_sug || {};
+  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:2px 0 6px">
+      <b style="font-size:13px">Planilla de gastos</b>${ayuda('Sugerido por las reglas, corregilo si no corresponde. Si el gasto va a más de un local o a más de un mes, agregá un renglón por cada parte con el + y poné el importe de cada una.' + (gs.motivo ? ' Motivo: ' + gs.motivo : ''))}
+      <span class="mini">· Total</span><input type="text" inputmode="decimal" id="g-base" class="fx-in" style="width:130px" value="${nmShow(base)}" oninput="_gBaseSet(this.value)">
     </div>
     <div style="overflow-x:auto"><table class="fx-tbl">
       <thead><tr><th>Período (mes de consumo)</th><th>Unidad</th><th>Categoría</th><th class="num">Importe</th><th></th></tr></thead>
@@ -2707,8 +2711,6 @@ function pintarControl(){
         <label class="c-tog" title="Va a la planilla de gastos (gestión). Naranja = sí"><input type="checkbox" id="ctrl-gestion" onchange="_gestionCambio()" ${gs.computa!==false?'checked':''}><span class="eico">${ico('hoja')}</span></label>
       </div>
       <div id="ctrl-gestion-box" style="display:${gs.computa!==false?'block':'none'};margin-top:8px;padding:8px 10px;border:1px dashed var(--line);border-radius:8px">
-        <div class="mini" style="margin-bottom:6px;display:flex;align-items:center;gap:6px"><b>Planilla de gastos</b>
-          ${ayuda('Sugerido por las reglas, corregilo si no corresponde.' + (gs.motivo ? ' Motivo: ' + gs.motivo : ''))}</div>
         <div id="ctrl-g-rep">${_gRepartoHTML()}</div>
         <div id="ctrl-g-aviso" class="mini" style="display:none;margin-top:6px;padding:6px 8px;border-radius:6px;background:#fef3c7;color:#92400e"></div>
       </div>
