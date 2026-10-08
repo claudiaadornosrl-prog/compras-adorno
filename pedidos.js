@@ -40,6 +40,12 @@
 .ped-e-parcial{background:#fef3c7;color:#92400e;} .ped-e-completo{background:#dcfce7;color:#166534;}
 .ped-e-cerrado{background:#e5e7eb;color:#374151;} .ped-e-anulado{background:#fee2e2;color:#991b1b;}
 .ped-venc{color:var(--bad);font-weight:700;}
+.ped-grid{grid-template-columns:2fr 1fr 1fr auto}
+#ped-overlay label.c-tog{cursor:pointer;display:inline-flex}#ped-overlay label.c-tog input{display:none}
+#ped-overlay label.c-tog .eico{width:34px;height:34px;color:#cbd5e1;border:1px solid var(--bd);background:#fff;cursor:pointer}
+#ped-overlay label.c-tog input:checked + .eico{color:#fff;background:var(--primary);border-color:var(--primary)}
+#ped-overlay .ped-cat td{white-space:nowrap}
+#ped-overlay .fx-tbl td{white-space:nowrap;vertical-align:middle}
 .ped-ok{color:var(--ok);font-weight:700;}
 @media(max-width:640px){.ped-grid{grid-template-columns:1fr}}`;
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
@@ -57,7 +63,7 @@ const _pedNro = n => String(n || 0).padStart(6, '0');
 // El pack sale de la equivalencia (cantidad por unidad). La cantidad del pedido se guarda en UNIDADES
 // nuestras (como el stock y los mínimos) y tiene que ser múltiplo del pack; al proveedor se le pide en packs.
 const _pedPk = x => Number(x && x.pack) > 1 ? Number(x.pack) : 1;
-function _pedPackChip(pk){ return pk > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="El proveedor lo vende en pack de ${pk}: se pide de a ${pk} unidades">📦 pack ×${pk}</span>` : ''; }
+function _pedPackChip(pk){ return pk > 1 ? ` <span class="eico" style="width:22px;height:22px;background:#7c3aed1a;color:#6d28d9;vertical-align:middle" title="El proveedor lo vende en pack de ${pk}: se pide en packs y se cuenta en unidades (el stock y los remitos van en unidades)">${ico('caja','s')}</span><span class="mini" style="color:#6d28d9"> ×${pk}</span>` : ''; }
 // (29-sep, JP) Condiciones del proveedor: compra mínima ($ y/o unidades) y descuento extra por volumen.
 // La cuenta la hace la base (compras_pedido_condiciones): importe = cant × precio (lista COMPRA sin IVA),
 // unidades = como las cuenta el proveedor (un pack ×2 cuenta 1). Al guardar, el pedido se queda con la foto.
@@ -71,7 +77,7 @@ function _pedCondHtml(c, importe, conProximo){
   if (!c) return '';
   const m = c.minimo, d = c.descuento, px = conProximo ? c.proximo : null, otros = c.otros || [];
   if (!m && !d && !px && !(c.escalones||[]).length && !otros.length)
-    return '<div class="mini" style="margin-top:8px">Este proveedor no tiene cargada compra mínima ni descuento por volumen (se cargan en 🏢 Proveedores → su ficha).</div>';
+    return `<div class="mini" style="margin-top:8px;display:flex;gap:6px;align-items:center">${ayuda('Este proveedor no tiene cargada compra mínima ni descuento por volumen. Se cargan en Proveedores, en su ficha.')} Sin condiciones cargadas</div>`;
   const partes = [];
   if (m){
     const req = [m.importe ? plata(m.importe) : null, m.unidades ? `${_pedN(m.unidades)} unidades` : null].filter(Boolean)
@@ -295,18 +301,19 @@ function _pedEditor(){
           <datalist id="ped-dl-provs">${(PED_PROVS||[]).map(p => `<option value="${esc(_pedProvTxt(p))}">`).join('')}</datalist></label>
         <label>Fecha del pedido <input type="date" id="ped-fecha" value="${esc(e.fecha||'')}" onchange="pedEd.fecha=this.value"></label>
         <label>Entrega estimada <input type="date" id="ped-entrega" value="${esc(e.entrega_estimada||'')}" onchange="pedEd.entrega_estimada=this.value"></label>
+        <label style="justify-content:flex-end">&nbsp;<label class="c-tog" title="Notas para el proveedor (salen en el pedido): horario de entrega, colores a consultar…"><input type="checkbox" id="ped-notas-tog" ${e.notas ? 'checked' : ''} onchange="const n=document.getElementById('ped-notas-fila'); n.style.display=this.checked?'':'none'; if(this.checked) document.getElementById('ped-notas').focus()"><span class="eico">${ico('hoja')}</span></label></label>
       </div>
-      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mut);margin-bottom:12px">Notas (salen en el pedido)
-        <input id="ped-notas" value="${esc(e.notas||'')}" oninput="pedEd.notas=this.value" placeholder="Ej.: entregar de 9 a 13 hs, consultar colores…"
-               style="font:inherit;font-size:14px;padding:7px 9px;border:1px solid var(--bd);border-radius:8px"></label>
+      <div id="ped-notas-fila" style="margin:-4px 0 12px;${e.notas ? '' : 'display:none'}">
+        <input id="ped-notas" value="${esc(e.notas||'')}" oninput="pedEd.notas=this.value" placeholder="Notas para el proveedor (salen en el pedido): entregar de 9 a 13 hs, consultar colores…"
+               style="width:100%;font:inherit;font-size:14px;padding:7px 9px;border:1px solid var(--bd);border-radius:8px"></div>
 
       <div class="card" style="padding:10px 12px;background:#fafafa">
-        <div class="filtros" style="margin-bottom:4px">
-          <b style="font-size:13.5px">🔎 Catálogo del proveedor</b>
-          <input type="search" id="ped-cat-q" placeholder="SKU o descripción (Enter)" onkeydown="if(event.key==='Enter')pedBuscarCat()">
-          <label class="mini" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="ped-cat-todos" onchange="pedBuscarCat()"> todo el catálogo</label>
-          <label class="mini" style="display:flex;gap:4px;align-items:center" title="Solo los artículos que están por debajo de su mínimo de reposición"><input type="checkbox" id="ped-cat-bajo" onchange="document.getElementById('ped-cat').innerHTML=_pedCatHtml()"> solo bajo mínimo</label>
-          <button class="act gh" onclick="pedBuscarCat()">Buscar</button>
+        <div class="filtros" style="margin-bottom:4px;align-items:center">
+          <button class="act gh mini-ico" title="Buscar en el catálogo del proveedor" onclick="pedBuscarCat()">${ico('lupa')}</button>
+          <input type="search" id="ped-cat-q" placeholder="SKU o descripción del catálogo del proveedor (Enter)" style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')pedBuscarCat()">
+          <label class="c-tog" title="Todo el catálogo del proveedor (no solo lo que ya compramos). Naranja = activo"><input type="checkbox" id="ped-cat-todos" onchange="pedBuscarCat()"><span class="eico">${ico('lista')}</span></label>
+          <label class="c-tog" title="Solo los artículos que están por debajo de su mínimo de reposición. Naranja = activo"><input type="checkbox" id="ped-cat-bajo" onchange="document.getElementById('ped-cat').innerHTML=_pedCatHtml()"><span class="eico">${ico('bajarflecha')}</span></label>
+          <span id="ped-cat-res" class="mini" style="display:inline-flex;align-items:center;gap:6px"></span>
         </div>
         <div id="ped-cat">${_pedCatHtml()}</div>
       </div>
@@ -315,7 +322,7 @@ function _pedEditor(){
       <div id="ped-cond"></div>
     </div>
     <div class="c-pie">
-      <button class="act gh" onclick="pedAgregarLibre()">＋ Renglón sin SKU</button>
+      <button class="act gh" style="display:inline-flex;align-items:center;gap:6px" title="Agregar un renglón sin SKU. Ojo: no se descuenta solo con los remitos, se recibe a mano." onclick="pedAgregarLibre()">${ico('mas','s')} Renglón sin SKU</button>
       <span style="flex:1"></span>
       <button class="act gh" onclick="pedCerrarModal()">Cancelar</button>
       <button class="act gh" onclick="pedGuardar(false)">💾 Guardar${e.estado==='borrador'?' borrador':''}</button>
@@ -387,29 +394,29 @@ function _pedCatHtml(){
   const filas = pedCat.map((a, i) => ({a, i})).filter(x => !soloBajo || _pedFalta(x.a) > 0);
   const faltan = pedCat.map((a, i) => ({a, i})).filter(x => _pedFalta(x.a) > 0 && !ya.has(String(x.a.sku).toUpperCase()));
   const sinMin = pedCat.filter(a => a.falta_minimo == null).length;
-  const cab = `<div class="mini" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:2px 0 6px">
-      <span>${faltan.length ? `<b style="color:var(--bad)">${faltan.length}</b> artículo(s) por debajo del mínimo sin agregar` : 'Ningún artículo por debajo del mínimo sin agregar'}${sinMin ? ` · ${sinMin} sin mínimo cargado` : ''}</span>
-      ${faltan.length ? `<button class="act gh" style="padding:2px 10px;font-size:12.5px" onclick="pedAgregarBajoMinimo()">＋ Agregar todo lo que falta (${faltan.length})</button>` : ''}
-    </div>`;
-  if (!filas.length) return cab + '<div class="mini" style="padding:8px">Ningún artículo de la lista está por debajo de su mínimo.</div>';
-  return cab + `<div class="ped-cat"><table>
+  // (8-oct, JP) el resumen y el "agregar todo lo que falta" van en el renglón de filtros, como íconos
+  setTimeout(() => { const r = document.getElementById('ped-cat-res'); if (!r) return;
+    r.innerHTML = `<span title="${faltan.length} artículo(s) por debajo del mínimo sin agregar al pedido${sinMin ? ' · ' + sinMin + ' sin mínimo cargado' : ''}" style="cursor:help;white-space:nowrap">${faltan.length ? `<b style="color:var(--bad)">${faltan.length}</b> bajo mín.` : 'bajo mín. 0'}${sinMin ? ` · ${sinMin} s/mín.` : ''}</span>
+      ${faltan.length ? `<button class="act mini-ico" style="width:34px;height:34px;justify-content:center" title="Agregar al pedido todo lo que falta para llegar al mínimo (${faltan.length} artículos, con la cantidad que falta)" onclick="pedAgregarBajoMinimo()">${ico('mas')}</button>` : ''}`; }, 0);
+  if (!filas.length) return '<div class="mini" style="padding:8px">Ningún artículo de la lista está por debajo de su mínimo.</div>';
+  return `<div class="ped-cat"><table>
     <thead><tr><th>SKU</th><th>Descripción</th><th class="num" title="Stock Alcorta / Unicenter / Oficina (en rojo: por debajo de su mínimo)">Stock A · U · O</th>
       <th class="num" title="Mínimo de reposición (umbral) Alcorta / Unicenter / Oficina — sale del Dragonfish">Mín. A · U · O</th>
       <th class="num" title="Lo que hay que pedir para volver al mínimo: lo que les falta a los locales + el mínimo del depósito, menos lo que ya hay en Oficina y lo ya pedido">Falta p/ mín.</th>
       <th class="num">$ compra</th><th class="num" title="Ya pedido y todavía no entregado (otros pedidos abiertos)">Ya pedido</th>
       <th class="num">Cant.</th><th></th></tr></thead>
     <tbody>${filas.map(({a, i}) => { const f = _pedFalta(a); return `<tr>
-      <td><b>${esc(a.sku)}</b>${a.codigo_proveedor ? `<div class="mini">${esc(a.codigo_proveedor)}</div>` : ''}</td>
+      <td title="${a.codigo_proveedor ? 'Código del proveedor: ' + esc(a.codigo_proveedor) : ''}"><b>${esc(a.sku)}</b></td>
       <td>${esc(a.descripcion||'')}${_pedPackChip(_pedPk(a))}</td>
       <td class="num">${_pedStk(a.stock_alcorta, a.min_alcorta)} · ${_pedStk(a.stock_unicenter, a.min_unicenter)} · ${_pedStk(a.stock_oficina, a.min_oficina)}</td>
       <td class="num">${_pedMin(a.min_alcorta)} · ${_pedMin(a.min_unicenter)} · ${_pedMin(a.min_oficina)}</td>
-      <td class="num">${f == null ? '<span class="mini">sin mín.</span>' : (f > 0 ? `<b style="color:var(--bad)">${_pedN(f)}</b>${_pedPk(a) > 1 ? `<div class="mini">= ${_pedN(Math.ceil(f/_pedPk(a)))} pack${Math.ceil(f/_pedPk(a))===1?'':'s'}</div>` : ''}` : '<span class="mini ped-ok">OK</span>')}</td>
+      <td class="num">${f == null ? '<span class="mini">sin mín.</span>' : (f > 0 ? `<b style="color:var(--bad)">${_pedN(f)}</b>${_pedPk(a) > 1 ? ` <span class="mini">= ${_pedN(Math.ceil(f/_pedPk(a)))} pk</span>` : ''}` : '<span class="mini ped-ok">OK</span>')}</td>
       <td class="num">${a.precio_compra ? plata(a.precio_compra) : '—'}</td>
       <td class="num">${_pedYaPedido(a) ? `<b style="color:var(--warn)">${_pedN(_pedYaPedido(a))}</b>` : '—'}</td>
       <td class="num"><input class="ped-in" id="ped-cq-${i}" inputmode="decimal" value="${f > 0 ? Math.ceil(f / _pedPk(a)) : 1}" onkeydown="if(event.key==='Enter')pedAgregarCat(${i})"
-            title="${_pedPk(a) > 1 ? 'Cantidad de PACKS (de a ' + _pedPk(a) + ' unidades)' : 'Unidades'}">${_pedPk(a) > 1 ? '<div class="mini">packs</div>' : ''}</td>
-      <td>${ya.has(String(a.sku).toUpperCase()) ? '<span class="mini ped-ok">✓ en el pedido</span>'
-            : `<button class="act" style="padding:3px 10px;font-size:13px" onclick="pedAgregarCat(${i})">＋</button>`}</td></tr>`; }).join('')}
+            title="${_pedPk(a) > 1 ? 'Cantidad de PACKS (de a ' + _pedPk(a) + ' unidades)' : 'Unidades'}">${_pedPk(a) > 1 ? ' <span class="mini">pk</span>' : ''}</td>
+      <td>${ya.has(String(a.sku).toUpperCase()) ? `<span class="eico" style="color:var(--ok);width:22px;height:22px" title="Ya está en el pedido">${ico('ok','s')}</span>`
+            : `<button class="act op-ico" title="Agregar al pedido" onclick="pedAgregarCat(${i})">${ico('mas','s')}</button>`}</td></tr>`; }).join('')}
     </tbody></table></div>`;
 }
 function pedAgregarBajoMinimo(){
@@ -478,25 +485,22 @@ function _pedLineasHtml(){
   if (!L.length) return '<div class="vacio" style="padding:18px">El pedido todavía no tiene artículos: agregalos desde el catálogo de arriba.</div>';
   const conRec = L.some(l => l.recibido > 0);
   return `<div style="overflow-x:auto"><table class="fx-tbl">
-    <thead><tr><th>#</th><th>SKU</th><th>Cód. proveedor</th><th>Descripción</th><th class="num">Cantidad</th>
-      ${conRec ? '<th class="num">Recibido</th>' : ''}<th class="num">$ unitario</th><th class="num">Subtotal</th><th></th></tr></thead>
+    <thead><tr><th>#</th><th>SKU</th><th>Cód. proveedor</th><th>Descripción</th><th class="num" title="Los artículos en pack (caja) se piden en packs y se cuentan en unidades">Cantidad</th>
+      ${conRec ? '<th class="num">Recibido</th>' : ''}<th class="num" title="Precio de la lista COMPRA vigente cuando lo hay, por unidad nuestra. Se puede corregir.">$ unitario</th><th class="num">Subtotal</th><th></th></tr></thead>
     <tbody>${L.map((l, i) => `<tr>
       <td>${i+1}</td>
       <td>${l.id || l.sku ? `<b>${esc(l.sku||'—')}</b>` : `<input class="ped-in w" style="width:90px" placeholder="(opcional)" value="${esc(l.sku)}" onchange="pedCampo(${i},'sku',this.value.toUpperCase())">`}</td>
       <td><input class="ped-in w" style="width:110px" value="${esc(l.codigo_proveedor||'')}" onchange="pedCampo(${i},'codigo_proveedor',this.value)"></td>
-      <td><input class="ped-in w" style="min-width:200px" value="${esc(l.descripcion||'')}" onchange="pedCampo(${i},'descripcion',this.value)">${_pedPackChip(_pedPk(l))}${l.descripcion_proveedor ? `<div class="mini">prov.: ${esc(l.descripcion_proveedor)}</div>` : ''}</td>
+      <td><input class="ped-in w" style="min-width:200px" value="${esc(l.descripcion||'')}" onchange="pedCampo(${i},'descripcion',this.value)" title="${l.descripcion_proveedor ? 'El proveedor lo llama: ' + esc(l.descripcion_proveedor) : ''}">${_pedPackChip(_pedPk(l))}</td>
       <td class="num">${_pedPk(l) > 1
         ? `<input class="ped-in" id="ped-pq-${i}" inputmode="decimal" value="${_pedN(l.cantidad / _pedPk(l))}" onchange="pedCampo(${i},'packs',this.value)"
-             title="Cantidad de PACKS"><div class="mini">packs ×${_pedPk(l)} <span id="ped-u-${i}">= ${_pedN(l.cantidad)} u.</span></div>`
+             title="Cantidad de PACKS de ${_pedPk(l)}"> <span class="mini" id="ped-u-${i}" style="white-space:nowrap">= ${_pedN(l.cantidad)} u.</span>`
         : `<input class="ped-in" inputmode="decimal" value="${_pedN(l.cantidad)}" onchange="pedCampo(${i},'cantidad',this.value)">`}</td>
       ${conRec ? `<td class="num">${_pedN(l.recibido)}</td>` : ''}
       <td class="num"><input class="ped-in" style="width:100px" inputmode="decimal" value="${l.precio_unitario != null ? _pedN(l.precio_unitario) : ''}" placeholder="—" onchange="pedCampo(${i},'precio_unitario',this.value)"></td>
       <td class="num" id="ped-sub-${i}">${l.precio_unitario ? plata(Number(l.cantidad||0) * Number(l.precio_unitario)) : '—'}</td>
-      <td>${l.recibido > 0 ? '' : `<button class="act gh" style="padding:2px 8px;font-size:12px" title="Sacar" onclick="pedQuitar(${i})">✕</button>`}</td></tr>`).join('')}
-    </tbody><tfoot><tr><td colspan="9" id="ped-tot">${_pedTotHtml()}</td></tr></tfoot></table></div>
-    <p class="mini" style="margin-top:6px">El precio es el de la lista COMPRA vigente cuando lo hay (por unidad nuestra); se puede corregir.
-      Los artículos 📦 en pack se piden en packs y se cuentan en unidades (el stock y los remitos van en unidades).
-      Los renglones sin SKU no se descuentan solos con los remitos: se reciben a mano.</p>`;
+      <td>${l.recibido > 0 ? '' : `<button class="act op-ico" style="background:var(--bad)" title="Sacar este renglón" onclick="pedQuitar(${i})">${ico('anular','s')}</button>`}</td></tr>`).join('')}
+    </tbody><tfoot><tr><td colspan="9" id="ped-tot">${_pedTotHtml()}</td></tr></tfoot></table></div>`;
 }
 
 async function pedGuardar(enviar){
