@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v93-ux-cabecera-bandeja';
+const CACHE_VERSION = 'compras-v94-ux-comprobantes';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

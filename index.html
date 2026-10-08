@@ -246,6 +246,11 @@ button.act.ico-btn{display:inline-flex;align-items:center;gap:7px}
 table.tb-band tbody tr{cursor:pointer}
 table.tb-band tbody tr:hover td{background:#fff7ed}
 table.tb-band td.oculta-mov{white-space:nowrap}
+table.tb-band td.prov{max-width:260px}
+table.tb-band .prov-nom{display:inline-block;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+table.tb-band td.ctr{text-align:center}
+.chip.tletra{font-weight:800;padding:2px 8px;cursor:help;min-width:26px;display:inline-block;text-align:center}
+.eico{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;cursor:help}
 table.tb-band a.nro{color:var(--tx);font-weight:600;text-decoration:none;border-bottom:1px dotted var(--mut)}
 table.tb-band a.nro:hover{color:var(--primary);border-bottom-color:var(--primary)}
 .cdot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:1px;cursor:help}
@@ -441,6 +446,12 @@ const EPAGO = {
 };
 const chipPago = e => { const p = EPAGO[e] || EPAGO.sin_definir;
   return `<span class="chip" style="background:${p.bg};color:${p.col}">${p.tx}</span>`; };
+// (8-oct, JP) versión ícono: un dibujo por etapa, el texto al pasar el mouse
+const EPAGO_ICO = {sin_contabilizar:'inbox', contabilizado_sin_controlar:'reloj', controlado_sin_op:'controlar', con_op_sin_pagar:'pago', pagada:'ok', sin_definir:'archivo'};
+const icoPago = e => { const p = EPAGO[e] || EPAGO.sin_definir;
+  return `<span class="eico" style="background:${p.bg};color:${p.col}" title="${p.tx}">${ico(EPAGO_ICO[e] || 'archivo','s')}</span>`; };
+const TIPO_LETRA = {gastos:'G', mercaderia:'M', inversiones:'I', no_actividad:'Z'};
+const letraTipo = t => t ? `<span class="chip c-${t} tletra" title="${TIPOS[t] || t}">${TIPO_LETRA[t] || '?'}</span>` : '<span class="mini">—</span>';
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 let session = {email:null}, DOCS = [], tabActual = 'bandeja';
 let MOTOR = null;   // última corrida del motor del circuito
@@ -533,6 +544,10 @@ const ICONOS = {
   alerta: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
   clip: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
   frasco: '<path d="M9 3h6M10 3v6.3L4.6 18a2 2 0 0 0 1.7 3h11.4a2 2 0 0 0 1.7-3L14 9.3V3"/>',
+  docmas: '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>',
+  reloj: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  ok: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+  archivo: '<rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
 };
 const ico = (n, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONOS[n] || ''}</svg>`;
 
@@ -670,7 +685,8 @@ function barraFiltros(){
       <option value="FC" ${filtro.clase==='FC'?'selected':''}>Solo facturas</option>
       <option value="NC" ${filtro.clase==='NC'?'selected':''}>Solo notas de crédito</option>
       <option value="ND" ${filtro.clase==='ND'?'selected':''}>Solo notas de débito</option>
-      <option value="RTO" ${filtro.clase==='RTO'?'selected':''}>Solo remitos</option></select>` : ''}
+      <option value="RTO" ${filtro.clase==='RTO'?'selected':''}>Solo remitos</option></select>
+    <button class="act mini-ico" onclick="abrirSinFactura()" title="Cargar un gasto sin factura (comprobante interno)">${ico('docmas')}</button>` : ''}
   </div>`;
 }
 
@@ -2877,16 +2893,9 @@ function vistaFacturas(){
   const rs = (filtro.clase === '' || filtro.clase === 'RTO') ? remitosFiltrados() : [];
   const suma = f.reduce((a,d) => a + (Number(d.total)||0) * (d.tipo === 'NC' ? -1 : 1), 0);
   const nFC = f.filter(d => d.tipo === 'FC' || d.tipo === 'INT').length, nNC = f.filter(d => d.tipo === 'NC').length, nND = f.filter(d => d.tipo === 'ND').length;
-  return `<div style="display:flex;justify-content:flex-end;margin-bottom:10px">
-      <button class="act" onclick="abrirSinFactura()">➕ Cargar sin factura</button>
-    </div>
-    <div class="kpis">
-      <div class="kpi"><div class="lbl">Comprobantes</div><div class="val">${f.length + rs.length}</div>
-        <div class="sub">${nFC} FC · ${nNC} NC · ${nND} ND · ${rs.length} remitos</div></div>
-      <div class="kpi"><div class="lbl">Total (FC + ND − NC)</div><div class="val">${platac(suma)}</div>
-        <div class="sub">${filtro.mes ? MESES[+filtro.mes-1] : 'año'} ${filtro.anio} · ${filtro.tipo ? TIPOS[filtro.tipo] : 'todos los tipos'}</div></div>
-    </div>
-    <div class="card">${barraFiltros()}
+  // (8-oct, JP) resumen en un renglón; el alta sin factura es un ícono al final de los filtros
+  const periodo = `${filtro.mes ? MESES[+filtro.mes-1] : 'año'} ${filtro.anio} · ${filtro.tipo ? TIPOS[filtro.tipo] : 'todos los tipos'}`;
+  return `<div class="card">${barraFiltros()}
       ${filtro.clase !== 'RTO' ? tabla(f) : ''}
       ${rs.length ? `<h3 style="font-size:14px;margin:16px 0 6px">🚚 Remitos <span class="mini">(${rs.length})</span></h3>${tablaRemitos(rs)}` : ''}
     </div>`;
@@ -2895,25 +2904,25 @@ function vistaFacturas(){
 function tabla(lista, bandeja){
   if (!lista.length) return `<div class="vacio">No hay comprobantes con esos filtros.</div>`;
   const cab = [['numero_interno','Nº int.'],['fecha_emision','Fecha'],['fecha_ingreso','Ingreso'],['proveedor_nombre','Proveedor'],['numero','Comprobante'],
-               ['tipo_gasto','Tipo'],['total','Total'],['estado_pago','Estado'],['remito','Remito asociado']];
-  return `<div style="overflow-x:auto"><table>
+               ['tipo_gasto','Tipo'],['total','Total'],['estado_pago','Estado'],['remito','Remito']];
+  return `<div style="overflow-x:auto"><table class="tb-band">
     <thead><tr>${cab.map(([k,t]) =>
-      `<th onclick="ordenar('${k}')" class="${k==='total'?'num':''}">${t}${orden.col===k?(orden.desc?' ▾':' ▴'):''}</th>`).join('')}
-      <th></th></tr></thead>
-    <tbody>${lista.slice(0,400).map(d => `<tr style="cursor:pointer" onclick="abrirResumenDoc(${d.id})">
+      `<th onclick="ordenar('${k}')" class="${k==='total'?'num':''}" title="Ordenar por ${t.toLowerCase()}">${t}${orden.col===k?(orden.desc?' ▾':' ▴'):''}</th>`).join('')}
+      </tr></thead>
+    <tbody>${lista.slice(0,400).map(d => {
+      const nro = d.tipo==='INT' ? '<span class="mini">— sin factura —</span>'
+        : `${esc(d.tipo)} ${esc(d.letra)} ${String(d.punto_venta).padStart(4,'0')}-${String(d.numero).padStart(8,'0')}`;
+      return `<tr onclick="abrirResumenDoc(${d.id})" title="Abrir el resumen del comprobante">
       <td class="mini"><b>${d.numero_interno ?? '—'}</b></td>
       <td>${fechaCorta(d.fecha_emision)}</td>
       <td class="mini">${d.fecha_ingreso ? fechaCorta(d.fecha_ingreso) : '—'}</td>
-      <td>${esc(d.proveedor_nombre || d.cuit_emisor || '—')}
-          ${d.archivo_alerta ? '<br><span class="mini" style="color:#dc2626">📎 archivo a revisar</span>' : ''}</td>
-      <td class="oculta-mov">${d.tipo==='INT' ? '<span class="mini">— sin factura —</span>'
-        : `${esc(d.tipo)} ${esc(d.letra)} ${String(d.punto_venta).padStart(4,'0')}-${String(d.numero).padStart(8,'0')}`}</td>
-      <td>${d.tipo_gasto ? `<span class="chip c-${d.tipo_gasto}">${TIPOS[d.tipo_gasto]}</span>` : '<span class="mini">—</span>'}</td>
+      <td class="prov"><span class="prov-nom" title="${esc(d.proveedor_nombre || d.cuit_emisor || '')}">${esc(d.proveedor_nombre || d.cuit_emisor || '—')}</span>${d.archivo_alerta ? ` <span title="${esc(d.archivo_alerta)}" style="color:var(--bad)">${ico('clip','s')}</span>` : ''}</td>
+      <td class="oculta-mov">${d.archivo_path ? `<a class="nro" href="${pdfUrl(d.archivo_path)}" target="_blank" rel="noopener" title="Abrir el PDF" onclick="event.stopPropagation()">${nro}</a>` : nro}</td>
+      <td class="ctr">${letraTipo(d.tipo_gasto)}</td>
       <td class="num">${plata(d.total)}</td>
-      <td>${chipPago(d.estado_pago)}</td>
+      <td class="ctr">${icoPago(d.estado_pago)}</td>
       <td style="white-space:nowrap;font-size:12px">${celdaRemitos(d)}</td>
-      <td class="num">${d.archivo_path ? `<a href="${pdfUrl(d.archivo_path)}" target="_blank" title="Ver PDF" onclick="event.stopPropagation()" style="text-decoration:none">📄</a>` : ''}</td>
-    </tr>`).join('')}</tbody></table></div>
+    </tr>`; }).join('')}</tbody></table></div>
     ${lista.length > 400 ? `<p class="mini" style="margin-top:9px">Mostrando los primeros 400 de ${lista.length}. Afiná la búsqueda para ver el resto.</p>` : ''}`;
 }
 
