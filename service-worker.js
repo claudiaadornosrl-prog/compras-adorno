@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v106-op-cabecera';
+const CACHE_VERSION = 'compras-v107-control-factura';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
