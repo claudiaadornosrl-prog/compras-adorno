@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 //  Compras Adorno · op-pdf.js — PDF de la Orden de Pago y del Certificado
-//  de Retención, con el mismo armado que emite hoy el Dragonfish (modelos
-//  que pasó JP el 22-sep-2026: OP 0032-00003290 y ret 1139 Cencosud).
+//  de Retención. Hasta el 8-oct-2026 copiaba el armado del Dragonfish;
+//  ahora usa el diseño "Tarjetas" elegido por JP (ver _disenos_pdf).
 //  Se carga después del script principal: usa sb, plata, _fecha, esc.
 //  jsPDF viene de cdnjs (igual que Tesorería / RRHH).
 // ═══════════════════════════════════════════════════════════════════════
@@ -51,17 +51,99 @@ function _pdfLetras(n){
   return `${s} con ${String(c).padStart(2,'0')}/100.-`;
 }
 
-function _pdfCabecera(doc, emp, tituloDer, subDer, fnt){
-  doc.setFont(fnt, 'bold'); doc.setFontSize(12); doc.text(emp.nombre, 14, 16);
-  doc.setFont(fnt, 'normal'); doc.setFontSize(7.5);
-  doc.text(emp.domicilio, 14, 21); doc.text('Buenos Aires - ARGENTINA', 14, 24.5);
-  doc.text('TE.:', 14, 28); doc.text(emp.cond_iva, 14, 31.5);
-  // recuadro X
-  doc.setLineWidth(0.5); doc.rect(97, 11, 16, 16); doc.setFontSize(20); doc.setFont(fnt, 'bold'); doc.text('X', 105, 23, {align: 'center'});
-  doc.setLineWidth(0.2); doc.line(105, 27, 105, 40);
-  doc.setFontSize(11); doc.text(tituloDer, 118, 16);
-  doc.setFont(fnt, 'normal'); doc.setFontSize(8);
-  subDer.forEach((t, i) => doc.text(t, 118, 21 + i*3.6));
+// ═══════════════════════════════════════════════════════════════════════
+//  (8-oct-2026, JP) Diseño "Tarjetas": logo Claudia Adorno, URW Gothic,
+//  bloque naranja con el número, secciones en tarjetas con banda gris,
+//  total/retención en franja naranja clara. Mismo lenguaje que el módulo.
+// ═══════════════════════════════════════════════════════════════════════
+const _PC = { or: [234,88,12], tx: [15,23,42], mut: [100,116,139], bd: [226,232,240], soft: [248,250,252], fila: [241,245,249],
+              amb: [255,247,237], ambBd: [254,215,170], ambTx: [154,52,18], blanco: [255,255,255], gris: [148,163,184] };
+let _pdfLogo = null;
+async function _pdfCargarLogo(){
+  if (_pdfLogo) return _pdfLogo;
+  try {
+    const r = await fetch('./logo-ca.png'); if (!r.ok) throw new Error('HTTP ' + r.status);
+    const b = await r.blob();
+    _pdfLogo = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = no; fr.readAsDataURL(b); });
+  } catch (e) { console.warn('Logo no disponible', e); _pdfLogo = null; }
+  return _pdfLogo;
+}
+// Texto con "negrita" simulada (la fuente institucional solo viene en Book): relleno + trazo fino.
+function _pt(doc, t, x, y, o = {}){
+  const col = o.col || _PC.tx;
+  doc.setTextColor(...col); doc.setFontSize(o.size || 8.5);
+  const opt = { align: o.align || 'left' };
+  if (o.maxWidth) opt.maxWidth = o.maxWidth;
+  if (o.charSpace) opt.charSpace = o.charSpace;
+  if (o.bold){ doc.setDrawColor(...col); doc.setLineWidth(o.size >= 12 ? 0.35 : 0.22); opt.renderingMode = 'fillAndStroke'; }
+  doc.text(String(t ?? ''), x, y, opt);
+  if (o.bold){ doc.setDrawColor(...(_PC.bd)); doc.setLineWidth(0.2); }
+}
+// Cabecera común: logo + datos de la empresa a la izquierda, bloque naranja a la derecha.
+function _pdfCabTarjetas(doc, emp, bloque){
+  if (_pdfLogo) doc.addImage(_pdfLogo, 'PNG', 14, 13, 58, 58 * 272 / 2432);
+  else _pt(doc, 'Claudia Adorno', 14, 19, {size: 16, col: _PC.gris});
+  _pt(doc, `${emp.nombre} · CUIT ${_pdfCuit(emp.cuit)} · ${emp.cond_iva}`, 14, 25, {size: 6.5, col: _PC.mut, maxWidth: 108});
+  _pt(doc, `${emp.domicilio} · ${emp.localidad || ''}`, 14, 28.3, {size: 6.5, col: _PC.mut, maxWidth: 108});
+  _pt(doc, `IIBB ${emp.iibb} · Inicio de actividades ${emp.inicio_actividades}`, 14, 31.6, {size: 6.5, col: _PC.mut, maxWidth: 108});
+  doc.setFillColor(..._PC.or); doc.roundedRect(128, 12, 68, 21, 2.5, 2.5, 'F');
+  _pt(doc, bloque.titulo.toUpperCase(), 192, 17.5, {size: 5.6, col: _PC.blanco, align: 'right', charSpace: 0.25});
+  _pt(doc, bloque.numero, 192, 24.5, {size: 12.5, col: _PC.blanco, align: 'right', bold: true});
+  _pt(doc, bloque.pie, 192, 30, {size: 7, col: _PC.blanco, align: 'right'});
+  return 40;
+}
+// Tarjeta: devuelve el y donde arranca el contenido; se cierra con _pdfCardFin.
+function _pdfCardIni(doc, x, y, w, titulo, letra){
+  doc.setFillColor(..._PC.soft); doc.roundedRect(x, y, w, 7, 2, 2, 'F'); doc.rect(x, y + 4, w, 3, 'F');
+  let tx = x + 4;
+  if (letra){ doc.setFillColor(..._PC.or); doc.circle(x + 5.5, y + 3.5, 2.1, 'F'); _pt(doc, letra, x + 5.5, y + 4.6, {size: 6, col: _PC.blanco, align: 'center', bold: true}); tx = x + 10; }
+  _pt(doc, titulo.toUpperCase(), tx, y + 4.7, {size: 6.3, col: _PC.mut, charSpace: 0.35});
+  doc.setDrawColor(..._PC.bd); doc.setLineWidth(0.2); doc.line(x, y + 7, x + w, y + 7);
+  return y + 7;
+}
+function _pdfCardFin(doc, x, y0, w, y){
+  doc.setDrawColor(..._PC.bd); doc.setLineWidth(0.25); doc.roundedRect(x, y0, w, y - y0, 2, 2, 'S');
+  return y + 5;
+}
+// Tabla dentro de una tarjeta. cols: [{t, x, align, w}], filas: array de arrays de celdas, tot: fila final
+function _pdfTabla(doc, x, w, y, cols, filas, tot, salto){
+  const enc = () => { cols.forEach(c => _pt(doc, c.t.toUpperCase(), c.x, y + 4.3, {size: 6, col: _PC.mut, align: c.align || 'left', charSpace: 0.3}));
+    y += 6.2; doc.setDrawColor(..._PC.bd); doc.line(x, y, x + w, y); };
+  enc();
+  filas.forEach(f => {
+    if (salto && y > 262) { y = salto(y); enc(); }
+    y += 5.2;
+    f.forEach((cel, i) => { const c = cols[i]; _pt(doc, cel, c.x, y, {size: 8, col: c.mut ? _PC.mut : _PC.tx, align: c.align || 'left', maxWidth: c.w}); });
+    y += 1.8; doc.setDrawColor(..._PC.fila); doc.line(x, y, x + w, y);
+  });
+  if (tot){ doc.setFillColor(250, 250, 250); doc.rect(x, y, w, 7, 'F'); y += 5;
+    tot.forEach((cel, i) => { if (cel == null) return; const c = cols[i]; _pt(doc, cel, c.x, y, {size: 8, align: c.align || 'left', bold: true}); }); y += 2; }
+  return y;
+}
+function _pdfFranja(doc, y, titulo, sub, monto){
+  doc.setFillColor(..._PC.amb); doc.setDrawColor(..._PC.ambBd); doc.setLineWidth(0.25); doc.roundedRect(14, y, 182, 16, 2.5, 2.5, 'FD');
+  _pt(doc, titulo, 19, y + 6.5, {size: 9, col: _PC.ambTx, bold: true});
+  _pt(doc, sub, 19, y + 11.5, {size: 6.8, col: _PC.ambTx, maxWidth: 110});
+  _pt(doc, monto, 191, y + 10.8, {size: 15, col: _PC.or, align: 'right', bold: true});
+  doc.setDrawColor(..._PC.bd);
+  return y + 21;
+}
+function _pdfPie(doc, izq, firma, prueba){
+  const n = doc.getNumberOfPages();
+  for (let p = 1; p <= n; p++){
+    doc.setPage(p);
+    doc.setDrawColor(..._PC.bd); doc.setLineWidth(0.2); doc.line(14, 281, 196, 281);
+    _pt(doc, izq, 14, 285, {size: 6.5, col: _PC.gris});
+    _pt(doc, 'Compras Adorno' + (n > 1 ? ` · página ${p} de ${n}` : ''), 196, 285, {size: 6.5, col: _PC.gris, align: 'right'});
+    if (prueba) _pt(doc, 'AMBIENTE DE PRUEBA', 105, 291, {size: 7, col: [203,213,225], align: 'center', charSpace: 1});
+  }
+  doc.setPage(n);
+  if (firma){
+    doc.setDrawColor(..._PC.tx); doc.setLineWidth(0.3); doc.line(firma.x, 266, firma.x + firma.w, 266);
+    _pt(doc, firma.t1, firma.x + firma.w / 2, 270, {size: 7, col: _PC.tx, align: 'center'});
+    if (firma.t2) _pt(doc, firma.t2, firma.x + firma.w / 2, 273.5, {size: 6.3, col: _PC.mut, align: 'center'});
+    doc.setDrawColor(..._PC.bd);
+  }
 }
 
 // ── ORDEN DE PAGO ─────────────────────────────────────────────────────
@@ -72,57 +154,54 @@ async function descargarOpPdf(opId){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit: 'mm', format: 'a4'});
   const fnt = (await _opCargarFuente(doc)) ? 'AdornoTitulo' : 'helvetica';
+  doc.setFont(fnt, 'normal'); await _pdfCargarLogo();
   const nro = `${String(o.punto_venta).padStart(4,'0')}-${String(o.numero).padStart(8,'0')}`;
-  _pdfCabecera(doc, emp, `ORDEN DE PAGO N°   ${nro}`, [
-    `FECHA: ${_pdfF(o.fecha)}`, `CUIT: ${emp.cuit}`, `IIBB: ${emp.iibb}`, `Inicio de actividades:   ${emp.inicio_actividades}`], fnt);
-  doc.setFontSize(7); doc.text('Página 1 de 1', 196, 38, {align: 'right'});
-  doc.line(14, 41, 196, 41);
-  // proveedor
-  doc.setFontSize(8);
-  doc.text(`${pv.nombre || ''}${pv.codigo ? ' (' + pv.codigo + ')' : ''}`, 14, 46);
-  doc.text(pv.domicilio || '', 14, 50); doc.text('C.A.B.A., Argentina', 14, 54);
-  doc.text('N° Documento:', 118, 46); doc.text(`CUIT: ${_pdfCuit(pv.cuit)}`, 118, 50); doc.text(pv.cond_iva || (pv.es_exterior ? 'Exterior' : 'Responsable Inscripto'), 118, 54);
-  // detalle comprobantes
-  let y = 61;
-  doc.setFont(fnt, 'bold'); doc.text('Detalle de comprobantes cancelados', 14, y); doc.setFont(fnt, 'normal'); y += 4;
-  doc.line(14, y, 196, y); y += 3.5;
-  doc.text('Fecha', 14, y); doc.text('Emisión', 38, y); doc.text('Vencimiento', 62, y); doc.text('Comprobante', 90, y); doc.text('Monto', 196, y, {align: 'right'}); y += 1.5;
-  doc.line(14, y, 196, y); y += 4;
-  const tipoNom = {FC: 'Factura De Compra', NC: 'Nota De Crédito', ND: 'Nota De Débito', INT: 'Comprobante Interno'};
-  f.forEach(x => {
-    doc.text(_pdfF(o.fecha), 14, y); doc.text(_pdfF(x.fecha), 38, y); doc.text(_pdfF(x.vencimiento), 62, y);
-    doc.text(`${tipoNom[x.tipo] || x.tipo} ${x.letra || ''} ${String(x.punto_venta||0).padStart(5,'0')}-${String(x.numero||0).padStart(8,'0')}`, 90, y);
-    doc.text(_pdfN(x.total), 196, y, {align: 'right'}); y += 4;
-  });
-  y = Math.max(y, 150);
-  doc.line(14, y, 196, y); y += 4;
-  doc.text('Subtotal', 150, y); doc.text(_pdfN(o.subtotal), 196, y, {align: 'right'}); y += 4;
+  const nuevaPagina = () => { doc.addPage(); doc.setFont(fnt, 'normal'); return 16; };
+  let y = _pdfCabTarjetas(doc, emp, {titulo: 'Orden de pago', numero: `${o.letra || 'X'} ${nro}`, pie: _pdfF(o.fecha)});
+  // proveedor + datos fiscales
+  let y0 = y, yc = _pdfCardIni(doc, 14, y, 88, 'Proveedor');
+  _pt(doc, pv.nombre || o.proveedor_nombre || '', 18, yc + 5.5, {size: 8.5, bold: true, maxWidth: 80});
+  _pt(doc, [pv.domicilio, 'C.A.B.A.'].filter(Boolean).join(' · '), 18, yc + 10.5, {size: 7.5, col: _PC.mut, maxWidth: 80});
+  _pdfCardFin(doc, 14, y0, 88, yc + 14);
+  yc = _pdfCardIni(doc, 108, y, 88, 'Datos fiscales');
+  _pt(doc, `CUIT ${_pdfCuit(pv.cuit || o.cuit_proveedor)}`, 112, yc + 5.5, {size: 8.5, bold: true});
+  _pt(doc, `${pv.cond_iva === 'RI' ? 'IVA Responsable Inscripto' : (pv.cond_iva || (pv.es_exterior ? 'Exterior' : 'Responsable Inscripto'))}${pv.codigo ? ' · Código de proveedor ' + pv.codigo : ''}`, 112, yc + 10.5, {size: 7.5, col: _PC.mut, maxWidth: 80});
+  y = _pdfCardFin(doc, 108, y0, 88, yc + 14);
+  // comprobantes
+  const tipoNom = {FC: 'Factura', NC: 'Nota de crédito', ND: 'Nota de débito', INT: 'Comprobante interno'};
+  y0 = y; yc = _pdfCardIni(doc, 14, y, 182, 'Comprobantes cancelados');
+  const colsF = [{t:'Emisión', x:18}, {t:'Vencimiento', x:42}, {t:'Comprobante', x:68, w:70}, {t:'Neto', x:160, align:'right', mut:true}, {t:'Importe', x:192, align:'right'}];
+  y = _pdfTabla(doc, 14, 182, yc, colsF, f.map(x => [_pdfF(x.fecha), _pdfF(x.vencimiento), `${tipoNom[x.tipo] || x.tipo} ${x.letra || ''} ${String(x.punto_venta||0).padStart(4,'0')}-${String(x.numero||0).padStart(8,'0')}`, _pdfN(x.neto), _pdfN(x.total)]),
+    ['Subtotal', null, null, null, _pdfN(o.subtotal)], yy => { _pdfCardFin(doc, 14, y0, 182, yy); const n = nuevaPagina(); y0 = n; return _pdfCardIni(doc, 14, n, 182, 'Comprobantes cancelados (cont.)'); });
+  y = _pdfCardFin(doc, 14, y0, 182, y);
+  if (y > 230) y = nuevaPagina();
   // retenciones
-  doc.setFont(fnt, 'bold'); doc.text('Retenciones aplicadas', 14, y); doc.setFont(fnt, 'normal'); y += 2; doc.line(14, y, 196, y); y += 4;
-  r.forEach(x => { doc.text(`${x.codigo} · ${x.nombre}${x.certificado_nro ? ' · Cert. ' + x.certificado_nro : ''}`, 14, y); doc.text(_pdfN(x.importe), 196, y, {align: 'right'}); y += 4; });
-  doc.line(14, y, 196, y); y += 4;
-  doc.text('Subtotal', 150, y); doc.text(_pdfN(o.retenciones_total), 196, y, {align: 'right'}); y += 5;
-  // valores
-  doc.setFont(fnt, 'bold'); doc.text('Detalle de valores otorgados', 14, y); doc.setFont(fnt, 'normal'); y += 2; doc.line(14, y, 196, y); y += 3.5;
-  doc.text('Valor', 14, y); doc.text('Descripción', 34, y); doc.text('Monto', 196, y, {align: 'right'}); y += 1.5; doc.line(14, y, 196, y); y += 4;
-  const cod = m => /transf/i.test(m) ? 'TRANS' : /echeq/i.test(m) ? 'ECHEQ' : /cheq/i.test(m) ? 'CHEQ' : /efect/i.test(m) ? 'EFEC' : /mercado/i.test(m) ? 'MP' : /d[eé]bito/i.test(m) ? 'DEBAUT' : String(m||'').slice(0,6).toUpperCase();
-  const desc = m => /transf/i.test(m) ? 'Transferencias Bancarias' : m;
-  pg.forEach(p => {
-    let d = desc(p.medio);
-    if (p.cheque_numero || p.cheque_banco || p.cheque_fecha) d += ` (${[p.cheque_numero ? 'N° ' + p.cheque_numero : '', p.cheque_banco, p.cheque_emision ? 'emisión ' + _pdfF(p.cheque_emision) : '', p.cheque_fecha ? 'pago ' + _pdfF(p.cheque_fecha) : ''].filter(Boolean).join(' · ')})`;
-    doc.text(cod(p.medio), 14, y); doc.text(d, 34, y); doc.text(_pdfN(p.importe), 196, y, {align: 'right'}); y += 4;
-  });
-  y += 6; doc.setFont(fnt, 'bold'); doc.text('Saldo de Cuenta Corriente', 14, y); doc.setFont(fnt, 'normal'); y += 2; doc.line(14, y, 196, y); y += 8;
-  doc.setFont(fnt, 'bold'); doc.text('Observaciones', 14, y); doc.setFont(fnt, 'normal'); y += 2; doc.line(14, y, 196, y); y += 5;
-  if (o.observaciones) doc.text(String(o.observaciones), 14, y, {maxWidth: 180});
-  // pie
-  let yb = 262;
-  doc.line(14, yb, 196, yb); yb += 4; doc.text('Subtotal', 150, yb); doc.text(_pdfN(o.neto_a_pagar), 196, yb, {align: 'right'}); yb += 3; doc.line(14, yb, 196, yb); yb += 6;
-  doc.text('Vuelto', 150, yb); yb += 6;
-  doc.setFont(fnt, 'bold'); doc.setFontSize(10); doc.text('TOTAL    $', 150, yb); doc.text(_pdfN(o.neto_a_pagar), 196, yb, {align: 'right'});
-  doc.setFont(fnt, 'normal'); doc.setFontSize(8); doc.text(`Son PESOS: ${_pdfLetras(o.neto_a_pagar)}`, 14, yb + 3);
-  doc.text(`Por ${emp.nombre}`, 150, yb + 12);
-  if (o.es_prueba){ doc.setTextColor(180); doc.setFontSize(9); doc.text('AMBIENTE DE PRUEBA', 105, 290, {align: 'center'}); doc.setTextColor(0); }
+  y0 = y; yc = _pdfCardIni(doc, 14, y, 182, 'Retenciones practicadas');
+  if (r.length){
+    const colsR = [{t:'Régimen', x:18}, {t:'Certificado', x:114}, {t:'Base', x:158, align:'right', mut:true}, {t:'Alíc.', x:172, align:'right'}, {t:'Importe', x:192, align:'right'}];
+    const corto = (t, n) => { t = String(t || ''); return t.length > n ? t.slice(0, n - 1).trim() + '…' : t; };
+    y = _pdfTabla(doc, 14, 182, yc, colsR, r.map(x => [corto(`${x.codigo} · ${x.nombre || ''}`, 48), x.certificado_nro || '—', _pdfN(x.base_calculo), x.alicuota != null ? Number(x.alicuota) + ' %' : '—', _pdfN(x.importe)]),
+      ['Total retenido', null, null, null, _pdfN(o.retenciones_total)]);
+  } else { _pt(doc, 'Sin retenciones.', 18, yc + 5.5, {size: 8, col: _PC.mut}); y = yc + 8; }
+  y = _pdfCardFin(doc, 14, y0, 182, y);
+  // total a pagar
+  y = _pdfFranja(doc, y, 'Total a pagar', `Son pesos ${_pdfLetras(o.neto_a_pagar).toLowerCase()}`, `$ ${_pdfN(o.neto_a_pagar)}`);
+  // valores entregados
+  y0 = y; yc = _pdfCardIni(doc, 14, y, 182, 'Valores entregados');
+  const colsP = [{t:'Medio', x:18}, {t:'Detalle', x:60, w:100, mut:true}, {t:'Importe', x:192, align:'right'}];
+  y = _pdfTabla(doc, 14, 182, yc, colsP, pg.map(p => {
+    let d = p.cuenta ? 'Cuenta ' + p.cuenta : '';
+    if (p.cheque_numero || p.cheque_banco || p.cheque_fecha) d += (d ? ' · ' : '') + [p.cheque_numero ? 'N° ' + p.cheque_numero : '', p.cheque_banco, p.cheque_emision ? 'emisión ' + _pdfF(p.cheque_emision) : '', p.cheque_fecha ? 'pago ' + _pdfF(p.cheque_fecha) : ''].filter(Boolean).join(' · ');
+    if (p.notas) d += (d ? ' · ' : '') + p.notas;
+    return [p.medio, d || '—', _pdfN(p.importe)];
+  }), pg.length > 1 ? ['Total', null, _pdfN(pg.reduce((a, p) => a + Number(p.importe || 0), 0))] : null);
+  y = _pdfCardFin(doc, 14, y0, 182, y);
+  if (o.observaciones){
+    y0 = y; yc = _pdfCardIni(doc, 14, y, 182, 'Observaciones');
+    const lin = doc.splitTextToSize(String(o.observaciones), 174);
+    _pt(doc, lin, 18, yc + 5.5, {size: 8}); y = _pdfCardFin(doc, 14, y0, 182, yc + 3 + lin.length * 4.2);
+  }
+  _pdfPie(doc, `Orden de pago ${o.letra || 'X'} ${nro} · emitida el ${_pdfF(o.fecha)} por ${o.emitida_por || ''}`, {x: 136, w: 60, t1: `Por ${emp.nombre}`}, o.es_prueba);
   doc.save(`OP ${nro} ${(pv.nombre || '').replace(/[\\/:*?"<>|]/g,'')}.pdf`);
 }
 
@@ -137,35 +216,57 @@ async function descargarCertificadosPdf(opId){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit: 'mm', format: 'a4'});
   const fnt = (await _opCargarFuente(doc)) ? 'AdornoTitulo' : 'helvetica';
+  doc.setFont(fnt, 'normal'); await _pdfCargarLogo();
   const IMP = {ganancias: 'Impuesto a las ganancias', iibb: 'Ingresos Brutos', iva: 'Impuesto al valor agregado', suss: 'SUSS'};
-  const nroOP = `${String(o.punto_venta).padStart(4,'0')}-${String(o.numero).padStart(8,'0')}`;
+  const nroOP = `${o.letra || 'X'} ${String(o.punto_venta).padStart(4,'0')}-${String(o.numero).padStart(8,'0')}`;
   const montoComp = f.reduce((a, x) => a + Number(x.total || 0), 0);
+  const tipoNom = {FC: 'Factura', NC: 'Nota de crédito', ND: 'Nota de débito', INT: 'Comprobante interno'};
+  const nuevaPagina = () => { doc.addPage(); doc.setFont(fnt, 'normal'); return 16; };
   rets.forEach((r, idx) => {
-    if (idx) doc.addPage();
+    if (idx) nuevaPagina();
     const imp = IMP[r.impuesto] || r.impuesto || 'Impuesto a las ganancias';
-    let y = 18;
-    doc.setFont(fnt, 'bold'); doc.setFontSize(12); doc.text('Comprobante de retención', 105, y, {align: 'center'}); y += 6;
-    doc.setFontSize(10); doc.text(imp, 105, y, {align: 'center'}); y += 8;
-    doc.setFont(fnt, 'normal'); doc.setFontSize(9);
-    doc.text(`Certificado Nro.:     ${r.certificado_nro || '—'}`, 14, y); doc.text(`FECHA:     ${_pdfF(o.fecha)}`, 140, y); y += 8;
-    const sec = (t) => { doc.setFont(fnt, 'bold'); doc.text(t, 14, y); doc.setFont(fnt, 'normal'); y += 2; doc.line(14, y, 196, y); y += 5; };
-    const fila = (k, v) => { doc.text(k, 14, y); doc.text(String(v ?? ''), 88, y, {maxWidth: 108}); y += 5; };
-    sec('A. - Datos del agente de retención');
-    fila('Apellido y nombre / Denominación:', emp.nombre); fila('C.U.I.T.:', emp.cuit); fila('Domicilio:', `${emp.domicilio} - ${emp.localidad}`); y += 4;
-    sec('B. - Datos del sujeto retenido');
-    fila('Apellido y nombre / Denominación:', pv.nombre || ''); fila('C.U.I.T.:', pv.cuit || ''); fila('Domicilio:', pv.domicilio || ''); y += 4;
-    sec('C. - Datos de la retención practicada');
-    fila('Impuesto:', imp); fila('Régimen:', r.regimen_nombre || r.nombre);
-    fila('Comprobante que origina la retención:', `Orden de pago ${nroOP}` + (f.length ? ` (${f.map(x => x.comprobante).join(', ')})` : ''));
-    fila('Monto del comprobante que origina la retención:', _pdfN(montoComp));
-    fila('Base de cálculo:', _pdfN(r.base_calculo)); fila('Alícuota:', (r.alicuota != null ? Number(r.alicuota) + ' %' : '—'));
-    doc.setFont(fnt, 'bold'); fila('Monto de la retención:', _pdfN(r.importe)); doc.setFont(fnt, 'normal');
-    if (r.editado && r.motivo_edicion) fila('Observación:', r.motivo_edicion);
-    y += 20;
-    doc.line(14, y, 90, y); y += 4; doc.text('Firma del agente de retención:', 14, y); y += 6;
-    doc.text(`Aclaración: ${emp.firmante}                 Cargo: ${emp.cargo}`, 14, y);
-    doc.setFontSize(7); doc.setTextColor(120); doc.text('Comprobante generado por Compras Adorno', 14, 285); doc.setTextColor(0);
-    if (o.es_prueba){ doc.setTextColor(180); doc.setFontSize(9); doc.text('AMBIENTE DE PRUEBA', 105, 290, {align: 'center'}); doc.setTextColor(0); }
+    const regimen = r.regimen_nombre || r.nombre || '';
+    let y = _pdfCabTarjetas(doc, emp, {titulo: 'Certificado de retención', numero: r.certificado_nro || '—', pie: _pdfF(o.fecha)});
+    _pt(doc, 'Retención de ', 14, y + 2, {size: 12});
+    const w1 = doc.getTextWidth('Retención de ');
+    _pt(doc, imp, 14 + w1, y + 2, {size: 12, col: _PC.or, bold: true});
+    y += 7;
+    // A y B
+    let y0 = y, yc = _pdfCardIni(doc, 14, y, 88, 'Agente de retención', 'A');
+    _pt(doc, emp.nombre, 18, yc + 5.5, {size: 8.5, bold: true});
+    _pt(doc, `CUIT ${_pdfCuit(emp.cuit)}`, 18, yc + 10, {size: 7.5, col: _PC.mut});
+    _pt(doc, `${emp.domicilio} · ${emp.localidad}`, 18, yc + 14, {size: 7.5, col: _PC.mut, maxWidth: 80});
+    _pdfCardFin(doc, 14, y0, 88, yc + 17.5);
+    yc = _pdfCardIni(doc, 108, y, 88, 'Sujeto retenido', 'B');
+    _pt(doc, pv.nombre || o.proveedor_nombre || '', 112, yc + 5.5, {size: 8.5, bold: true, maxWidth: 80});
+    _pt(doc, `CUIT ${_pdfCuit(pv.cuit || o.cuit_proveedor)}`, 112, yc + 10, {size: 7.5, col: _PC.mut});
+    _pt(doc, pv.domicilio || '', 112, yc + 14, {size: 7.5, col: _PC.mut, maxWidth: 80});
+    y = _pdfCardFin(doc, 108, y0, 88, yc + 17.5);
+    // C
+    y0 = y; yc = _pdfCardIni(doc, 14, y, 182, 'Retención practicada', 'C');
+    const kv = [['Impuesto', imp], ['Régimen', regimen],
+      ['Comprobante que origina la retención', `Orden de pago ${nroOP} · ${f.length} comprobante${f.length === 1 ? '' : 's'} (detalle abajo)`],
+      ['Monto de los comprobantes', `$ ${_pdfN(montoComp)}`], ['Base de cálculo', `$ ${_pdfN(r.base_calculo)}`],
+      ['Alícuota', r.alicuota != null ? Number(r.alicuota) + ' %' : '—']];
+    if (r.editado && r.motivo_edicion) kv.push(['Observación', r.motivo_edicion]);
+    let yk = yc + 2;
+    kv.forEach(([k, v]) => { yk += 4.6; _pt(doc, k, 18, yk, {size: 7.8, col: _PC.mut}); _pt(doc, v, 78, yk, {size: 7.8, maxWidth: 114}); });
+    y = _pdfCardFin(doc, 14, y0, 182, yk + 3);
+    // comprobantes alcanzados
+    y0 = y; yc = _pdfCardIni(doc, 14, y, 182, 'Comprobantes alcanzados por la retención');
+    const colsF = [{t:'Emisión', x:18}, {t:'Comprobante', x:44, w:90}, {t:'Neto', x:160, align:'right', mut:true}, {t:'Importe', x:192, align:'right'}];
+    y = _pdfTabla(doc, 14, 182, yc, colsF, f.map(x => [_pdfF(x.fecha), `${tipoNom[x.tipo] || x.tipo} ${x.letra || ''} ${String(x.punto_venta||0).padStart(4,'0')}-${String(x.numero||0).padStart(8,'0')}`, _pdfN(x.neto), _pdfN(x.total)]),
+      [`Total · ${f.length} comprobante${f.length === 1 ? '' : 's'}`, null, _pdfN(f.reduce((a, x) => a + Number(x.neto || 0), 0)), _pdfN(montoComp)],
+      yy => { _pdfCardFin(doc, 14, y0, 182, yy); const n = nuevaPagina(); y0 = n; return _pdfCardIni(doc, 14, n, 182, 'Comprobantes alcanzados (cont.)'); });
+    y = _pdfCardFin(doc, 14, y0, 182, y);
+    if (y > 240) y = nuevaPagina();
+    _pdfFranja(doc, y, 'Monto de la retención', `Son pesos ${_pdfLetras(r.importe).toLowerCase()}`, `$ ${_pdfN(r.importe)}`);
+    // firma de este certificado (en la página donde terminó)
+    doc.setDrawColor(..._PC.tx); doc.setLineWidth(0.3); doc.line(14, 262, 84, 262);
+    _pt(doc, 'Firma del agente de retención', 14, 266, {size: 7});
+    _pt(doc, `${emp.firmante} · ${emp.cargo}`, 14, 269.5, {size: 6.3, col: _PC.mut});
+    doc.setDrawColor(..._PC.bd);
   });
-  doc.save(`Retencion OP ${nroOP} ${(pv.nombre || '').replace(/[\\/:*?"<>|]/g,'')}.pdf`);
+  _pdfPie(doc, `Certificado${rets.length > 1 ? 's' : ''} de retención · Orden de pago ${nroOP} · ${_pdfF(o.fecha)}`, null, o.es_prueba);
+  doc.save(`Retencion OP ${nroOP.replace(/\s/g, ' ')} ${(pv.nombre || '').replace(/[\\/:*?"<>|]/g,'')}.pdf`);
 }

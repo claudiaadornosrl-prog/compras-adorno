@@ -1,5 +1,5 @@
-const CACHE_VERSION = 'compras-v117-ver-op';
-const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
+const CACHE_VERSION = 'compras-v118-pdf-tarjetas';
+const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE_VERSION).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
