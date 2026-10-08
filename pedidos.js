@@ -187,7 +187,7 @@ function _pedVistaLista(){
              oninput="PED_BUSCA=this.value;clearTimeout(window._pedT);window._pedT=setTimeout(()=>{_pedPintar();const i=document.querySelector('.filtros input[type=search]');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},250)">
     </div>
     ${rows.length ? `<div style="overflow-x:auto"><table class="tb-band">
-      <thead><tr><th>Nº</th><th>Fecha</th><th>Proveedor</th><th class="ctr">Estado</th><th class="num" title="Renglones">Reng.</th>
+      <thead><tr><th>Nº</th><th>Fecha</th><th>Proveedor</th><th class="ctr">Estado</th><th class="num" title="Cantidad de SKU distintos en el pedido">SKU</th>
         <th class="num">Pedido</th><th class="num">Recibido</th><th class="num">Pendiente</th>
         <th class="num">$ pendiente</th><th>Entrega est.</th></tr></thead>
       <tbody>${rows.map(p => {
