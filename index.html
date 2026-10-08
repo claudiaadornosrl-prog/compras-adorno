@@ -293,6 +293,15 @@ main{padding:14px;max-width:1250px;margin:0 auto;}
 .pf-sec>summary .res.ok{color:#166534;}
 .pf-sec .pf-body{padding:8px 12px 12px;background:#fff;border-top:1px solid var(--bd);border-radius:0 0 10px 10px;}
 .pf-sec .hint{font-size:12px;color:var(--mut);line-height:1.5;}
+/* (v134) .btn no tenía estilo: todos los botones de la ficha/alta de proveedores */
+#prov-modal .btn{display:inline-flex;align-items:center;gap:6px;background:#fff;color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:7px 12px;font-size:13px;font-family:inherit;cursor:pointer;text-decoration:none;line-height:1.2;white-space:nowrap;}
+#prov-modal .btn:hover{border-color:var(--primary);color:var(--primary-dark);}
+#prov-modal .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary);font-weight:700;}
+#prov-modal .btn.primary:hover{background:var(--primary-dark);color:#fff;}
+#prov-modal .btn.ico{padding:7px 8px;}
+#prov-modal .btn svg{width:15px;height:15px;}
+#prov-modal .pf-fila{display:grid;gap:6px;align-items:end;margin-bottom:6px;padding:8px;border:1px solid var(--bd);border-radius:8px;background:#fafafa;}
+#prov-modal .pf-fila .eico{width:30px;height:30px;}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;}
 .kpi{background:#fff;border:1px solid var(--bd);border-left:4px solid var(--primary);border-radius:10px;padding:11px 13px;}
 .kpi .lbl{font-size:11.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px;}
@@ -1591,33 +1600,31 @@ const _nP = (n, uno, varios) => n + ' ' + (n === 1 ? uno : varios);
 function _renderContactos(){
   const c = document.getElementById('pf-contactos'); if (!c) return;
   c.innerHTML = (_fContactos.length ? _fContactos.map((x,i) => `
-    <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr 1.2fr auto;gap:6px;align-items:end;margin-bottom:6px;">
+    <div class="pf-fila" style="grid-template-columns:1.2fr 1fr 1fr 1fr 1.2fr auto auto;">
       <label>Nombre<input value="${_mEscP(x.nombre||'')}" onchange="_fContactos[${i}].nombre=this.value"></label>
       <label>Cargo<input value="${_mEscP(x.cargo||'')}" placeholder="ventas, cobranzas…" onchange="_fContactos[${i}].cargo=this.value"></label>
       <label>Teléfono<input value="${_mEscP(x.telefono||'')}" onchange="_fContactos[${i}].telefono=this.value"></label>
       <label>WhatsApp<input value="${_mEscP(x.whatsapp||'')}" placeholder="11 5555 5555" onchange="_fContactos[${i}].whatsapp=this.value;_renderContactos()"></label>
       <label>Mail<input value="${_mEscP(x.email||'')}" onchange="_fContactos[${i}].email=this.value;_renderContactos()"></label>
-      <button class="btn" type="button" title="Quitar" onclick="_fContactos.splice(${i},1);_renderContactos()">🗑</button>
-      <div style="grid-column:1/-1;">${_contactoLinks(x)}</div>
-    </div>`).join('') : '<div class="hint">Sin contactos cargados.</div>')
-    + `<button class="btn" type="button" onclick="_fContactos.push({});_renderContactos()">➕ Agregar contacto</button>`;
+      <div style="display:flex;gap:4px;padding-bottom:1px;">${_contactoIcos(x)}</div>
+      <button class="btn ico" type="button" title="Quitar este contacto" onclick="_fContactos.splice(${i},1);_renderContactos()">${ico('basura','s')}</button>
+    </div>`).join('') : '<div class="hint" style="margin-bottom:8px;">Todavía no hay personas cargadas.</div>')
+    + `<button class="btn" type="button" onclick="_fContactos.push({});_renderContactos()">${ico('mas','s')} Agregar persona</button>`;
   _resP('personas', _fContactos.length ? _nP(_fContactos.length, 'persona', 'personas') : 'sin cargar', _fContactos.length);
   _estilarModalP();
 }
 function _renderDescuentos(){
   const c = document.getElementById('pf-descuentos'); if (!c) return;
   c.innerHTML = (_fDescuentos.length ? _fDescuentos.map((x,i) => `
-    <div style="display:grid;grid-template-columns:1.4fr 0.6fr 1.3fr 0.9fr 1.2fr auto;gap:6px;align-items:end;margin-bottom:6px;">
+    <div class="pf-fila" style="grid-template-columns:1.4fr 0.6fr 1.3fr 0.9fr 1.2fr auto;">
       <label>Descripción<input value="${_mEscP(x.descripcion||'')}" placeholder="Servilletas, cosmética, pedido > $2M…" onchange="_fDescuentos[${i}].descripcion=this.value"></label>
       <label>%<input type="number" step="0.01" value="${x.porcentaje ?? ''}" onchange="_fDescuentos[${i}].porcentaje=parseFloat(this.value)||0"></label>
       <label>Tipo<select onchange="_fDescuentos[${i}].tipo=this.value;_renderDescuentos()">${DESC_TIPOS.map(([v,t]) => `<option value="${v}" ${(x.tipo||'general')===v?'selected':''}>${t}</option>`).join('')}</select></label>
       <label>${x.tipo==='monto_minimo' ? 'Desde $' : x.tipo==='cantidad_minima' ? 'Desde (unid.)' : x.tipo==='pronto_pago' ? 'Hasta (días)' : 'Umbral'}<input type="number" step="1" value="${x.umbral ?? ''}" ${['monto_minimo','cantidad_minima','pronto_pago'].includes(x.tipo) ? '' : 'disabled'} onchange="_fDescuentos[${i}].umbral=parseFloat(this.value)||null"></label>
       <label>Notas<input value="${_mEscP(x.notas||'')}" onchange="_fDescuentos[${i}].notas=this.value"></label>
-      <button class="btn" type="button" title="Quitar" onclick="_fDescuentos.splice(${i},1);_renderDescuentos()">🗑</button>
-    </div>`).join('') : '<div class="hint">Sin descuentos pactados cargados.</div>')
-    + `<button class="btn" type="button" onclick="_fDescuentos.push({tipo:'general'});_renderDescuentos()">➕ Agregar descuento</button>
-       <div class="hint" style="margin-top:8px;">Acá van los acuerdos comerciales con el proveedor (un % general, por volumen, por pronto pago, por línea). El descuento de cada artículo NO va acá: ya está en la lista COSTO del Dragonfish.<br>
-         Los de tipo "Por compra mínima" y "Por cantidad mínima" los aplica solo el 📝 Pedido cuando pasa el "Desde"; si hay varios, toma el % más alto alcanzado (no se suman).</div>`;
+      <button class="btn ico" type="button" title="Quitar este descuento" onclick="_fDescuentos.splice(${i},1);_renderDescuentos()">${ico('basura','s')}</button>
+    </div>`).join('') : '<div class="hint" style="margin-bottom:8px;">Todavía no hay descuentos cargados.</div>')
+    + `<button class="btn" type="button" onclick="_fDescuentos.push({tipo:'general'});_renderDescuentos()">${ico('mas','s')} Agregar descuento</button>`;
   _resP('descuentos', _fDescuentos.length ? _nP(_fDescuentos.length, 'descuento', 'descuentos') : 'sin cargar', _fDescuentos.length);
   _estilarModalP();
 }
@@ -1709,29 +1716,36 @@ async function fichaProveedor(i){
 
     ${_secP('pedidos', 'clipboard', 'Condiciones para los pedidos',
       (m => (m.importe || m.unidades) ? 'mínimo ' + [m.importe ? _fmtP(m.importe) : null, m.unidades ? m.unidades + ' unid.' : null].filter(Boolean).join(' / ') : 'sin mínimo')(p.pedido_minimo || {}), `
-    <div class="hint" style="margin-bottom:10px;">Lo que el proveedor exige para aceptar un pedido. El 📝 Pedido avisa si no llega al mínimo.</div>
+    <div class="hint" style="margin-bottom:10px;display:flex;align-items:center;gap:6px;">Lo que el proveedor exige para aceptar un pedido; el 📝 Pedido avisa si no llega.
+      ${ayuda('El importe se compara con la lista COMPRA sin IVA. Las unidades se cuentan como las cuenta el proveedor (un pack ×2 cuenta 1). Si además hace descuento por volumen, cargalo en "Descuentos pactados".')}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
       <label>Compra mínima $<input id="pf-min-imp" type="number" step="1" min="0" value="${p.pedido_minimo?.importe ?? ''}" placeholder="sin mínimo"></label>
       <label>Compra mínima (unidades)<input id="pf-min-uni" type="number" step="1" min="0" value="${p.pedido_minimo?.unidades ?? ''}" placeholder="sin mínimo"></label>
       <label>Si tiene los dos<select id="pf-min-modo">
         <option value="cualquiera" ${(p.pedido_minimo?.modo||'cualquiera')==='cualquiera'?'selected':''}>alcanza con cumplir uno</option>
         <option value="ambos" ${p.pedido_minimo?.modo==='ambos'?'selected':''}>hay que cumplir los dos</option></select></label>
-      <label style="grid-column:1/-1;">Nota del mínimo<input id="pf-min-nota" value="${_mEscP(p.pedido_minimo?.nota||'')}" placeholder="ej.: por debajo cobran flete"></label>
     </div>
-    <div class="hint" style="margin-top:8px;">El importe es sobre la lista COMPRA sin IVA. Las unidades se cuentan como las cuenta el proveedor (un pack ×2 cuenta 1). Si además hace descuento por volumen, cargalo en "Descuentos pactados".</div>`)}
+    <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+      <button class="btn" type="button" id="pf-min-nota-btn" onclick="const w=document.getElementById('pf-min-nota-wrap');w.style.display=w.style.display==='none'?'':'none';if(w.style.display!=='none')document.getElementById('pf-min-nota').focus()" title="Una aclaración sobre el mínimo, ej.: por debajo cobran flete">${ico('hoja','s')} Nota del mínimo</button>
+      <div id="pf-min-nota-wrap" style="flex:1;${p.pedido_minimo?.nota ? '' : 'display:none;'}"><input id="pf-min-nota" value="${_mEscP(p.pedido_minimo?.nota||'')}" placeholder="ej.: por debajo cobran flete"></div>
+    </div>`)}
 
-    ${_secP('descuentos', 'regalo', 'Descuentos pactados', '…', `<div id="pf-descuentos"></div>`)}
+    ${_secP('descuentos', 'regalo', 'Descuentos pactados', '…', `
+    <div class="hint" style="margin-bottom:10px;display:flex;align-items:center;gap:6px;">Acuerdos comerciales con el proveedor: un % general, por volumen, por pronto pago o por línea.
+      ${ayuda('El descuento de cada artículo NO va acá: ya está en la lista COSTO del Dragonfish. Los de tipo "Por compra mínima" y "Por cantidad mínima" los aplica solo el Pedido cuando pasa el "Desde"; si hay varios, toma el % más alto alcanzado (no se suman).')}</div>
+    <div id="pf-descuentos"></div>`)}
     ${p.cuit && !p.es_exterior ? _secP('ret', 'porcentaje', 'Retenciones', 'cargando…', `
     <div class="hint" style="margin-bottom:10px;">Qué le retenemos a este proveedor cuando le pagamos (Ganancias, IIBB…). Lo que se marque acá es lo que la 💸 Orden de pago calcula sola.</div>
     <div id="pf-ret"><div class="hint">Cargando…</div></div>`) : ''}
     ${_secP('notas', 'hoja', 'Notas', p.notas ? 'hay notas' : 'sin notas', `
     <textarea id="pf-notas" rows="3" placeholder="Lo que conviene recordar de este proveedor: horarios, cómo manda la mercadería, con quién reclamar…">${_mEscP(p.notas||'')}</textarea>`, !!p.notas)}
-    ${p.cuit && !p.es_exterior ? `<div style="margin-top:12px;">
-      <button class="btn" type="button" onclick="validarArca('${_mEscP(p.cuit)}','pf-arca', true)">🔍 Consultar en ARCA (constancia de inscripción)</button>
-      <div id="pf-arca" style="margin-top:8px;">${p.arca ? _arcaCard(p.arca) : ''}</div></div>` : ''}
+    ${p.cuit && !p.es_exterior ? _secP('arca', 'lupa', 'Constancia de ARCA', _arcaResumen(p.arca), `
+    <div class="hint" style="margin-bottom:10px;">Lo que ARCA informa de este CUIT: si está vigente, condición de IVA, domicilio fiscal, actividad e impuestos en los que está inscripto.</div>
+    <div id="pf-arca">${p.arca ? _arcaCard(p.arca) : '<div class="hint">Todavía no se consultó.</div>'}</div>
+    <button class="btn" type="button" style="margin-top:10px;" onclick="validarArca('${_mEscP(p.cuit)}','pf-arca', true).then(c=>{if(c)_resP('arca',_arcaResumen(c),c.vigente===true)})">${ico('refrescar','s')} ${p.arca ? 'Volver a consultar' : 'Consultar en ARCA'}</button>`, false) : ''}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;position:sticky;bottom:-20px;background:#fff;padding:10px 0;">
       <button class="btn" onclick="cerrarModalP()">Cancelar</button>
-      <button class="btn" style="background:var(--primary);color:#fff;border-color:var(--primary);" onclick="guardarFichaProveedor('${_mEscP(p.codigo)}','${_mEscP(p.cuit||'')}')">Guardar</button>
+      <button class="btn primary" onclick="guardarFichaProveedor('${_mEscP(p.codigo)}','${_mEscP(p.cuit||'')}')">${ico('guardar','s')} Guardar</button>
     </div>`);
   document.getElementById('pf-ext').addEventListener('change', e => {
     document.getElementById('pf-pais-wrap').style.display = e.target.checked ? '' : 'none';
@@ -1769,37 +1783,62 @@ async function guardarFichaProveedor(codigo, cuit){
 }
 
 async function altaProveedor(){
+  // (v134, JP) primero el CUIT: ARCA trae razón social, IVA y domicilio; lo que falte se completa a mano.
   openModalP(`
-    <h3 style="margin:0 0 10px;">➕ Proveedor nuevo</h3>
-    <div class="hint" style="margin-bottom:12px;">
-      Solo para proveedores que NO están en Dragonfish. Si ya existe ahí, aparece solo en el listado —
-      buscalo antes de crearlo, para no terminar con dos fichas del mismo.</div>
-    <div style="display:grid;gap:10px;">
-      <label>Nombre / razón social<input id="pa-nombre" placeholder="ANTHROPIC PBC"></label>
-      <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;">
-        <input type="checkbox" id="pa-ext" style="width:17px;height:17px;margin-top:2px;">
-        <span>Es del exterior <div class="hint">Sin CUIT. Se le asigna un código propio.</div></span></label>
-      <label id="pa-cuit-wrap">CUIT
-        <div style="display:flex;gap:8px;"><input id="pa-cuit" placeholder="30-70967311-0" style="flex:1;">
-          <button class="btn" type="button" style="white-space:nowrap;" onclick="validarAltaArca()">🔍 Validar en ARCA</button></div></label>
-      <div id="pa-arca"></div>
-      <label id="pa-pais-wrap" style="display:none;">País<input id="pa-pais" placeholder="Estados Unidos"></label>
+    <h3 style="margin:0 0 6px;">➕ Proveedor nuevo</h3>
+    <div class="hint" style="margin-bottom:12px;">Solo para proveedores que NO están en el Dragonfish (los de allá aparecen solos en el listado). Buscalo antes de crearlo, así no quedan dos fichas del mismo.</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+      <input type="checkbox" id="pa-ext"><span onclick="document.getElementById('pa-ext').click()" style="font-size:13.5px;color:var(--tx);cursor:pointer;">Es del exterior <span class="hint">(sin CUIT; se le asigna un código propio)</span></span></div>
+    <div id="pa-cuit-wrap">
+      <label>CUIT
+        <div style="display:flex;gap:8px;"><input id="pa-cuit" placeholder="30-70967311-0" style="flex:1;" inputmode="numeric"
+          onkeydown="if(event.key==='Enter')validarAltaArca()" oninput="if(this.value.replace(/\\D/g,'').length===11)validarAltaArca()">
+          <button class="btn primary" type="button" onclick="validarAltaArca()">${ico('lupa','s')} Buscar en ARCA</button></div></label>
+      <div class="hint" style="margin:4px 0 10px;">Con los 11 dígitos el sistema consulta ARCA solo y completa lo que pueda.</div>
+      <div id="pa-arca" style="margin-bottom:10px;"></div>
+    </div>
+    <div id="pa-datos" style="display:none;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <label style="grid-column:1/-1;">Nombre / razón social<input id="pa-nombre" placeholder="Como figura en la factura"></label>
+        <label>Condición frente al IVA<select id="pa-iva">
+          ${[['','— sin definir —'],['RI','Responsable Inscripto'],['MT','Monotributo'],['EX','Exento'],['NI','No inscripto'],['CF','Consumidor Final'],['EXT','Del exterior']]
+            .map(([v,t]) => `<option value="${v}">${t}</option>`).join('')}</select></label>
+        <label>Domicilio<input id="pa-dom"></label>
+        <div id="pa-pais-wrap" style="display:none;"><label>País<input id="pa-pais" placeholder="Estados Unidos"></label></div>
+      </div>
+      <div class="hint" id="pa-datos-hint" style="margin-top:6px;"></div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
       <button class="btn" onclick="cerrarModalP()">Cancelar</button>
-      <button class="btn" style="background:var(--primary);color:#fff;border-color:var(--primary);" onclick="confirmarAltaProveedor()">Crear</button>
+      <button class="btn primary" id="pa-crear" disabled style="opacity:.5;" onclick="confirmarAltaProveedor()">${ico('mas','s')} Crear</button>
     </div>`);
   document.getElementById('pa-ext').addEventListener('change', e => {
-    document.getElementById('pa-cuit-wrap').style.display = e.target.checked ? 'none' : '';
-    document.getElementById('pa-pais-wrap').style.display = e.target.checked ? '' : 'none';
+    const ext = e.target.checked;
+    document.getElementById('pa-cuit-wrap').style.display = ext ? 'none' : '';
+    document.getElementById('pa-pais-wrap').style.display = ext ? '' : 'none';
+    document.getElementById('pa-datos').style.display = ext ? '' : (_arcaUltima ? '' : 'none');
+    if (ext){ document.getElementById('pa-iva').value = 'EXT'; _habilitarCrear(true); }
+    else _habilitarCrear(!!_arcaUltima);
   });
+  _arcaUltima = null;
 }
+function _habilitarCrear(si){ const b = document.getElementById('pa-crear'); if (b){ b.disabled = !si; b.style.opacity = si ? '' : '.5'; } }
 
-// Valida el CUIT del alta contra ARCA y, si el nombre está vacío, lo completa con la razón social oficial.
+// Consulta ARCA y vuelca lo que trae en el formulario; el resto queda para completar a mano.
 async function validarAltaArca(){
   const c = await validarArca(document.getElementById('pa-cuit')?.value, 'pa-arca');
-  if (c && c.razon_social && !(document.getElementById('pa-nombre').value || '').trim())
-    document.getElementById('pa-nombre').value = c.razon_social;
+  if (!c) return null;
+  const datos = document.getElementById('pa-datos'); datos.style.display = '';
+  const g = id => document.getElementById(id);
+  if (c.razon_social && !(g('pa-nombre').value || '').trim()) g('pa-nombre').value = c.razon_social;
+  if (c.cond_iva && !g('pa-iva').value) g('pa-iva').value = c.cond_iva;
+  const dom = c.domicilio ? [c.domicilio.direccion, c.domicilio.localidad, c.domicilio.descripcionProvincia].filter(Boolean).join(', ') : '';
+  if (dom && !(g('pa-dom').value || '').trim()) g('pa-dom').value = dom;
+  const faltan = [!c.razon_social && 'el nombre', !c.cond_iva && 'la condición de IVA', !dom && 'el domicilio'].filter(Boolean);
+  g('pa-datos-hint').textContent = faltan.length
+    ? `ARCA no informó ${faltan.join(', ')}: completalo a mano. El resto (teléfonos, CBU, condición de pago) se carga después en la ficha.`
+    : 'Datos traídos de ARCA; corregí lo que haga falta. Teléfonos, CBU y condición de pago se cargan después en la ficha.';
+  _habilitarCrear(true);
   return c;
 }
 
@@ -1819,9 +1858,10 @@ async function confirmarAltaProveedor(){
   }
   if (!nombre) return alert('Poné el nombre del proveedor.');
   const domArca = arca?.domicilio ? [arca.domicilio.direccion, arca.domicilio.localidad, arca.domicilio.descripcionProvincia].filter(Boolean).join(', ') : '';
+  const domForm = (document.getElementById('pa-dom')?.value || '').trim(), ivaForm = document.getElementById('pa-iva')?.value || '';
   const { data, error } = await sb.rpc('compras_proveedor_alta',
     { p_nombre: nombre, p_cuit: cuit || null, p_es_exterior: ext,
-      p_datos: { pais, moneda_habitual: ext ? 'USD' : 'ARS', cond_iva: ext ? 'EXT' : (arca?.cond_iva || ''), domicilio: domArca,
+      p_datos: { pais, moneda_habitual: ext ? 'USD' : 'ARS', cond_iva: ext ? 'EXT' : (ivaForm || arca?.cond_iva || ''), domicilio: domForm || domArca,
                  notas: arca ? `ARCA ${arca.estado_clave} · ${arca.razon_social || ''} · validado ${_fechaTs(new Date())}` : '' } });
   if (error) return alert('No se pudo crear: ' + error.message);
   if (data && data.ya_existe){
@@ -1863,6 +1903,13 @@ async function validarArca(cuit, contId, forzar){
   return c;
 }
 
+// (v134) resumen para el título del apartado: "CUIT vigente · RI · 22/09/26"
+function _arcaResumen(c){
+  if (!c) return 'sin consultar';
+  if (c.error) return 'ARCA dio error';
+  const f = c.consultado_at ? new Date(c.consultado_at).toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
+  return [c.vigente === true ? 'CUIT vigente' : '⚠ CUIT no vigente', c.cond_iva || null, f].filter(Boolean).join(' · ');
+}
 function _arcaCard(c){
   if (c.error) return `<div class="hint" style="background:#fef2f2;border-left:3px solid #ef4444;padding:8px 10px;border-radius:6px;">❌ ARCA: ${_mEscP(c.error)}</div>`;
   const errs = (c.errores||[]).map(e => typeof e === 'string' ? e : JSON.stringify(e));
@@ -5184,6 +5231,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=3"></script>
 <script src="juegos.js?v=5"></script>
-<script src="manual.js?v=67"></script>
+<script src="manual.js?v=68"></script>
 </body>
 </html>
