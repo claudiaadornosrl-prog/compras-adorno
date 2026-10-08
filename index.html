@@ -4198,7 +4198,7 @@ async function vistaMercaderia(){
               </select></td>
           <td class="num" style="white-space:nowrap">${r.renglones||0}${r.sin_sku?` <span class="eico" style="background:#fee2e2;color:#991b1b;cursor:pointer" title="${r.sin_sku} renglones sin SKU: abrí el remito para asignarlos o desglosarlos por color" onclick="abrirRemitoDetalle('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">${ico('alerta','s')}</span>`:''}
             ${r.renglones?` <button class="act gh mini-ico" title="Ver los renglones del remito · desglosar por color" onclick="abrirRemitoDetalle('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">${ico('ojo','s')}</button>`:''}</td>
-          <td class="ctr">${r.origen==='factura'?`<span class="eico" title="Anunciado por la factura">${ico('factura','s')}</span>`:r.origen==='proveedor_pdf'?`<span class="eico" title="Leído del PDF del remito">${ico('pdf','s')}</span>`:esc(r.origen)}</td>
+          <td class="ctr">${r.origen==='factura'?`<span class="eico" title="Anunciado por la factura">${ico('factura','s')}</span>`:r.origen==='proveedor_pdf'?`<span class="eico" title="Leído del PDF del remito">${ico('pdf','s')}</span>`:r.origen==='txt_naitiva'?`<span class="eico" style="background:#dcfce7;color:#166534" title="TXT bajado de Naitiva (FGR): el módulo ya dejó el archivo con los desgloses en TXT › PARA IMPORTAR">${ico('archivo','s')}</span>`:esc(r.origen)}</td>
           <td class="num" style="white-space:nowrap">
             ${!r.factura?`<button class="act gh mini-ico" title="Asociar a una factura" onclick="asociarRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">${ico('link','s')}</button> `:''}
             ${imp
