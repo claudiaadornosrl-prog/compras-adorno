@@ -115,6 +115,9 @@ function pedCondRefrescar(){
 }
 function _pedPacksTxt(u, pk){ const n = Number(u||0) / pk; return `${_pedN(n)} pack${n === 1 ? '' : 's'} ×${pk}`; }
 const _pedChip = e => `<span class="chip ped-e-${esc(e)}">${PED_ESTADOS[e] || esc(e)}</span>`;
+const PED_EST_ICO = {borrador:'lapiz', enviado:'avion', parcial:'reloj', completo:'ok', cerrado:'candado', anulado:'anular'};
+const PED_EST_TXT = {borrador:'Borrador', enviado:'Enviado', parcial:'Entrega parcial', completo:'Completo', cerrado:'Cerrado', anulado:'Anulado'};
+const _pedEico = e => `<span class="eico ped-e-${esc(e)}" title="${PED_EST_TXT[e] || esc(e)}">${ico(PED_EST_ICO[e] || 'info','s')}</span>`;
 const _pedDias = f => f ? Math.round((new Date(_hoyAR()) - new Date(String(f).slice(0,10))) / 864e5) : null;
 
 // ── Carga ─────────────────────────────────────────────────────────────
@@ -143,22 +146,14 @@ function _pedPintar(){
   const pendUni = PED_PEND.reduce((a, l) => a + Number(l.pendiente || 0), 0);
   const pendImp = PED_PEND.reduce((a, l) => a + Number(l.pendiente || 0) * Number(l.precio_unitario || 0), 0);
   const vencidos = PED_LISTA.filter(p => ['enviado','parcial'].includes(p.estado) && p.entrega_estimada && p.entrega_estimada < _hoyAR()).length;
+  // (8-oct, JP) resumen en un renglón de chips y sub-pestañas con ícono; el alta es un "+"
   c.innerHTML = `
-    <div class="kpis">
-      <div class="kpi"><div class="lbl">Pedidos abiertos</div><div class="val">${abiertos.length}</div>
-        <div class="sub">${abiertos.filter(p=>p.estado==='borrador').length} en borrador</div></div>
-      <div class="kpi"><div class="lbl">Unidades pendientes</div><div class="val">${_pedN(pendUni)}</div>
-        <div class="sub">${PED_PEND.length} renglones</div></div>
-      <div class="kpi"><div class="lbl">Pendiente valorizado</div><div class="val">${platac(pendImp)}</div>
-        <div class="sub">a precio de pedido</div></div>
-      <div class="kpi" style="border-left-color:${vencidos?'var(--bad)':'var(--ok)'}"><div class="lbl">Entrega vencida</div>
-        <div class="val">${vencidos}</div><div class="sub">pasaron la fecha estimada</div></div>
-    </div>
-    <div class="ped-sub">
-      <button class="${PED_VISTA==='pedidos'?'on':''}" onclick="PED_VISTA='pedidos';_pedPintar()">📋 Pedidos</button>
-      <button class="${PED_VISTA==='pendientes'?'on':''}" onclick="PED_VISTA='pendientes';_pedPintar()">⏳ Pendiente de entrega</button>
+    <div class="abar">
+      <button class="fchip ${PED_VISTA==='pedidos'?'on':''}" onclick="PED_VISTA='pedidos';_pedPintar()" title="Pedidos abiertos: ${abiertos.filter(p=>p.estado==='borrador').length} en borrador">${ico('lista','s')} <b>${abiertos.length}</b> pedidos</button>
+      <button class="fchip ${PED_VISTA==='pendientes'?'on':''}" onclick="PED_VISTA='pendientes';_pedPintar()" title="Unidades pedidas y no recibidas: ${PED_PEND.length} renglones · ${platac(pendImp)} a precio de pedido">${ico('reloj','s')} <b>${_pedN(pendUni)}</b> pendientes</button>
+      ${vencidos ? `<span class="fchip" style="cursor:help;color:var(--bad);border-color:#fecaca;background:#fef2f2" title="Pedidos enviados que pasaron la fecha de entrega estimada">${ico('alerta','s')} <b>${vencidos}</b> vencidos</span>` : ''}
       <span style="flex:1"></span>
-      <button class="act" style="border-radius:8px" onclick="pedNuevo()">➕ Nuevo pedido</button>
+      <button class="act mini-ico" onclick="pedNuevo()" title="Nuevo pedido">${ico('mas')}</button>
     </div>
     ${PED_VISTA === 'pedidos' ? _pedVistaLista() : _pedVistaPendientes()}`;
 }
@@ -181,22 +176,22 @@ function _pedVistaLista(){
       <input type="search" placeholder="Buscar proveedor, Nº o nota…" value="${esc(PED_BUSCA)}"
              oninput="PED_BUSCA=this.value;clearTimeout(window._pedT);window._pedT=setTimeout(()=>{_pedPintar();const i=document.querySelector('.filtros input[type=search]');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},250)">
     </div>
-    ${rows.length ? `<div style="overflow-x:auto"><table>
-      <thead><tr><th>Nº</th><th>Fecha</th><th>Proveedor</th><th>Estado</th><th class="num">Renglones</th>
+    ${rows.length ? `<div style="overflow-x:auto"><table class="tb-band">
+      <thead><tr><th>Nº</th><th>Fecha</th><th>Proveedor</th><th class="ctr">Estado</th><th class="num" title="Renglones">Reng.</th>
         <th class="num">Pedido</th><th class="num">Recibido</th><th class="num">Pendiente</th>
         <th class="num">$ pendiente</th><th>Entrega est.</th></tr></thead>
       <tbody>${rows.map(p => {
         const venc = ['enviado','parcial'].includes(p.estado) && p.entrega_estimada && p.entrega_estimada < _hoyAR();
-        return `<tr style="cursor:pointer" onclick="pedAbrir(${p.id})">
+        return `<tr onclick="pedAbrir(${p.id})" title="Abrir el pedido">
           <td><b>${_pedNro(p.numero)}</b></td><td>${fechaCorta(p.fecha)}</td>
-          <td>${esc(p.proveedor_nombre)}${p.notas ? `<div class="mini">${esc(p.notas)}</div>` : ''}</td>
-          <td>${_pedChip(p.estado)}${Number(p.descuento_extra_pct) ? ` <span class="chip" style="background:#dcfce7;color:#166534" title="Descuento extra por volumen">🎁 −${_pedN(p.descuento_extra_pct)} %</span>` : ''}${p.condiciones?.minimo && !p.condiciones.minimo.cumple && p.estado !== 'anulado' ? ' <span class="chip" style="background:#fee2e2;color:#991b1b" title="No llega a la compra mínima del proveedor">⚠ bajo mínimo</span>' : ''}</td><td class="num">${p.renglones}</td>
+          <td class="prov"><span class="prov-nom">${esc(p.proveedor_nombre)}</span>${p.notas ? `<div class="mini prov-nom" title="${esc(p.notas)}">${esc(p.notas)}</div>` : ''}</td>
+          <td class="ctr" style="white-space:nowrap">${_pedEico(p.estado)}${Number(p.descuento_extra_pct) ? ` <span class="eico" style="background:#dcfce7;color:#166534" title="Descuento extra por volumen: −${_pedN(p.descuento_extra_pct)} %">${ico('regalo','s')}</span>` : ''}${p.condiciones?.minimo && !p.condiciones.minimo.cumple && p.estado !== 'anulado' ? ` <span class="eico" style="background:#fee2e2;color:#991b1b" title="No llega a la compra mínima del proveedor">${ico('alerta','s')}</span>` : ''}</td><td class="num">${p.renglones}</td>
           <td class="num">${_pedN(p.unidades)}</td><td class="num">${_pedN(p.recibido)}</td>
           <td class="num"><b>${_pedN(p.pendiente)}</b>${Number(p.cancelado) ? `<div class="mini">${_pedN(p.cancelado)} cancel.</div>` : ''}</td>
           <td class="num">${Number(p.importe_pendiente) ? plata(p.importe_pendiente * (1 - Number(p.descuento_extra_pct||0)/100)) : '—'}</td>
-          <td class="${venc?'ped-venc':''}">${p.entrega_estimada ? fechaCorta(p.entrega_estimada) : '—'}${venc?' ⚠':''}</td></tr>`;
+          <td class="${venc?'ped-venc':''}" ${venc ? 'title="Pasó la fecha de entrega estimada"' : ''}>${p.entrega_estimada ? fechaCorta(p.entrega_estimada) : '—'}</td></tr>`;
       }).join('')}</tbody></table></div>`
-      : `<div class="vacio">${PED_LISTA.length ? 'No hay pedidos con ese filtro.' : 'Todavía no hay pedidos. Tocá ➕ Nuevo pedido para armar el primero.'}</div>`}
+      : `<div class="vacio">${PED_LISTA.length ? 'No hay pedidos con ese filtro.' : 'Todavía no hay pedidos. Tocá el + para armar el primero.'}</div>`}
   </div>`;
 }
 
@@ -211,30 +206,29 @@ function _pedVistaPendientes(){
   const tot = rows.reduce((a, l) => a + Number(l.pendiente||0), 0);
   const imp = rows.reduce((a, l) => a + Number(l.pendiente||0) * Number(l.precio_unitario||0), 0);
   return `<div class="card">
-    <p class="mini" style="margin-bottom:10px">Lo que se pidió y todavía no llegó, de los pedidos enviados. Se descuenta solo cuando
-      entra el remito del proveedor con el mismo SKU (o a mano con 📥 Recibir dentro del pedido).</p>
     <div class="filtros">
+      <span class="mini" style="cursor:help" title="Lo que se pidió y todavía no llegó, de los pedidos enviados. Se descuenta solo cuando entra el remito del proveedor con el mismo SKU, o a mano con Recibir dentro del pedido.">${ico('info','s')}</span>
       <select onchange="PED_PROV_PEND=this.value;_pedPintar()">
         <option value="">Todos los proveedores (${provs.length})</option>
         ${provs.map(p => `<option ${p===PED_PROV_PEND?'selected':''}>${esc(p)}</option>`).join('')}
       </select>
       <input type="search" placeholder="Buscar SKU o descripción…" value="${esc(PED_BUSCA)}"
              oninput="PED_BUSCA=this.value;clearTimeout(window._pedT);window._pedT=setTimeout(()=>{_pedPintar();const i=document.querySelector('.filtros input[type=search]');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},250)">
-      <button class="act gh" onclick="pedPendExcel()">⬇ Excel</button>
-      <button class="act gh" onclick="pedPendPdf()">⬇ PDF</button>
+      <button class="act gh mini-ico" onclick="pedPendExcel()" title="Bajar en Excel">${ico('excel')}</button>
+      <button class="act gh mini-ico" onclick="pedPendPdf()" title="Bajar en PDF (sirve para reclamarle al proveedor)">${ico('pdf')}</button>
     </div>
-    ${rows.length ? `<div style="overflow-x:auto"><table>
+    ${rows.length ? `<div style="overflow-x:auto"><table class="tb-band">
       <thead><tr><th>Proveedor</th><th>Pedido</th><th>SKU</th><th>Descripción</th>
         <th class="num">Pedido</th><th class="num">Recibido</th><th class="num">Pendiente</th>
         <th class="num">Días</th><th>Entrega est.</th></tr></thead>
       <tbody>${rows.map(l => {
         const venc = l.entrega_estimada && l.entrega_estimada < _hoyAR();
-        return `<tr style="cursor:pointer" onclick="pedAbrir(${l.pedido_id})">
-          <td>${esc(l.proveedor_nombre)}</td><td>Nº ${_pedNro(l.pedido_numero)}<div class="mini">${fechaCorta(l.fecha)}</div></td>
+        return `<tr onclick="pedAbrir(${l.pedido_id})" title="Abrir el pedido">
+          <td class="prov"><span class="prov-nom">${esc(l.proveedor_nombre)}</span></td><td>Nº ${_pedNro(l.pedido_numero)}<div class="mini">${fechaCorta(l.fecha)}</div></td>
           <td><b>${esc(l.sku||'—')}</b>${l.codigo_proveedor ? `<div class="mini">${esc(l.codigo_proveedor)}</div>` : ''}</td>
           <td>${esc(l.descripcion)}</td><td class="num">${_pedN(l.cantidad)}</td><td class="num">${_pedN(l.recibido)}</td>
           <td class="num"><b>${_pedN(l.pendiente)}</b></td><td class="num">${_pedDias(l.fecha) ?? '—'}</td>
-          <td class="${venc?'ped-venc':''}">${l.entrega_estimada ? fechaCorta(l.entrega_estimada) : '—'}</td></tr>`;
+          <td class="${venc?'ped-venc':''}" ${venc ? 'title="Pasó la fecha de entrega estimada"' : ''}>${l.entrega_estimada ? fechaCorta(l.entrega_estimada) : '—'}</td></tr>`;
       }).join('')}</tbody>
       <tfoot><tr><td colspan="6"><b>${rows.length} renglones</b></td><td class="num"><b>${_pedN(tot)}</b></td>
         <td colspan="2" class="num">${imp ? plata(imp) : ''}</td></tr></tfoot></table></div>`
