@@ -258,6 +258,9 @@ table.tb-band a.nro:hover{color:var(--primary);border-bottom-color:var(--primary
 .op-mas{display:inline-flex;align-items:center;gap:6px;margin-left:6px;vertical-align:middle}
 button.act.op-ico{background:var(--primary);color:#fff;border:none;padding:2px 4px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;margin-left:3px;vertical-align:middle}
 button.act.op-ico svg{width:11px;height:11px}
+label.c-tog{cursor:pointer;display:inline-flex}label.c-tog input{display:none}
+label.c-tog .eico{width:30px;height:30px;color:#cbd5e1;border:1px solid var(--bd);background:#fff;cursor:pointer}
+label.c-tog input:checked + .eico{color:#fff;background:var(--primary);border-color:var(--primary)}
 .aviso-amb{background:#fef3c7;color:#92400e;border-left:4px solid #d97706;border-radius:8px;padding:8px 11px;font-size:13px}.aviso-amb div{display:flex;gap:6px;align-items:flex-start;margin:2px 0}
 button.act.mini-ico{padding:5px 7px;border-radius:8px;display:inline-flex}
 details.plegable summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;font-size:13.5px}
@@ -564,6 +567,7 @@ const ICONOS = {
   telefono: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"/>',
   lupa: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
   basura: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  iva: '<text x="1" y="17" font-size="11.5" font-weight="800" stroke="none" fill="currentColor" font-family="inherit">IVA</text>',
   estrella: '<path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/>',
   hoja: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
   traducir: '<path d="M5 8l6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/>',
@@ -2611,7 +2615,8 @@ function _pintarDescLinea(i, cod){
   const el = document.getElementById('desc-linea-' + i); if (!el) return;
   const cc = CONCEPTOS.find(c => c.codigo === cod);
   el.style.color = cc ? '#166534' : (cod ? '#b91c1c' : 'var(--mut)');
-  el.innerHTML = cc ? `<b>${esc(cc.codigo)}</b> · ${esc(cc.descripcion||'')} · IVA ${cc.alicuota ?? '?'} %` : (cod ? '⚠ Ese código no está en el catálogo' : 'Escribí o elegí el código: abajo aparece su descripción');
+  el.title = cc ? (cc.descripcion||'') : '';
+  el.innerHTML = cc ? `${esc(cc.descripcion||'')} <span class="mini">· IVA ${cc.alicuota ?? '?'} %</span>` : (cod ? '⚠ Ese código no está en el catálogo' : 'Escribí o elegí el código');
 }
 
 function _tipoGastoCambio(tipo){
@@ -2653,16 +2658,20 @@ function pintarControl(){
         <div class="mini" style="margin-top:2px">Extranjera: no entra al Libro IVA (lo define el estudio) · sí computa como gasto real.</div>
       </div>` : ''}
 
-      <h4 style="font-size:14px;margin:14px 0 4px;display:flex;align-items:center;gap:10px">Imputación contable${(d._usados && d._usados.length) ? ` <a href="#" onclick="event.preventDefault();toggleUsados()" style="font-weight:400;font-size:12.5px;color:var(--primary);text-decoration:none" title="Conceptos que ya usó este proveedor">${d._usados.length} usados ▾</a>` : ''}</h4>
+      <div style="height:10px"></div>
       ${(d._usados && d._usados.length) ? `<div id="ctrl-usados" style="display:none;margin:0 0 8px;padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background:#fafafa;font-size:12.5px">
           <div class="mini" style="margin-bottom:4px">Conceptos que ya usó este proveedor (tocá uno para ponerlo en la primera línea):</div>
           ${d._usados.map(u => `<button class="act gh" style="margin:0 5px 5px 0;font-size:12px;padding:4px 8px"
             onclick="usarConcepto('${esc(u.codigo)}')">${esc(u.codigo)} · ${esc(u.descripcion||'')} <span class="mini">(${u.veces})</span></button>`).join('')}
         </div>` : ''}
-      <div class="c-linea fx-lin-hd" style="margin-bottom:2px"><span style="flex:1;min-width:150px">Concepto</span><span style="width:140px;text-align:right">Importe neto</span><span style="width:72px;text-align:right">IVA %</span>${lineasControl.length > 1 ? '<span style="width:34px"></span>' : ''}</div>
+      <div class="c-linea fx-lin-hd" style="margin-bottom:2px"><span style="flex:1;min-width:150px;display:inline-flex;align-items:center;gap:8px">Concepto${(d._usados && d._usados.length) ? ` <a href="#" onclick="event.preventDefault();toggleUsados()" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--primary);text-decoration:none" title="Conceptos que ya usó este proveedor">${d._usados.length} usados ▾</a>` : ''}
+          <button class="act op-ico" title="Dividir en otro concepto" onclick="agregarLinea()">${ico('mas','s')}</button>
+          <button class="act op-ico" title="Crear un concepto nuevo" onclick="toggleNuevoConcepto()">${ico('estrella','s')}</button>
+          <span id="ctrl-dif" style="display:inline-flex">${_difConceptosHTML(dif, neto)}</span></span><span style="width:140px;text-align:right">Importe neto</span><span style="width:72px;text-align:right">IVA %</span>${lineasControl.length > 1 ? '<span style="width:34px"></span>' : ''}</div>
       ${lineasControl.map((l,i) => { const cc = CONCEPTOS.find(c => c.codigo === l.concepto); return `<div class="c-linea" style="flex-wrap:wrap">
         <input list="dl-conceptos" id="ctrl-conc-${i}" value="${esc(l.concepto)}" placeholder="Código de concepto"
-               oninput="lineasControl[${i}].concepto=this.value.split(' ')[0].trim(); _pintarDescLinea(${i}, this.value.split(' ')[0].trim()); _pintarConfLinea(${i}); _avisoUnidadConcepto()" style="flex:1;min-width:150px;${_estiloConf(i, l.concepto)}" title="${_titleConf(i, l.concepto)}">
+               oninput="lineasControl[${i}].concepto=this.value.split(' ')[0].trim(); _pintarDescLinea(${i}, this.value.split(' ')[0].trim()); _pintarConfLinea(${i}); _avisoUnidadConcepto()" style="width:150px;${_estiloConf(i, l.concepto)}" title="${_titleConf(i, l.concepto)}">
+        <div id="desc-linea-${i}" style="flex:1;min-width:120px;align-self:center;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${cc ? 'color:#166534' : (l.concepto ? 'color:#b91c1c' : 'color:var(--mut)')}" title="${cc ? esc(cc.descripcion||'') : ''}">${cc ? `${esc(cc.descripcion||'')} <span class="mini">· IVA ${cc.alicuota ?? '?'} %</span>` : (l.concepto ? '⚠ Ese código no está en el catálogo' : 'Escribí o elegí el código')}</div>
         <input type="text" inputmode="decimal" value="${nmShow(l.monto)}" style="width:140px;text-align:right"
                onfocus="wireImporte(this)"
                oninput="lineasControl[${i}].monto=nmParse(this.value); pintarNums()">
@@ -2670,13 +2679,7 @@ function pintarControl(){
                style="width:72px;text-align:right" oninput="lineasControl[${i}].alicuota=this.value.replace(',','.').trim()">
         ${lineasControl.length > 1
           ? `<button class="act gh" onclick="quitarLinea(${i})" title="Quitar">✕</button>` : ''}
-        <div id="desc-linea-${i}" style="flex-basis:100%;margin:0 0 5px 2px;font-size:14px;line-height:1.35;${cc ? 'color:#166534' : (l.concepto ? 'color:#b91c1c' : 'color:var(--mut)')}">${cc ? `<b>${esc(cc.codigo)}</b> · ${esc(cc.descripcion||'')} · IVA ${cc.alicuota ?? '?'} %` : (l.concepto ? '⚠ Ese código no está en el catálogo' : 'Escribí o elegí el código: abajo aparece su descripción')}</div>
       </div>`; }).join('')}
-      <div style="display:flex;align-items:center;gap:6px">
-        <button class="act op-ico" title="Dividir en otro concepto" onclick="agregarLinea()">${ico('mas','s')}</button>
-        <button class="act op-ico" title="Crear un concepto nuevo" onclick="toggleNuevoConcepto()">${ico('estrella','s')}</button>
-        <span id="ctrl-dif" style="margin-left:4px;display:inline-flex">${_difConceptosHTML(dif, neto)}</span>
-      </div>
       <div id="nc-form" style="display:none;background:#fff7ed;border:1px solid var(--primary);border-radius:9px;padding:11px;margin-top:9px;">
         <div class="mini" style="margin-bottom:7px"><b>Crear concepto contable</b> — un SKU + su descripción, como los artículos del Dragonfish. Solo para gastos de un tipo que todavía no existe en el catálogo.</div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;">
@@ -2697,17 +2700,15 @@ function pintarControl(){
       <div class="c-fila" style="gap:12px">
         <label>CAE <input id="ctrl-cae" value="${esc(d.cae || d.extraido_json?.cae || '')}" placeholder="14 dígitos" inputmode="numeric" maxlength="20" style="width:150px"></label>
         <label>Vto. CAE <input id="ctrl-cae-vto" type="date" value="${esc(d.cae_vto || d.extraido_json?.cae_vto || '')}"></label>
-        <label title="Tipo de gasto: ${Object.entries(TIPOS).map(([k,v]) => k + ' = ' + v).join(' · ')}">Tipo
-          <select id="ctrl-tipo" onchange="_tipoGastoCambio(this.value)" style="width:64px">
-            <option value="">—</option>
+        <label>Tipo de gasto
+          <select id="ctrl-tipo" onchange="_tipoGastoCambio(this.value)">
+            <option value="">— sin clasificar —</option>
             ${Object.entries(TIPOS).map(([k,v]) =>
-              `<option value="${k}" title="${esc(v)}" ${d.tipo_gasto===k?'selected':''}>${TIPO_LETRA[k] || k}</option>`).join('')}
+              `<option value="${k}" ${d.tipo_gasto===k?'selected':''}>${v}</option>`).join('')}
           </select></label>
         <span style="flex:1"></span>
-        <label class="c-chk" title="Va al Libro IVA (contabilidad formal)"><input type="checkbox" id="ctrl-formal" ${d.computa_formal!==false?'checked':''}>
-          <span class="eico" style="width:24px;height:24px;cursor:inherit">${ico('factura','s')}</span></label>
-        <label class="c-chk" title="Va a la planilla de gastos (gestión)"><input type="checkbox" id="ctrl-gestion" onchange="_gestionCambio()" ${gs.computa!==false?'checked':''}>
-          <span class="eico" style="width:24px;height:24px;cursor:inherit">${ico('hoja','s')}</span></label>
+        <label class="c-tog" title="Va al Libro IVA (contabilidad formal). Naranja = sí"><input type="checkbox" id="ctrl-formal" ${d.computa_formal!==false?'checked':''}><span class="eico">${ico('iva')}</span></label>
+        <label class="c-tog" title="Va a la planilla de gastos (gestión). Naranja = sí"><input type="checkbox" id="ctrl-gestion" onchange="_gestionCambio()" ${gs.computa!==false?'checked':''}><span class="eico">${ico('hoja')}</span></label>
       </div>
       <div id="ctrl-gestion-box" style="display:${gs.computa!==false?'block':'none'};margin-top:8px;padding:8px 10px;border:1px dashed var(--line);border-radius:8px">
         <div class="mini" style="margin-bottom:6px">📒 <b>Planilla de gastos</b> — sugerido por las reglas, corregilo si no corresponde.
