@@ -567,7 +567,7 @@ const ICONOS = {
   telefono: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"/>',
   lupa: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
   basura: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
-  iva: '<text x="1" y="17" font-size="11.5" font-weight="800" stroke="none" fill="currentColor" font-family="inherit">IVA</text>',
+  iva: '<text x="12" y="16.5" text-anchor="middle" font-size="11.5" font-weight="800" stroke="none" fill="currentColor" font-family="inherit">IVA</text>',
   estrella: '<path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/>',
   hoja: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
   traducir: '<path d="M5 8l6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/>',
@@ -1907,11 +1907,10 @@ function _gRepartoHTML(){
       <td><select onchange="_gPartSet(${i},'categoria',this.value)">
         ${G_CATEGORIAS.map(c => `<option value="${c.clave}" ${x.categoria===c.clave?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select></td>
       <td class="num"><input type="text" inputmode="decimal" id="g-imp-${i}" class="fx-in" style="width:130px" value="${x.importe == null ? '' : nmShow(x.importe)}" oninput="_gPartImp(${i}, this.value)"></td>
-      <td>${varias ? `<button class="act gh" type="button" style="padding:2px 8px" title="Quitar este renglón" onclick="_gPartQuitar(${i})">✕</button>` : ''}</td>
+      <td style="white-space:nowrap">${i === 0 ? `<button class="act op-ico" type="button" title="Agregar un renglón: otro local, otro mes o las dos cosas. Arranca con lo que falta repartir." onclick="_gPartAgregar()">${ico('mas','s')}</button>` : ''}${varias ? `<button class="act op-ico" type="button" style="background:var(--bad)" title="Quitar este renglón" onclick="_gPartQuitar(${i})">${ico('anular','s')}</button>` : ''}</td>
     </tr>`;
   return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:2px 0 6px">
-      <label class="mini">Total a la planilla <input type="text" inputmode="decimal" id="g-base" class="fx-in" style="width:130px" value="${nmShow(base)}" oninput="_gBaseSet(this.value)"></label>
-      <span class="mini" style="color:var(--mut)">Si el gasto va a más de un local o a más de un mes, agregá un renglón por cada parte y poné el importe de cada una.</span>
+      <label class="mini" title="Si el gasto va a más de un local o a más de un mes, agregá un renglón por cada parte con el + y poné el importe de cada una">Total a la planilla <input type="text" inputmode="decimal" id="g-base" class="fx-in" style="width:130px" value="${nmShow(base)}" oninput="_gBaseSet(this.value)"></label>
     </div>
     <div style="overflow-x:auto"><table class="fx-tbl">
       <thead><tr><th>Período (mes de consumo)</th><th>Unidad</th><th>Categoría</th><th class="num">Importe</th><th></th></tr></thead>
@@ -1919,7 +1918,6 @@ function _gRepartoHTML(){
       ${varias ? `<tfoot><tr><td colspan="3" style="text-align:right;color:var(--mut)">Suma de los renglones</td><td class="num" id="g-suma"><b>${plata(suma)}</b></td><td></td></tr></tfoot>` : ''}
     </table></div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px">
-      <button class="act gh" type="button" style="font-size:12px;padding:3px 9px" onclick="_gPartAgregar()" title="Otro renglón: otro local, otro mes o las dos cosas. Arranca con lo que falta repartir.">+ Agregar renglón</button>
       <span class="mini" id="g-dif" style="${Math.abs(dif) > 0.01 && varias ? 'color:#b45309' : 'color:var(--mut)'}">${varias ? (Math.abs(dif) > 0.01 ? `⚠ Los renglones suman ${plata(suma)} y el total es ${plata(base)}: ${dif > 0 ? 'faltan' : 'sobran'} ${plata(Math.abs(dif))}. Hasta que cierre no se puede contabilizar.` : '✓ Los renglones suman el total.') : ''}</span>
     </div>`;
 }
@@ -2299,7 +2297,7 @@ function _facturaCabecera(d, opts = {}){
       <div style="margin-top:4px">${arca}${opts.chips || ''}</div>
     </div>
     <div style="text-align:right">
-      <div class="fx-num">${num}</div>
+      <div class="fx-num">${d.archivo_path ? `<a href="${_pdfUrl(d.archivo_path)}" target="_blank" rel="noopener" title="Abrir el PDF de la factura en OneDrive, en otra pestaña" style="color:inherit;text-decoration:none;border-bottom:1px dotted currentColor">${num}</a>` : num}</div>
       <div class="mini">Emisión <b>${fechaCorta(d.fecha_emision)}</b> · Vto ${opts.editable
         ? `<input type="date" id="ctrl-vto" class="fx-vto-in" value="${esc(vto || '')}" min="${esc(d.fecha_emision || '')}" title="Vencimiento de la factura. Si el papel no lo trae, cargalo acá: es la fecha de pago que después toma la orden de pago y el pendiente de Tesorería.">${vto ? '' : '<span class="fx-vto-falta">falta · cargalo</span>'}`
         : `<b>${vto ? fechaCorta(vto) : falta}</b>`}</div>
@@ -2308,7 +2306,6 @@ function _facturaCabecera(d, opts = {}){
             · Nº int. <input id="ctrl-numint" type="number" min="1" step="1" inputmode="numeric" class="fx-vto-in" style="width:86px" value="${esc(d._numint ?? d.numero_interno ?? '')}" placeholder="auto" oninput="enControl._numint=this.value" title="Número interno: correlativo propio del módulo. Vacío = se asigna el siguiente al contabilizar."></div>`
         : ((d.fecha_ingreso || d.numero_interno) ? `<div class="mini">Ingreso <b>${d.fecha_ingreso ? fechaCorta(d.fecha_ingreso) : '—'}</b> · Nº int. <b>${d.numero_interno ?? '—'}</b></div>` : '')}
       <div class="mini">Remito ${remito ? esc(remito) : falta}</div>
-      ${d.archivo_path ? `<a class="act fx-pdf" target="_blank" rel="noopener" href="${_pdfUrl(d.archivo_path)}" title="Abre el PDF en OneDrive, en otra pestaña">📄 Ver la factura</a>` : ''}
       ${remsPdf.map(r => `<a class="act fx-pdf" target="_blank" rel="noopener" href="${_pdfUrl(r.archivo_path)}" title="Abre el PDF del remito ${_numRemito(r)} en OneDrive, en otra pestaña">📦 Ver remito${remsPdf.length > 1 ? ' ' + Number(r.numero) : ''}</a>`).join(' ')}
     </div>
   </div>`;
@@ -2706,16 +2703,14 @@ function pintarControl(){
             ${Object.entries(TIPOS).map(([k,v]) =>
               `<option value="${k}" ${d.tipo_gasto===k?'selected':''}>${v}</option>`).join('')}
           </select></label>
-        <span style="flex:1"></span>
         <label class="c-tog" title="Va al Libro IVA (contabilidad formal). Naranja = sí"><input type="checkbox" id="ctrl-formal" ${d.computa_formal!==false?'checked':''}><span class="eico">${ico('iva')}</span></label>
         <label class="c-tog" title="Va a la planilla de gastos (gestión). Naranja = sí"><input type="checkbox" id="ctrl-gestion" onchange="_gestionCambio()" ${gs.computa!==false?'checked':''}><span class="eico">${ico('hoja')}</span></label>
       </div>
       <div id="ctrl-gestion-box" style="display:${gs.computa!==false?'block':'none'};margin-top:8px;padding:8px 10px;border:1px dashed var(--line);border-radius:8px">
-        <div class="mini" style="margin-bottom:6px">📒 <b>Planilla de gastos</b> — sugerido por las reglas, corregilo si no corresponde.
-          ${gs.motivo ? `<span title="${esc(gs.motivo)}" style="cursor:help">ⓘ</span>` : ''}</div>
+        <div class="mini" style="margin-bottom:6px;display:flex;align-items:center;gap:6px"><b>Planilla de gastos</b>
+          ${ayuda('Sugerido por las reglas, corregilo si no corresponde.' + (gs.motivo ? ' Motivo: ' + gs.motivo : ''))}</div>
         <div id="ctrl-g-rep">${_gRepartoHTML()}</div>
         <div id="ctrl-g-aviso" class="mini" style="display:none;margin-top:6px;padding:6px 8px;border-radius:6px;background:#fef3c7;color:#92400e"></div>
-        <div class="mini" style="color:var(--muted)">${esc(gs.motivo || '')}</div>
       </div>
     </div>
 
