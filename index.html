@@ -570,6 +570,7 @@ const ICONOS = {
   pdf: '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/>',
   mas: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
   lapiz: '<path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+  circulo: '<circle cx="12" cy="12" r="9"/>',
   mano: '<path d="M18 11V6a2 2 0 0 0-4 0v1a2 2 0 0 0-4 0v2a2 2 0 0 0-4 0v6"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>',
   guardar: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
   mundo: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
@@ -1458,6 +1459,10 @@ async function anularOP(id, comp){
 //  sync, que matchea por código, nunca lo encuentre y lo pise.
 // ═══════════════════════════════════════════════════════════════════════
 let _provCache = [], _provBusca = '';
+// (v132, JP) filtros rápidos sobre la lista ya traída; inactivos ocultos por defecto
+let _provFil = { mercaderia:false, exterior:false, inactivos:false, sinficha:false };
+const _provEsMerc = p => p.compra_mercaderia === true || (p.compra_mercaderia == null && p.mercaderia_auto);
+function toggleProvFiltro(k){ _provFil[k] = !_provFil[k]; pintarProveedores(); }
 
 async function vistaProveedores(){
   const c = document.getElementById('cont');
@@ -1471,6 +1476,8 @@ async function vistaProveedores(){
     <div id="prov-lista"><div class="hint">Cargando…</div></div>
   </div>`;
   document.getElementById('prov-q').addEventListener('keydown', e => { if (e.key === 'Enter') buscarProveedores(); });
+  // (v132, JP) si se borra todo lo escrito, vuelve el listado general sin apretar Enter
+  document.getElementById('prov-q').addEventListener('input', e => { if (!e.target.value.trim() && _provBusca) buscarProveedores(); });
   await buscarProveedores();
 }
 
@@ -1494,16 +1501,32 @@ async function buscarProveedores(){
       _provCache.forEach(p => { p.arca = porCuit[String(p.cuit||'').replace(/\D/g,'')] || null; });
     }
   } catch(e){ console.warn('arca', e); }
+  pintarProveedores();
+}
+
+function pintarProveedores(){
+  const cont = document.getElementById('prov-lista'); if (!cont) return;
+  const f = _provFil;
+  const lista = _provCache.filter(p => (f.inactivos || p.activo) && (!f.mercaderia || _provEsMerc(p)) &&
+    (!f.exterior || p.es_exterior) && (!f.sinficha || !p.tiene_ficha));
+  const chip = (k, icon, txt, title) => `<button class="fchip ${f[k]?'on':''}" type="button" onclick="toggleProvFiltro('${k}')" title="${title}">${ico(icon,'s')} ${txt}</button>`;
+  const nInact = _provCache.filter(p => !p.activo).length;
   cont.innerHTML = `
-    <div class="mini" style="margin-bottom:8px;">${_provCache.length} proveedor(es) · ordenados por cuántas facturas les cargamos</div>
-    <table class="tb-band"><thead><tr>
+    <div class="abar" style="margin-bottom:8px">
+      ${chip('mercaderia','camion','Mercadería','Solo los proveedores a los que les compramos mercadería (los del armado de pedidos)')}
+      ${chip('exterior','mundo','Exterior','Solo proveedores del exterior')}
+      ${chip('sinficha','circulo','Sin ficha','Solo los que todavía no tienen la ficha completa')}
+      ${chip('inactivos','apagado', f.inactivos ? 'Mostrando inactivos' : 'Ocultar inactivos' + (nInact ? ` (${nInact})` : ''), f.inactivos ? 'Se ven también los inactivos. Tocá para ocultarlos.' : 'Los inactivos están ocultos. Tocá para verlos.')}
+      <span class="mini">${lista.length} proveedor(es) · ordenados por cuántas facturas les cargamos</span>
+    </div>
+    ${!lista.length ? '<div class="hint">Ningún proveedor cumple con los filtros marcados.</div>' : `<table class="tb-band"><thead><tr>
       <th>Proveedor</th><th>CUIT</th><th class="num">Facturas</th><th class="num">Total comprado</th>
       <th>Última</th><th>Condición de pago</th><th class="ctr">Contacto</th><th class="ctr" title="Ficha completa">Ficha</th></tr></thead><tbody>
-    ${_provCache.map((p,i) => `<tr onclick="fichaProveedor(${i})" title="Abrir la ficha del proveedor">
+    ${lista.map(p => { const i = _provCache.indexOf(p); return `<tr onclick="fichaProveedor(${i})" title="Abrir la ficha del proveedor">
       <td class="prov" style="white-space:nowrap"><span class="prov-nom"><strong>${_mEscP(p.nombre)}</strong></span>
-        ${(p.compra_mercaderia === true || (p.compra_mercaderia == null && p.mercaderia_auto)) ? `<span class="eico" style="background:#dcfce7;color:#166534" title="Le compramos mercadería${p.compra_mercaderia == null ? ' (automático)' : ''}: aparece al armar pedidos">${ico('camion','s')}</span>` : ''}
+        ${_provEsMerc(p) ? `<span class="eico" style="background:#dcfce7;color:#166534" title="Le compramos mercadería${p.compra_mercaderia == null ? ' (automático)' : ''}: aparece al armar pedidos">${ico('camion','s')}</span>` : ''}
         ${p.es_exterior ? `<span class="eico" style="background:#ede9fe;color:#5b21b6" title="Proveedor del exterior">${ico('mundo','s')}</span>` : ''}
-        ${p.origen === 'manual' ? `<span class="eico" style="color:#475569" title="Creado a mano en el módulo">${ico('lapiz','s')}</span>` : ''}
+        ${p.origen === 'manual' ? `<span class="eico" style="color:#475569" title="Creado a mano en el módulo">${ico('mano','s')}</span>` : ''}
         ${!p.activo ? `<span class="eico" style="background:#fee2e2;color:#991b1b" title="Inactivo">${ico('apagado','s')}</span>` : ''}
         ${p.copias_mismo_cuit > 1 ? `<span class="eico" style="background:#fef3c7;color:#b45309" title="Dragonfish tiene ${p.copias_mismo_cuit} fichas con este mismo CUIT: cargá los datos en una sola">${ico('alerta','s')}</span>` : ''}
       </td>
@@ -1517,8 +1540,8 @@ async function buscarProveedores(){
         ${p.retenciones_excluidas ? `<span class="eico" title="Certificado de exclusión en ${p.retenciones_excluidas} régimen(es)" style="background:#fef3c7;color:#92400e">${ico('porcentaje','s')}</span>` : ''}
         ${(p.descuentos||[]).length ? `<span class="eico" title="${(p.descuentos||[]).length} descuento(s): ${_mEscP((p.descuentos||[]).map(d => (d.porcentaje||0)+'% '+(d.descripcion||'')).join(' · '))}" style="background:#dcfce7;color:#166534">${ico('regalo','s')}</span>` : ''}</td>
       <td class="ctr" style="white-space:nowrap" onclick="event.stopPropagation()">${_contactoIcos({ whatsapp: p.whatsapp, email: p.email || p.email_op || p.df_email })}</td>
-      <td class="ctr">${p.tiene_ficha ? `<span class="eico" style="color:var(--ok)" title="Ficha completa">${ico('ok','s')}</span>` : `<span class="eico" style="color:var(--mut)" title="Ficha sin completar">${ico('lapiz','s')}</span>`}</td>
-    </tr>`).join('')}</tbody></table>`;
+      <td class="ctr">${p.tiene_ficha ? `<span class="eico" style="color:var(--ok)" title="Ficha completa">${ico('ok','s')}</span>` : `<span class="eico" style="color:var(--mut)" title="Ficha sin completar">${ico('circulo','s')}</span>`}</td>
+    </tr>`; }).join('')}</tbody></table>`}`;
 }
 
 // ── Helpers de contacto: links directos a WhatsApp y mail ──
@@ -5126,6 +5149,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=3"></script>
 <script src="juegos.js?v=5"></script>
-<script src="manual.js?v=65"></script>
+<script src="manual.js?v=66"></script>
 </body>
 </html>

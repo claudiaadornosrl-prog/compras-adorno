@@ -15,6 +15,7 @@ function _manualSecciones() {
       desc: 'La ficha de cada proveedor con los datos que el módulo necesita y Dragonfish no tiene.',
       pasos: [
         'El listado trae los 1.300 proveedores ordenados por cuántas facturas les cargamos. Se busca por nombre o por CUIT.',
+        'Chips de arriba para filtrar la lista: Mercadería (los que entran al armado de pedidos), Exterior, Sin ficha (los que falta completar) e Inactivos, que están ocultos por defecto. Si borrás lo que escribiste en el buscador, vuelve el listado general solo. En la columna Ficha, el tilde verde es ficha completa y el círculo gris, sin completar; la manito al lado del nombre marca los creados a mano en el módulo.',
         'El nombre, CUIT, mail y teléfono los manda Dragonfish y se actualizan solos cada 4 horas: si los cambiás allá, acá se ven al rato.',
         'Lo que cargás en la ficha (condición de pago, CBU, mail para la orden de pago, condición de IVA, notas) es del módulo y NO se pisa con el sync. Va a servir para emitir las órdenes de pago.',
         '➕ Nuevo proveedor es SOLO para los que no están en Dragonfish. Si ya existe, el sistema no lo duplica: te avisa y te muestra cuál es.',
