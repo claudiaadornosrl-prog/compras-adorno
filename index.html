@@ -555,6 +555,12 @@ const ICONOS = {
   pdf: '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/>',
   mas: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
   lapiz: '<path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+  bajar: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+  ajustes: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  subir: '<path d="M12 19V5"/><polyline points="5 12 12 5 19 12"/>',
+  bajarflecha: '<path d="M12 5v14"/><polyline points="19 12 12 19 5 12"/>',
+  pregunta: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  puzzle: '<path d="M19.4 11.2h-1.6a1.6 1.6 0 0 1-1.6-1.6V8a2 2 0 0 0-2-2h-1.6a1.6 1.6 0 0 1-1.6-1.6V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v4.4a1.6 1.6 0 0 0 1.6 1.6H7a2 2 0 0 1 2 2v1.6a1.6 1.6 0 0 1-1.6 1.6H5.6A1.6 1.6 0 0 0 4 16.8V20a2 2 0 0 0 2 2h3.2a1.6 1.6 0 0 0 1.6-1.6v-1.6a2 2 0 0 1 2-2h1.6a1.6 1.6 0 0 1 1.6 1.6v1.6a1.6 1.6 0 0 0 1.6 1.6H20a2 2 0 0 0 2-2v-6.4a2 2 0 0 0-2-2z"/>',
   avion: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
   candado: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
   lista: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
@@ -4105,12 +4111,16 @@ let MERC = [], REM_SIN = [];
 // Cuando el flujo esté perfecto: pasar a false (un solo cambio) y redeployar.
 const MODO_PRUEBA = true;
 const MERC_EST = {
-  coincide:   {ico:'✅', tx:'Coincide con lista',  col:'#166534', bg:'#dcfce7'},
-  mas_caro:   {ico:'🔺', tx:'Facturado de MÁS',    col:'#991b1b', bg:'#fee2e2'},
-  mas_barato: {ico:'🔻', tx:'Facturado de menos',  col:'#1e40af', bg:'#dbeafe'},
-  sin_remito: {ico:'❔', tx:'Sin remito',           col:'#475569', bg:'#f1f5f9'},
-  sin_lista:  {ico:'⚠️', tx:'Falta lista',          col:'#92400e', bg:'#fef3c7'},
+  coincide:   {ico:'✅', li:'ok',          tx:'Coincide con lista',  col:'#166534', bg:'#dcfce7'},
+  mas_caro:   {ico:'🔺', li:'subir',       tx:'Facturado de MÁS',    col:'#991b1b', bg:'#fee2e2'},
+  mas_barato: {ico:'🔻', li:'bajarflecha', tx:'Facturado de menos',  col:'#1e40af', bg:'#dbeafe'},
+  sin_remito: {ico:'❔', li:'pregunta',    tx:'Sin remito',           col:'#475569', bg:'#f1f5f9'},
+  sin_lista:  {ico:'⚠️', li:'alerta',      tx:'Falta lista',          col:'#92400e', bg:'#fef3c7'},
 };
+// (8-oct, JP) ícono de estado con el texto en tooltip
+const mercEico = k => { const e = MERC_EST[k] || MERC_EST.sin_remito; return `<span class="eico" style="background:${e.bg};color:${e.col}" title="${e.tx}">${ico(e.li,'s')}</span>`; };
+// ícono de ayuda con el texto largo en tooltip (reemplaza los párrafos explicativos)
+const ayuda = t => `<span class="mini" style="cursor:help;display:inline-flex;vertical-align:middle" title="${esc(t)}">${ico('info','s')}</span>`;
 
 async function vistaMercaderia(){
   const c = document.getElementById('cont');
@@ -4129,84 +4139,72 @@ async function vistaMercaderia(){
   const n = k => MERC.filter(m => m.estado === k);
   const deMas = n('mas_caro').reduce((a,m) => a + Number(m.dif||0), 0);
 
-  c.innerHTML = `<div class="kpis">
-      <div class="kpi" style="border-left-color:var(--ok)"><div class="lbl">Coinciden al peso</div>
-        <div class="val">${n('coincide').length}</div><div class="sub">de ${MERC.length} facturas ${filtro.anio}</div></div>
-      <div class="kpi" style="border-left-color:var(--bad)"><div class="lbl">Facturadas de más</div>
-        <div class="val">${n('mas_caro').length}</div><div class="sub">${platac(deMas)} por encima de lista</div></div>
-      <div class="kpi" style="border-left-color:var(--info)"><div class="lbl">Facturadas de menos</div>
-        <div class="val">${n('mas_barato').length}</div><div class="sub">a favor nuestro</div></div>
-      <div class="kpi"><div class="lbl">Sin remito</div>
-        <div class="val">${n('sin_remito').length}</div><div class="sub">no se pueden controlar</div></div>
+  // (8-oct, JP) resumen en chips; tocar uno filtra la tabla de facturas FGR
+  const kchip = (k, tit) => `<button class="fchip" style="color:${MERC_EST[k].col}" title="${tit}" onclick="const s=document.getElementById('merc-filtro'); if(s){s.value='${k}'; renderMercTabla(); s.scrollIntoView({behavior:'smooth',block:'center'});}">${ico(MERC_EST[k].li,'s')} <b>${n(k).length}</b> ${MERC_EST[k].tx.toLowerCase()}</button>`;
+  c.innerHTML = `<div class="abar">
+      ${kchip('coincide', `Facturas de FGR ${filtro.anio} que coinciden al peso con remito y lista: ${n('coincide').length} de ${MERC.length}`)}
+      ${kchip('mas_caro', `Facturadas por encima de la lista COSTO: ${platac(deMas)} de más`)}
+      ${kchip('mas_barato', 'Facturadas por debajo de la lista: a favor nuestro')}
+      ${kchip('sin_remito', 'Sin remito asociado: no se pueden controlar')}
     </div>
     ${REM_ESP.length ? `<div class="card" style="border-left:4px solid var(--info)">
-      <h3 style="font-size:15px;margin-bottom:6px">📥 Remitos para importar al Dragonfish · ${REM_ESP.length}</h3>
-      <p class="mini" style="margin-bottom:9px">Remitos <b>anunciados</b> por la factura o por el PDF del remito. Mientras el stock viva en el
-        Dragonfish, el módulo solo <b>genera el TXT</b>: se importa allá como remito de compra y el tránsito, la recepción y el
-        stock los sigue haciendo el Dragon. Un renglón sin SKU frena el TXT — se resuelve en 🔗 Equivalencias.
-        El TXT se puede volver a bajar (queda registrado cuándo), pero <b>importalo una sola vez</b>.
-        Si el proveedor manda su propio TXT para ese destino (FGR a los locales), acá no se genera: se importa el de ellos.
-        El destino se elige en la columna <b>Destino</b>.</p>
-      <div style="overflow-x:auto"><table>
+      <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('bajar','s')} Remitos para importar al Dragonfish · ${REM_ESP.length}
+        ${ayuda('Remitos anunciados por la factura o por el PDF del remito. Mientras el stock viva en el Dragonfish, el módulo solo genera el TXT: se importa allá como remito de compra y el tránsito, la recepción y el stock los sigue haciendo el Dragon. Un renglón sin SKU frena el TXT (se resuelve en Equivalencias). El TXT se puede volver a bajar, pero importalo una sola vez. Si el proveedor manda su propio TXT para ese destino (FGR a los locales), acá no se genera: se importa el de ellos. El destino se elige en la columna Destino.')}</h3>
+      <div style="overflow-x:auto"><table class="tb-band">
         <thead><tr><th>Remito</th><th>Proveedor</th><th>Fecha</th><th>Factura</th><th>Destino</th>
-          <th class="num">Renglones</th><th>Origen</th><th></th></tr></thead>
+          <th class="num" title="Renglones">Reng.</th><th class="ctr">Origen</th><th></th></tr></thead>
         <tbody>${REM_ESP.slice(0,150).map(r => `<tr>
-          <td><b>${String(r.punto_venta).padStart(4,'0')}-${String(r.numero).padStart(8,'0')}</b>
-            ${r.archivo_nombre?`<div class="mini" title="${esc(r.archivo_nombre)}">📄 ${esc(r.archivo_nombre.slice(0,28))}${r.archivo_nombre.length>28?'…':''}</div>`:''}</td>
-          <td>${esc(r.proveedor||'—')}</td>
+          <td style="white-space:nowrap"><b ${r.archivo_nombre?`title="${esc(r.archivo_nombre)}" style="cursor:help"`:''}>${String(r.punto_venta).padStart(4,'0')}-${String(r.numero).padStart(8,'0')}</b></td>
+          <td class="prov"><span class="prov-nom">${esc(r.proveedor||'—')}</span></td>
           <td>${fechaCorta(r.fecha)}</td>
-          <td>${r.factura ? esc(r.factura) : '<span class="mini" style="color:#b45309">sin factura</span>'}</td>
+          <td style="white-space:nowrap">${r.factura ? esc(r.factura) : '<span class="mini" style="color:#b45309">sin factura</span>'}</td>
           <td><select style="font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:${r.local_destino?'#fff':'#fffbeb'}"
                 onchange="cambiarDestinoRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero},this.value)">
                 <option value="" ${!r.local_destino?'selected':''}>a definir…</option>
                 ${(SUCS.length?SUCS:[{clave:'alcorta',nombre:'Alcorta'},{clave:'unicenter',nombre:'Unicenter'},{clave:'oficina',nombre:'Venta Online'}]).filter(x=>x.activo!==false)
                   .map(x=>`<option value="${esc(x.clave)}" ${r.local_destino===x.clave?'selected':''}>${esc(x.nombre||x.clave)}${x.codigo_txt?' · '+esc(x.codigo_txt):''}</option>`).join('')}
               </select></td>
-          <td class="num">${r.renglones||0}${r.sin_sku?` <span class="chip" style="background:#fee2e2;color:#991b1b;cursor:pointer" title="Renglones sin SKU: abrí el remito para asignarlos o desglosarlos por color" onclick="abrirRemitoDetalle('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">${r.sin_sku} sin SKU</span>`:''}
-            ${r.renglones?` <button class="act gh" style="font-size:11.5px;padding:2px 7px" title="Ver los renglones del remito · desglosar por color" onclick="abrirRemitoDetalle('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">👁</button>`:''}</td>
-          <td class="mini">${r.origen==='factura'?'📑 factura':r.origen==='proveedor_pdf'?'📄 remito PDF':esc(r.origen)}</td>
+          <td class="num" style="white-space:nowrap">${r.renglones||0}${r.sin_sku?` <span class="eico" style="background:#fee2e2;color:#991b1b;cursor:pointer" title="${r.sin_sku} renglones sin SKU: abrí el remito para asignarlos o desglosarlos por color" onclick="abrirRemitoDetalle('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">${ico('alerta','s')}</span>`:''}
+            ${r.renglones?` <button class="act gh mini-ico" title="Ver los renglones del remito · desglosar por color" onclick="abrirRemitoDetalle('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">${ico('ojo','s')}</button>`:''}</td>
+          <td class="ctr">${r.origen==='factura'?`<span class="eico" title="Anunciado por la factura">${ico('factura','s')}</span>`:r.origen==='proveedor_pdf'?`<span class="eico" title="Leído del PDF del remito">${ico('pdf','s')}</span>`:esc(r.origen)}</td>
           <td class="num" style="white-space:nowrap">
-            ${!r.factura?`<button class="act gh" style="font-size:12px;padding:4px 9px" onclick="asociarRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">🔗</button> `:''}
+            ${!r.factura?`<button class="act gh mini-ico" title="Asociar a una factura" onclick="asociarRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">${ico('link','s')}</button> `:''}
             ${r.txt_proveedor
-              ? `<span class="chip" style="background:#e0e7ff;color:#3730a3;white-space:normal" title="El proveedor manda su propio TXT para este destino: se importa ESE en el Dragonfish. Generar otro duplicaría el ingreso.">📨 TXT lo manda el proveedor</span>`
-              : `<button class="act" style="font-size:12px;padding:4px 9px" ${(!r.renglones||r.sin_sku)?'disabled title="Faltan renglones o SKUs"':''}
+              ? `<span class="eico" style="background:#e0e7ff;color:#3730a3" title="El proveedor manda su propio TXT para este destino: se importa ESE en el Dragonfish. Generar otro duplicaría el ingreso.">${ico('inbox','s')}</span>`
+              : `<button class="act mini-ico" ${(!r.renglones||r.sin_sku)?'disabled title="Faltan renglones o SKUs"':''}
               title="${r.txt_generado_at?'TXT ya generado el '+_fechaTs(r.txt_generado_at)+' — volver a bajar':'Generar el TXT para el importador'}"
-              onclick="txtRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero},'${esc(r.local_destino||'')}')">${r.txt_generado_at?'⬇ TXT ✓':'⬇ TXT'}</button>`}</td>
+              onclick="txtRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero},'${esc(r.local_destino||'')}')">${ico('bajar')}${r.txt_generado_at?' ✓':''}</button>`}</td>
         </tr>`).join('')}</tbody></table></div>
     </div>` : ''}
     <div id="juegos-card"></div>
     ${REM_SIN.length ? `<div class="card">
       <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
-        <h3 style="font-size:15px;flex:1">📦 Remitos sin factura asociada · ${REM_SIN.length}</h3>
-        <button class="act" style="font-size:12.5px;padding:6px 11px" onclick="abrirCargaRemito()">➕ Cargar remito</button>
-        <button class="act gh" style="font-size:12.5px;padding:6px 10px" title="Sucursales y códigos TXT" onclick="abrirSucursales()">⚙</button>
+        <h3 style="font-size:15px;flex:1;display:flex;align-items:center;gap:8px">${ico('camion','s')} Remitos sin factura asociada · ${REM_SIN.length}
+          ${ayuda('Mercadería que entró por remito y ninguna factura la cubre todavía: el control anti doble conteo, el stock ya está adentro pero el gasto no. FGR se asocia solo cuando llega la factura (mismo número); si algo queda acá mucho tiempo, o falta la factura o vino con otro número: asociala a mano.')}</h3>
+        <button class="act mini-ico" title="Cargar un remito a mano" onclick="abrirCargaRemito()">${ico('mas')}</button>
+        <button class="act gh mini-ico" title="Sucursales y códigos TXT" onclick="abrirSucursales()">${ico('ajustes')}</button>
       </div>
-      <p class="mini" style="margin-bottom:9px">Mercadería que entró por remito y ninguna factura la cubre todavía —
-        el control anti doble conteo: el stock ya está adentro pero el gasto no. FGR se asocia solo cuando llega la
-        factura (mismo número); si algo queda acá mucho tiempo, o falta la factura o vino con otro número — asociala a mano.</p>
-      <div style="overflow-x:auto"><table>
+      <div style="overflow-x:auto"><table class="tb-band">
         <thead><tr><th>Remito</th><th>Proveedor</th><th>Fecha</th><th>Destino</th><th class="num">Renglones</th><th class="num">Días</th><th></th></tr></thead>
         <tbody>${REM_SIN.slice(0,150).map(r => `<tr>
           <td><b>${String(r.punto_venta).padStart(4,'0')}-${String(r.numero).padStart(8,'0')}</b></td>
-          <td>${esc(r.proveedor||'—')}${r.origen==='manual'?' <span class="mini">✍️</span>':''}</td>
+          <td class="prov"><span class="prov-nom">${esc(r.proveedor||'—')}</span>${r.origen==='manual'?` <span class="mini" title="Cargado a mano">${ico('lapiz','s')}</span>`:''}</td>
           <td>${fechaCorta(r.fecha)}</td>
           <td>${esc(r.destino||'—')}</td>
           <td class="num">${r.renglones||0}</td>
-          <td class="num" style="color:${r.dias_sin_factura>30?'#dc2626':'inherit'};font-weight:${r.dias_sin_factura>30?'700':'400'}">${r.dias_sin_factura??''}</td>
-          <td class="num"><button class="act gh" style="font-size:12px;padding:4px 9px"
-            onclick="asociarRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">🔗 Asociar</button></td>
+          <td class="num" style="color:${r.dias_sin_factura>30?'#dc2626':'inherit'};font-weight:${r.dias_sin_factura>30?'700':'400'}" ${r.dias_sin_factura>30?'title="Más de 30 días sin factura"':''}>${r.dias_sin_factura??''}</td>
+          <td class="num"><button class="act gh mini-ico" title="Asociar a una factura"
+            onclick="asociarRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">${ico('link','s')}</button></td>
         </tr>`).join('')}</tbody></table></div>
       ${REM_SIN.length>150?`<p class="mini" style="margin-top:7px">Mostrando los 150 más nuevos de ${REM_SIN.length}.</p>`:''}
     </div>` : `<div class="card" style="display:flex;align-items:center;gap:10px">
-      <span style="flex:1" class="mini">📦 No hay remitos sin factura. Cuando llegue mercadería antes que la factura, cargá el remito acá.</span>
-      <button class="act" style="font-size:12.5px;padding:6px 11px" onclick="abrirCargaRemito()">➕ Cargar remito</button>
-      <button class="act gh" style="font-size:12.5px;padding:6px 10px" title="Sucursales y códigos TXT" onclick="abrirSucursales()">⚙</button>
+      <span style="flex:1" class="mini">${ico('camion','s')} No hay remitos sin factura. Cuando llegue mercadería antes que la factura, cargá el remito con el +.</span>
+      <button class="act mini-ico" title="Cargar un remito a mano" onclick="abrirCargaRemito()">${ico('mas')}</button>
+      <button class="act gh mini-ico" title="Sucursales y códigos TXT" onclick="abrirSucursales()">${ico('ajustes')}</button>
     </div>`}
     <div class="card">
-      <p class="mini" style="margin-bottom:11px">Facturas de <b>Familia García Regueira</b> del ${filtro.anio},
-        controladas contra el remito (qué vino y cuánto) y la lista COSTO vigente a la fecha
-        (el precio con el descuento pactado de cada artículo). El desvío puede ser sobreprecio
-        del proveedor <b>o</b> una lista desactualizada en el Dragonfish — el detalle por artículo lo dice.</p>
+      <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('factura','s')} Facturas de Familia García Regueira · ${filtro.anio}
+        ${ayuda('Controladas contra el remito (qué vino y cuánto) y la lista COSTO vigente a la fecha (el precio con el descuento pactado de cada artículo). El desvío puede ser sobreprecio del proveedor o una lista desactualizada en el Dragonfish: el detalle por artículo lo dice.')}</h3>
       <div class="filtros">
         <select onchange="setF('anio',this.value)">${(()=>{const a=[];for(let y=new Date().getFullYear();y>=2025;y--)a.push(y);
           return a.map(y=>`<option ${y==filtro.anio?'selected':''}>${y}</option>`).join('')})()}</select>
@@ -4618,13 +4616,13 @@ function renderMercTabla(){
   const el = document.getElementById('merc-tabla');
   if (!el) return;
   if (!lista.length){ el.innerHTML = '<div class="vacio">Nada con ese filtro.</div>'; return; }
-  el.innerHTML = `<div style="overflow-x:auto"><table>
+  el.innerHTML = `<div style="overflow-x:auto"><table class="tb-band">
     <thead><tr><th>Factura</th><th>Fecha</th><th>Local</th>
       <th class="num">Facturado</th><th class="num">Según lista</th><th class="num">Diferencia</th>
-      <th>Estado</th><th></th></tr></thead>
+      <th class="ctr">Estado</th><th></th></tr></thead>
     <tbody>${lista.slice(0,300).map(m => {
       const e = MERC_EST[m.estado] || MERC_EST.sin_remito;
-      return `<tr>
+      return `<tr ${m.estado !== 'sin_remito' ? `onclick="abrirDetalleMerc(${m.doc_id}, '${esc(String(m.numero))}')" title="Ver el detalle por artículo"` : 'style="cursor:default"'}>
         <td><b>${esc(String(m.numero))}</b></td>
         <td>${fechaCorta(m.fecha)}</td>
         <td>${esc(m.destino || '—')}</td>
@@ -4632,10 +4630,10 @@ function renderMercTabla(){
         <td class="num">${m.esperado != null ? plata(m.esperado) : '—'}</td>
         <td class="num" style="color:${Math.abs(m.dif) <= 1 ? 'var(--mut)' : e.col};font-weight:600">
           ${m.esperado != null ? plata(m.dif) : '—'}</td>
-        <td><span class="chip" style="background:${e.bg};color:${e.col}">${e.ico} ${e.tx}</span></td>
+        <td class="ctr">${mercEico(m.estado)}</td>
         <td class="num">${m.estado !== 'sin_remito'
-          ? `<button class="act gh" style="font-size:12.5px;padding:5px 10px"
-               onclick="abrirDetalleMerc(${m.doc_id}, '${esc(String(m.numero))}')">Detalle</button>` : ''}</td>
+          ? `<button class="act gh mini-ico" title="Ver el detalle por artículo"
+               onclick="event.stopPropagation(); abrirDetalleMerc(${m.doc_id}, '${esc(String(m.numero))}')">${ico('ojo','s')}</button>` : ''}</td>
       </tr>`;
     }).join('')}</tbody></table></div>
     ${lista.length > 300 ? `<p class="mini" style="margin-top:8px">Mostrando 300 de ${lista.length}.</p>` : ''}`;
@@ -5088,7 +5086,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="op-pdf.js?v=2"></script>
 <script src="pedidos.js?v=7"></script>
 <script src="equiv-import.js?v=3"></script>
-<script src="juegos.js?v=2"></script>
+<script src="juegos.js?v=3"></script>
 <script src="manual.js?v=64"></script>
 </body>
 </html>

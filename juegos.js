@@ -51,14 +51,11 @@ function pintarJuegosCard() {
   else cuerpo = _jgHtmlRecetas();
   el.innerHTML = `<div class="card" style="border-left:4px solid #7c3aed">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
-      <h3 style="font-size:15px;flex:1;min-width:220px">🧩 Juegos que se desglosan</h3>
-      ${tabBtn('pend', `📋 Desgloses por remito${nPend ? ' · ' + nPend : ''}`)}
-      ${tabBtn('recetas', `🧩 Recetas · ${JG.recetas.length}${sinConf ? ' <span style="color:#b45309">(' + sinConf + ' sin confirmar)</span>' : ''}`)}
+      <h3 style="font-size:15px;flex:1;min-width:220px;display:flex;align-items:center;gap:8px">${ico('puzzle','s')} Juegos que se desglosan
+        ${ayuda('Artículos que el proveedor factura como juego bajo un solo SKU y que vendemos por separado (ej. SREDO → SREDO + SREDOCH). La receta dice qué piezas salen de cada juego. Los TXT que genera el módulo ya las suman solas; para los TXT que manda FGR a los locales, acá se ve qué desglose le toca cargar a cada local y si ya lo cargó en su Dragonfish (movimiento de stock DES, se sincroniza todas las mañanas).')}</h3>
+      ${tabBtn('pend', `Desgloses por remito${nPend ? ' · ' + nPend : ''}`)}
+      ${tabBtn('recetas', `Recetas · ${JG.recetas.length}${sinConf ? ' <span style="color:#b45309">(' + sinConf + ' sin confirmar)</span>' : ''}`)}
     </div>
-    <p class="mini" style="margin-bottom:9px">Artículos que el proveedor factura como <b>juego</b> bajo un solo SKU y que vendemos
-      por separado (ej. SREDO → SREDO + SREDOCH). La <b>receta</b> dice qué piezas salen de cada juego. Los TXT que genera el
-      módulo ya las suman solas; para los TXT que manda <b>FGR a los locales</b>, acá se ve qué desglose le toca cargar a cada
-      local y si ya lo cargó en su Dragonfish (movimiento de stock <b>DES</b>, se sincroniza todas las mañanas).</p>
     ${cuerpo}
   </div>`;
 }

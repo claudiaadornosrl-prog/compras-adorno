@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v97-ux-pedidos';
+const CACHE_VERSION = 'compras-v98-ux-mercaderia';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
