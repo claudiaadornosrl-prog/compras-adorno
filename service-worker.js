@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v112-link-remito';
+const CACHE_VERSION = 'compras-v113-sin-botones-pdf';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
