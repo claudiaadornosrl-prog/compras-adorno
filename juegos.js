@@ -10,7 +10,7 @@
 //    lo sube sync_mercaderia.py todas las mañanas).
 // Usa: sb, esc, fechaCorta, _fechaTs, toast (si existe).
 // ════════════════════════════════════════════════════════════════════
-const JG = { recetas: [], pend: [], vista: 'recetas', local: '', soloPend: true, busca: '', err: '' };
+const JG = { recetas: [], pend: [], importados: new Set(), vista: 'pend', local: '', soloPend: true, busca: '', err: '' };
 
 const _JG_EST = {
   pendiente: ['⏳ Sin cargar', '#92400e', '#fef3c7', 'El local todavía no cargó el desglose de este remito en el Dragonfish'],
@@ -24,10 +24,12 @@ async function cargarJuegosCard() {
   const el = document.getElementById('juegos-card');
   if (!el) return;
   el.innerHTML = '<div class="card"><span class="mini">🧩 Cargando juegos y desgloses…</span></div>';
-  const [r1, r2] = await Promise.all([
+  const [r1, r2, r3] = await Promise.all([
     sb.rpc('stock_juegos_listar'),
     sb.rpc('stock_desgloses_pendientes', { p_desde: null, p_local: null }),
+    sb.from('stock_remitos_dragon').select('punto_venta,numero').eq('tipo', 'venta').gte('punto_venta', 9000).limit(5000),
   ]);
+  JG.importados = new Set((r3.data || []).map(x => `${x.punto_venta}|${x.numero}`));
   JG.err = (r1.error || r2.error) ? (r1.error || r2.error).message : '';
   JG.recetas = r1.data || [];
   JG.pend = r2.data || [];
@@ -52,15 +54,16 @@ function pintarJuegosCard() {
   el.innerHTML = `<div class="card" style="border-left:4px solid #7c3aed">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
       <h3 style="font-size:15px;flex:1;min-width:220px;display:flex;align-items:center;gap:8px">${ico('puzzle','s')} Desgloses
-        ${ayuda('Artículos que el proveedor factura como juego bajo un solo SKU y que vendemos por separado (ej. SREDO → SREDO + SREDOCH). La receta dice qué piezas salen de cada juego. Los TXT que genera el módulo ya las suman solas; para los TXT que manda FGR a los locales, acá se ve qué desglose le toca cargar a cada local y si ya lo cargó en su Dragonfish (movimiento de stock DES, se sincroniza todas las mañanas).')}</h3>
-      <span class="mini">${JG.recetas.length} recetas${sinConf ? ` · <span style="color:#b45309">${sinConf} sin confirmar</span>` : ''}</span>
+        ${ayuda('Artículos que el proveedor factura como juego bajo un solo SKU y que vendemos por separado (ej. SREDO → SREDO + SREDOCH). En Composición está qué piezas salen de cada juego. En Para subir, por cada remito de FGR con juegos, se baja un TXT con las piezas: se importa como un remito más (compra en ADMIN y venta al local), con el mismo número del remito y el punto de venta + 9000. Cuando entra al Dragon, sale solo de la lista (se cruza todas las mañanas).')}</h3>
+      <button class="fchip ${JG.vista === 'pend' ? 'on' : ''}" onclick="JG.vista='pend';pintarJuegosCard()" title="Desgloses de los remitos de FGR que todavía no entraron al Dragon: se bajan como TXT y se importan como un remito más">${ico('bajar','s')} Para subir${nPend ? ' · ' + nPend : ''}</button>
+      <button class="fchip ${JG.vista === 'recetas' ? 'on' : ''}" onclick="JG.vista='recetas';pintarJuegosCard()" title="Cómo se compone cada juego: qué piezas salen de cada SKU">${ico('puzzle','s')} Composición · ${JG.recetas.length}${sinConf ? ` <span style="color:#b45309">(${sinConf} sin confirmar)</span>` : ''}</button>
     </div>
     ${cuerpo}
   </div>`;
 }
 
 function _jgHtmlPend() {
-  let filas = JG.pend.slice();
+  let filas = JG.pend.slice().filter(p => !JG.importados.has(`${Number(p.punto_venta) + 9000}|${p.numero}`));
   if (JG.local) filas = filas.filter(p => p.local === JG.local);
   if (JG.soloPend) filas = filas.filter(p => p.estado !== 'ok');
   const filtros = `<div class="filtros" style="margin-bottom:8px">
@@ -75,8 +78,9 @@ function _jgHtmlPend() {
     </div>`;
   if (!filas.length) return filtros + `<div class="vacio" style="padding:14px">${JG.pend.length ? '✅ Todos los desgloses de los últimos 45 días están cargados.' : 'No entraron juegos a los locales en los últimos 45 días.'}</div>`;
   return filtros + `<div style="overflow-x:auto"><table>
-    <thead><tr><th>Fecha</th><th>Local</th><th>Remito</th><th>Piezas a sumar al stock</th><th>Cargado en el Dragonfish</th><th>Estado</th></tr></thead>
+    <thead><tr><th>Fecha</th><th>Local</th><th>Remito</th><th>Piezas a sumar al stock</th><th>Cargado en el Dragonfish</th><th>Estado</th><th class="ctr">TXT</th></tr></thead>
     <tbody>${filas.slice(0, 200).map(p => {
+      const iP = JG.pend.indexOf(p), sinConf = (p.piezas || []).some(x => x.confirmado === false);
       const e = _JG_EST[p.estado] || _JG_EST.pendiente;
       const movs = (p.movs || []).map(m => `mov ${esc(String(m.mov))} (${fechaCorta(m.fecha)})`).join(', ');
       return `<tr>
@@ -87,9 +91,34 @@ function _jgHtmlPend() {
         <td>${_jgPiezasTxt(p.piezas)}</td>
         <td>${(p.cargado || []).length ? _jgPiezasTxt(p.cargado) + `<div class="mini">${movs}</div>` : '<span class="mini">—</span>'}</td>
         <td><span class="chip" style="background:${e[2]};color:${e[1]}" title="${esc(e[3])}">${e[0]}</span></td>
+        <td class="ctr"><button class="act mini-ico" onclick="jgTxtDesglose(${iP})"
+          title="Bajar el TXT del desglose (remito ${Number(p.punto_venta) + 9000}-${p.numero})${sinConf ? ' · ojo: tiene piezas de recetas SIN confirmar, revisalas en Composición' : ''}">${ico('bajar','s')}</button></td>
       </tr>`;
     }).join('')}</tbody></table></div>
     ${filas.length > 200 ? `<p class="mini" style="margin-top:6px">Mostrando 200 de ${filas.length}.</p>` : ''}`;
+}
+
+// (8-oct, JP) El desglose va como un remito más: mismo formato que el TXT del remito
+// ("COD;PPPP;NNNNNN" + "    CANT+SKU"). El importador del Dragon hace la compra en ADMIN
+// y la venta al local. Número = el del remito de FGR; punto de venta = el del remito + 9000,
+// para que no choque con el remito original (el Dragon no reimporta un pv+número existente).
+function jgTxtDesglose(i) {
+  const p = JG.pend[i]; if (!p) return;
+  const cod = ((typeof SUCS !== 'undefined' && SUCS.length ? SUCS : []).find(s => s.clave === p.local) || {}).codigo_txt
+           || ({ alcorta: 'ALCO', unicenter: 'CENTE', oficina: 'ADMIN' }[p.local]);
+  if (!cod) { alert('No sé el código de TXT del local ' + p.local + '. Revisalo en Sucursales.'); return; }
+  const tot = {};
+  (p.piezas || []).forEach(x => { const s = String(x.sku || '').trim().toUpperCase(); if (s) tot[s] = (tot[s] || 0) + Number(x.cantidad || 0); });
+  const lineas = Object.entries(tot).filter(([, c]) => c > 0);
+  if (!lineas.length) { alert('Este remito no tiene piezas para desglosar.'); return; }
+  const pv = Number(p.punto_venta) + 9000;
+  const txt = `${cod};${String(pv).padStart(4, '0')};${String(p.numero).padStart(6, '0')}\r\n\r\n`
+            + lineas.map(([s, c]) => `    ${_jgNum(c)}+${s}`).join('\r\n') + '\r\n';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }));
+  a.download = `des_${String(cod).toLowerCase()}_${p.numero}.txt`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
 function _jgHtmlRecetas() {
