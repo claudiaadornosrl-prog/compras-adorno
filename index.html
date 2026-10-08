@@ -2089,19 +2089,17 @@ function vistaBandeja(){
       value="${esc(filtro.texto)}" oninput="buscarTexto(this.value)" onkeydown="if(event.key==='Enter')buscarTexto(this.value,true)"></div>
     <div style="overflow-x:auto"><table class="tb-band">
       <thead><tr><th>Fecha</th><th>Proveedor</th><th class="oculta-mov">Comprobante</th>
-        <th class="num">Total</th><th>Concepto propuesto</th><th></th></tr></thead>
+        <th class="num">Total</th><th>Concepto</th><th></th></tr></thead>
       <tbody>${lista.map(d => {
         const cf = CONF[d.sug_confianza] || CONF.baja;
         const nro = `${esc(d.tipo)} ${esc(d.letra)} ${String(d.punto_venta).padStart(4,'0')}-${String(d.numero).padStart(8,'0')}`;
         return `<tr onclick="abrirControl(${d.id})">
           <td>${fechaCorta(d.fecha_emision)}</td>
-          <td>${esc(d.proveedor_nombre || d.cuit_emisor || '—')}${d.archivo_alerta ? ` <span title="${esc(d.archivo_alerta)}" style="color:var(--bad)">${ico('clip','s')}</span>` : ''}</td>
+          <td class="prov" style="white-space:nowrap"><span class="prov-nom">${esc(d.proveedor_nombre || d.cuit_emisor || '—')}</span>${d.archivo_alerta ? ` <span title="${esc(d.archivo_alerta)}" style="color:var(--bad)">${ico('clip','s')}</span>` : ''}</td>
           <td class="oculta-mov">${d.archivo_path ? `<a class="nro" target="_blank" rel="noopener" href="${_pdfUrl(d.archivo_path)}" title="Abrir el PDF" onclick="event.stopPropagation()">${nro}</a>` : nro}</td>
-          <td class="num">${plata(d.total)}
-              ${(d.moneda && d.moneda !== 'ARS' && d.importe_moneda)
-                ? `<br><span class="mini" style="color:#0e7490" title="Importe en moneda extranjera y cotización usada">${esc(d.moneda)} ${Number(d.importe_moneda).toLocaleString('es-AR',{minimumFractionDigits:2})} × $${Number(d.cotizacion).toLocaleString('es-AR')}</span>` : ''}</td>
-          <td>${d.sug_concepto
-                ? `<span class="cdot" style="background:${cf.col}" title="Confianza ${cf.tx.toLowerCase()}: ${esc(d.sug_motivo||'')}"></span><b>${esc(d.sug_concepto)}</b> <span class="mini">${esc(d.sug_descripcion || '')}</span>`
+          <td class="num" style="white-space:nowrap" ${(d.moneda && d.moneda !== 'ARS' && d.importe_moneda) ? `title="${esc(d.moneda)} ${Number(d.importe_moneda).toLocaleString('es-AR',{minimumFractionDigits:2})} × $${Number(d.cotizacion).toLocaleString('es-AR')}"` : ''}>${plata(d.total)}${(d.moneda && d.moneda !== 'ARS' && d.importe_moneda) ? ` <span class="mini" style="color:#0e7490">${esc(d.moneda)}</span>` : ''}</td>
+          <td style="white-space:nowrap">${d.sug_concepto
+                ? `<span class="cdot" style="background:${cf.col}" title="Confianza ${cf.tx.toLowerCase()}: ${esc(d.sug_motivo||'')}"></span><span class="prov-nom" style="max-width:200px" title="${esc(d.sug_concepto)} · ${esc(d.sug_descripcion || '')}">${esc(d.sug_descripcion || d.sug_concepto)}</span>`
                 : `<span class="cdot" style="background:var(--bad)" title="Proveedor nuevo: hay que decidir el concepto a mano"></span><span class="mini">proveedor nuevo</span>`}</td>
           <td class="num"><button class="act mini-ico" onclick="event.stopPropagation();abrirControl(${d.id})" title="Controlar este comprobante">${ico('controlar','s')}</button></td>
         </tr>`;

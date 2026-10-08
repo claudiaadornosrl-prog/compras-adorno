@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v114-cotizacion-tooltip';
+const CACHE_VERSION = 'compras-v115-bandeja-un-renglon';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
