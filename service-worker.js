@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v132-proveedores-filtros';
+const CACHE_VERSION = 'compras-v133-ficha-plegable';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

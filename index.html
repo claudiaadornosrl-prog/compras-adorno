@@ -283,6 +283,16 @@ nav.tabs button{background:none;border:none;padding:11px 13px;font-size:14px;col
 nav.tabs button.on{color:var(--primary);border-bottom-color:var(--primary);font-weight:700;}
 main{padding:14px;max-width:1250px;margin:0 auto;}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px;}
+/* (v133, JP) ficha del proveedor: apartados plegables, cerrados salvo Datos comerciales */
+.pf-sec{border:1px solid var(--bd);border-radius:10px;background:#f8fafc;margin:8px 0;}
+.pf-sec>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:10px 12px;font-weight:700;font-size:13px;color:var(--tx);user-select:none;}
+.pf-sec>summary::-webkit-details-marker{display:none;}
+.pf-sec>summary .chev{transition:transform .15s;color:var(--mut);flex:none;}
+.pf-sec[open]>summary .chev{transform:rotate(90deg);}
+.pf-sec>summary .res{margin-left:auto;font-weight:500;color:var(--mut);font-size:12px;text-align:right;}
+.pf-sec>summary .res.ok{color:#166534;}
+.pf-sec .pf-body{padding:8px 12px 12px;background:#fff;border-top:1px solid var(--bd);border-radius:0 0 10px 10px;}
+.pf-sec .hint{font-size:12px;color:var(--mut);line-height:1.5;}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;}
 .kpi{background:#fff;border:1px solid var(--bd);border-left:4px solid var(--primary);border-radius:10px;padding:11px 13px;}
 .kpi .lbl{font-size:11.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px;}
@@ -571,6 +581,9 @@ const ICONOS = {
   mas: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
   lapiz: '<path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
   circulo: '<circle cx="12" cy="12" r="9"/>',
+  clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h6"/>',
+  tarjeta: '<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>',
+  cliente: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
   mano: '<path d="M18 11V6a2 2 0 0 0-4 0v1a2 2 0 0 0-4 0v2a2 2 0 0 0-4 0v6"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>',
   guardar: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
   mundo: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
@@ -1569,6 +1582,11 @@ function _contactoLinks(c){
 let _fContactos = [], _fDescuentos = [], _fRet = [];
 const DESC_TIPOS = [['general','General (siempre)'],['monto_minimo','Por compra mínima ($)'],['cantidad_minima','Por cantidad mínima (unidades)'],['pronto_pago','Por pronto pago'],['linea','Por línea / rubro']];
 const _h4P = t => `<h4 style="margin:18px 0 8px;font-size:13px;letter-spacing:.4px;text-transform:uppercase;color:var(--mut);border-bottom:1px solid var(--bd);padding-bottom:4px;">${t}</h4>`;
+// (v133) apartado plegable de la ficha: título + resumen a la derecha (se actualiza con _resP)
+const _secP = (id, icon, titulo, resumen, body, abierto) =>
+  `<details class="pf-sec" id="sec-${id}" ${abierto ? 'open' : ''}><summary>${ico('chevron','s chev')}${ico(icon,'s')} ${titulo}<span class="res" id="res-${id}">${resumen}</span></summary><div class="pf-body">${body}</div></details>`;
+function _resP(id, txt, ok){ const r = document.getElementById('res-'+id); if (r){ r.textContent = txt; r.classList.toggle('ok', !!ok); } }
+const _nP = (n, uno, varios) => n + ' ' + (n === 1 ? uno : varios);
 
 function _renderContactos(){
   const c = document.getElementById('pf-contactos'); if (!c) return;
@@ -1583,6 +1601,7 @@ function _renderContactos(){
       <div style="grid-column:1/-1;">${_contactoLinks(x)}</div>
     </div>`).join('') : '<div class="hint">Sin contactos cargados.</div>')
     + `<button class="btn" type="button" onclick="_fContactos.push({});_renderContactos()">➕ Agregar contacto</button>`;
+  _resP('personas', _fContactos.length ? _nP(_fContactos.length, 'persona', 'personas') : 'sin cargar', _fContactos.length);
   _estilarModalP();
 }
 function _renderDescuentos(){
@@ -1597,13 +1616,16 @@ function _renderDescuentos(){
       <button class="btn" type="button" title="Quitar" onclick="_fDescuentos.splice(${i},1);_renderDescuentos()">🗑</button>
     </div>`).join('') : '<div class="hint">Sin descuentos pactados cargados.</div>')
     + `<button class="btn" type="button" onclick="_fDescuentos.push({tipo:'general'});_renderDescuentos()">➕ Agregar descuento</button>
-       <div class="hint" style="margin-top:6px;">El descuento POR ARTÍCULO ya vive en Dragonfish (lista COSTO). Acá van las condiciones comerciales pactadas: acuerdos generales, por volumen, pronto pago, etc.
-         Los de tipo "Por compra mínima ($)" y "Por cantidad mínima (unidades)" se aplican SOLOS en los 📝 Pedidos cuando se supera el "Desde" (si hay varios, el mayor % alcanzado, no se suman).</div>`;
+       <div class="hint" style="margin-top:8px;">Acá van los acuerdos comerciales con el proveedor (un % general, por volumen, por pronto pago, por línea). El descuento de cada artículo NO va acá: ya está en la lista COSTO del Dragonfish.<br>
+         Los de tipo "Por compra mínima" y "Por cantidad mínima" los aplica solo el 📝 Pedido cuando pasa el "Desde"; si hay varios, toma el % más alto alcanzado (no se suman).</div>`;
+  _resP('descuentos', _fDescuentos.length ? _nP(_fDescuentos.length, 'descuento', 'descuentos') : 'sin cargar', _fDescuentos.length);
   _estilarModalP();
 }
 function _renderRetenciones(){
   const c = document.getElementById('pf-ret'); if (!c) return;
-  if (!_fRet.length){ c.innerHTML = '<div class="hint">No hay regímenes configurados (pestaña ⚙️ Retenciones).</div>'; return; }
+  if (!_fRet.length){ c.innerHTML = '<div class="hint">No hay regímenes configurados (pestaña ⚙️ Retenciones).</div>'; _resP('ret', 'sin regímenes'); return; }
+  const nAp = _fRet.filter(r => r.aplica && !r.exento).length, nEx = _fRet.filter(r => r.aplica && r.exento).length, nVen = _fRet.filter(r => r.cert_vencido).length;
+  _resP('ret', (nAp ? _nP(nAp, 'régimen aplica', 'regímenes aplican') : 'no se le retiene') + (nEx ? ` · ${_nP(nEx, 'excluido', 'excluidos')}` : '') + (nVen ? ` · ⚠ ${_nP(nVen, 'certificado vencido', 'certificados vencidos')}` : ''), nAp && !nVen);
   c.innerHTML = `<table style="width:100%;font-size:12.5px;"><thead><tr><th>Régimen</th><th>Aplica</th><th>Excluido</th><th>Alíc. %</th><th>Certificado</th><th>Vence</th><th>Notas</th></tr></thead><tbody>
     ${_fRet.map((r,i) => `<tr style="${r.cert_vencido ? 'background:#fef2f2;' : ''}">
       <td title="${_mEscP(r.codigo)}">${_mEscP(r.nombre)}<div class="hint">${_mEscP(r.jurisdiccion||'')}</div></td>
@@ -1614,7 +1636,7 @@ function _renderRetenciones(){
       <td><input type="date" style="width:135px;" value="${r.cert_vigencia_hasta||''}" ${r.exento?'':'disabled'} onchange="_fRet[${i}].cert_vigencia_hasta=this.value">${r.cert_vencido ? '<div style="color:#b91c1c;font-size:11px;">⚠ vencido</div>' : ''}</td>
       <td><input value="${_mEscP(r.notas||'')}" onchange="_fRet[${i}].notas=this.value"></td>
     </tr>`).join('')}</tbody></table>
-    <div class="hint" style="margin-top:6px;">"Aplica" = a este proveedor le retenemos por ese régimen · "Excluido" = tiene certificado de exclusión (cargá número y vencimiento; vencido se marca en rojo).</div>`;
+    <div class="hint" style="margin-top:8px;"><b>Aplica</b> = a este proveedor le retenemos por ese régimen al pagarle. <b>Excluido</b> = nos presentó certificado de exclusión: cargá número y vencimiento, y mientras esté vigente no se le retiene (vencido queda en rojo y se vuelve a retener). La alícuota vacía usa la del régimen.</div>`;
   _estilarModalP();
 }
 function _estilarModalP(){
@@ -1642,9 +1664,11 @@ async function fichaProveedor(i){
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">${_contactoLinks({ whatsapp: p.whatsapp, telefono: p.telefono || p.df_telefono, email: p.email || p.email_op || p.df_email })}</div>
     ${p.origen === 'dragonfish' ? `<div class="hint" style="background:#eff6ff;border-left:3px solid #3b82f6;padding:8px 10px;border-radius:6px;margin-bottom:8px;">
-      Nombre, CUIT${p.df_email ? ', mail (' + _mEscP(p.df_email) + ')' : ''}${p.df_telefono ? ' y teléfono (' + _mEscP(p.df_telefono) + ')' : ''} vienen de Dragonfish y se actualizan solos cada 4 horas. Lo de acá abajo es del módulo y no se pisa.</div>` : ''}
+      Nombre y CUIT${p.df_email ? ', mail (' + _mEscP(p.df_email) + ')' : ''}${p.df_telefono ? ' y teléfono (' + _mEscP(p.df_telefono) + ')' : ''} vienen del Dragonfish y se actualizan solos cada 4 horas: si hay que corregirlos, se corrigen allá. Todo lo de abajo es del módulo y no se pisa.</div>` : ''}
 
-    ${_h4P('Datos comerciales')}
+    ${_secP('datos', 'tarjeta', 'Datos comerciales',
+      [p.condicion_pago ? 'paga a ' + _mEscP(p.condicion_pago) : 'sin condición de pago', p.cond_iva ? _mEscP(p.cond_iva) : null, p.cbu ? 'CBU cargado' : null].filter(Boolean).join(' · '), `
+    <div class="hint" style="margin-bottom:10px;">Lo que el módulo necesita para pagarle y para los listados del estudio. Si no lo tenés, dejalo vacío: se puede completar después.</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <label>Condición de pago<select id="pf-cond">${cp.map(v => `<option value="${v}" ${(p.condicion_pago||'')===v?'selected':''}>${v||'— sin definir —'}</option>`).join('')}</select></label>
       <label>Condición frente al IVA<select id="pf-iva">
@@ -1654,29 +1678,38 @@ async function fichaProveedor(i){
       <label>Alias<input id="pf-alias" value="${_mEscP(p.alias_cbu||'')}"></label>
       <label>Moneda habitual<select id="pf-moneda">${['ARS','USD','EUR'].map(m => `<option ${(p.moneda_habitual||'ARS')===m?'selected':''}>${m}</option>`).join('')}</select></label>
       <label>Domicilio<input id="pf-dom" value="${_mEscP(p.domicilio||'')}"></label>
-      <label style="grid-column:1/-1;display:flex;gap:8px;align-items:flex-start;font-size:13px;">
-        <input type="checkbox" id="pf-ext" ${p.es_exterior?'checked':''} style="width:17px;height:17px;margin-top:2px;">
-        <span>Proveedor del exterior
-          <div class="hint">No lleva CUIT ni IVA discriminado. Las compras al exterior van aparte en el Libro IVA.</div></span></label>
-      <label id="pf-pais-wrap" style="grid-column:1/-1;${p.es_exterior?'':'display:none;'}">País<input id="pf-pais" value="${_mEscP(p.pais||'')}" placeholder="Estados Unidos"></label>
-      <label title="Define si aparece en la lista de proveedores al armar un pedido. En automático lo decide el sistema: facturas de mercadería, remitos o artículos del stock a su nombre.">Le compramos mercadería
+      <label>Le compramos mercadería
         <select id="pf-merc">
           <option value="" ${p.compra_mercaderia == null ? 'selected' : ''}>Automático (${p.mercaderia_auto ? 'sí' : 'no'})</option>
           <option value="si" ${p.compra_mercaderia === true ? 'selected' : ''}>Sí</option>
           <option value="no" ${p.compra_mercaderia === false ? 'selected' : ''}>No</option>
-        </select></label>
-    </div>
+        </select>
+        <div class="hint" style="font-weight:400;margin-top:3px;">Define si aparece al armar un 📝 Pedido. En automático lo decide el sistema por sus facturas de mercadería, remitos o artículos del stock.</div></label>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;">
+        <input type="checkbox" id="pf-ext" ${p.es_exterior?'checked':''} style="width:17px;height:17px;margin-top:2px;">
+        <span>Proveedor del exterior
+          <div class="hint" style="font-weight:400;">Sin CUIT ni IVA discriminado; sus facturas van aparte en el Libro IVA y no se le retiene.</div></span></label>
+      <div id="pf-pais-wrap" style="grid-column:1/-1;${p.es_exterior?'':'display:none;'}"><label>País<input id="pf-pais" value="${_mEscP(p.pais||'')}" placeholder="Estados Unidos"></label></div>
+    </div>`, true)}
 
-    ${_h4P('Contacto de la empresa')}
+    ${_secP('empresa', 'telefono', 'Contacto de la empresa',
+      (n => n ? _nP(n, 'dato', 'datos') : 'sin cargar')([p.telefono, p.whatsapp, p.email, p.email_op, p.web].filter(Boolean).length), `
+    <div class="hint" style="margin-bottom:10px;">Los canales generales del proveedor. Las personas con nombre van en el apartado de abajo.</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <label>Teléfono<input id="pf-tel" value="${_mEscP(p.telefono||'')}" placeholder="${_mEscP(p.df_telefono||'')}"></label>
       <label>WhatsApp<input id="pf-wa" value="${_mEscP(p.whatsapp||'')}" placeholder="11 5555 5555"></label>
       <label>Mail general<input id="pf-email" value="${_mEscP(p.email||'')}" placeholder="${_mEscP(p.df_email||'')}"></label>
       <label>Mail para la orden de pago<input id="pf-mail" value="${_mEscP(p.email_op||'')}" placeholder="pagos@proveedor.com"></label>
       <label style="grid-column:1/-1;">Web / Instagram<input id="pf-web" value="${_mEscP(p.web||'')}" placeholder="https://…"></label>
-    </div>
-    ${_h4P('Personas de contacto')}<div id="pf-contactos"></div>
-    ${_h4P('Condiciones para los pedidos')}
+    </div>`)}
+
+    ${_secP('personas', 'cliente', 'Personas de contacto', '…', `
+    <div class="hint" style="margin-bottom:10px;">Con quién hablamos en el proveedor: vendedor, cobranzas, logística. Con WhatsApp o mail cargado aparece el botón para escribirle directo.</div>
+    <div id="pf-contactos"></div>`)}
+
+    ${_secP('pedidos', 'clipboard', 'Condiciones para los pedidos',
+      (m => (m.importe || m.unidades) ? 'mínimo ' + [m.importe ? _fmtP(m.importe) : null, m.unidades ? m.unidades + ' unid.' : null].filter(Boolean).join(' / ') : 'sin mínimo')(p.pedido_minimo || {}), `
+    <div class="hint" style="margin-bottom:10px;">Lo que el proveedor exige para aceptar un pedido. El 📝 Pedido avisa si no llega al mínimo.</div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
       <label>Compra mínima $<input id="pf-min-imp" type="number" step="1" min="0" value="${p.pedido_minimo?.importe ?? ''}" placeholder="sin mínimo"></label>
       <label>Compra mínima (unidades)<input id="pf-min-uni" type="number" step="1" min="0" value="${p.pedido_minimo?.unidades ?? ''}" placeholder="sin mínimo"></label>
@@ -1685,12 +1718,14 @@ async function fichaProveedor(i){
         <option value="ambos" ${p.pedido_minimo?.modo==='ambos'?'selected':''}>hay que cumplir los dos</option></select></label>
       <label style="grid-column:1/-1;">Nota del mínimo<input id="pf-min-nota" value="${_mEscP(p.pedido_minimo?.nota||'')}" placeholder="ej.: por debajo cobran flete"></label>
     </div>
-    <div class="hint" style="margin-top:6px;">Importe = lista COMPRA sin IVA. Unidades = como cuenta el proveedor (un pack ×2 cuenta 1). El pedido avisa si no llega.
-      Los descuentos extra por volumen se cargan abajo, con tipo "Por compra mínima ($)" o "Por cantidad mínima (unidades)": el pedido los aplica solos.</div>
-    ${_h4P('Descuentos pactados')}<div id="pf-descuentos"></div>
-    ${p.cuit && !p.es_exterior ? _h4P('Retenciones') + '<div id="pf-ret"><div class="hint">Cargando…</div></div>' : ''}
-    ${_h4P('Notas')}
-    <textarea id="pf-notas" rows="2">${_mEscP(p.notas||'')}</textarea>
+    <div class="hint" style="margin-top:8px;">El importe es sobre la lista COMPRA sin IVA. Las unidades se cuentan como las cuenta el proveedor (un pack ×2 cuenta 1). Si además hace descuento por volumen, cargalo en "Descuentos pactados".</div>`)}
+
+    ${_secP('descuentos', 'regalo', 'Descuentos pactados', '…', `<div id="pf-descuentos"></div>`)}
+    ${p.cuit && !p.es_exterior ? _secP('ret', 'porcentaje', 'Retenciones', 'cargando…', `
+    <div class="hint" style="margin-bottom:10px;">Qué le retenemos a este proveedor cuando le pagamos (Ganancias, IIBB…). Lo que se marque acá es lo que la 💸 Orden de pago calcula sola.</div>
+    <div id="pf-ret"><div class="hint">Cargando…</div></div>`) : ''}
+    ${_secP('notas', 'hoja', 'Notas', p.notas ? 'hay notas' : 'sin notas', `
+    <textarea id="pf-notas" rows="3" placeholder="Lo que conviene recordar de este proveedor: horarios, cómo manda la mercadería, con quién reclamar…">${_mEscP(p.notas||'')}</textarea>`, !!p.notas)}
     ${p.cuit && !p.es_exterior ? `<div style="margin-top:12px;">
       <button class="btn" type="button" onclick="validarArca('${_mEscP(p.cuit)}','pf-arca', true)">🔍 Consultar en ARCA (constancia de inscripción)</button>
       <div id="pf-arca" style="margin-top:8px;">${p.arca ? _arcaCard(p.arca) : ''}</div></div>` : ''}
@@ -5149,6 +5184,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=3"></script>
 <script src="juegos.js?v=5"></script>
-<script src="manual.js?v=66"></script>
+<script src="manual.js?v=67"></script>
 </body>
 </html>
