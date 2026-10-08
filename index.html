@@ -4168,70 +4168,61 @@ async function vistaMercaderia(){
   const n = k => MERC.filter(m => m.estado === k);
   const deMas = n('mas_caro').reduce((a,m) => a + Number(m.dif||0), 0);
 
-  // (8-oct, JP) Mercaderia = remitos por entrar al Dragon + desgloses. El control de
-  // facturas contra remito y lista vive en la ventana de contabilizacion.
+  // (8-oct, JP) Mercaderia = UNA tabla de remitos + Desgloses.
+  // Un remito esta en la tabla mientras le falte algo: entrar al Dragon o tener factura.
+  // Cuando cumple las dos cosas, sale solo. Fuentes: esperados (no entraron) + sin factura.
+  const _rk = r => `${r.proveedor_cuit}|${r.punto_venta}|${r.numero}`;
+  const _dentro = r => r.origen === 'fgr_txt' || r.estado === 'recibido' || !!remImportado(r);
+  const _todos = new Map();
+  [...REM_ESP, ...REM_SIN].forEach(r => { if (!_todos.has(_rk(r))) _todos.set(_rk(r), r); });
+  const lista = [..._todos.values()]
+    .filter(r => !(_dentro(r) && r.factura))
+    .sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')) || (b.numero - a.numero));
+  const nFaltaIngreso = lista.filter(r => !_dentro(r)).length, nFaltaFc = lista.filter(r => !r.factura).length;
   c.innerHTML = `
-    ${(() => { const nImp = REM_ESP.filter(r => remImportado(r)).length; const lista = REM_IMP_OCULTAR ? REM_ESP.filter(r => !remImportado(r)) : REM_ESP; window._remEspLista = lista;
-    return REM_ESP.length ? `<div class="card" style="border-left:4px solid var(--info)">
-      <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('bajar','s')} Remitos por entrar al Dragon · ${lista.length}${nImp ? ` <span class="mini" style="font-weight:400">· ${nImp} ya en el Dragon</span>` : ''}
+    <div class="card" style="border-left:4px solid var(--info)">
+      <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">${ico('camion','s')} Remitos · ${lista.length}
+        <span class="mini" style="font-weight:400" title="Remitos que todavía no entraron al Dragon / que todavía no tienen factura asociada">${nFaltaIngreso} sin ingresar · ${nFaltaFc} sin factura</span>
+        ${ayuda('Un remito queda en esta tabla mientras le falte algo: entrar al Dragon (se baja el TXT y se importa allá) o tener su factura asociada. Cuando cumple las dos cosas, sale solo. El ingreso al Dragon se detecta todas las mañanas. Un renglón sin SKU frena el TXT (se resuelve en Equivalencias). Si el proveedor manda su propio TXT para ese destino (FGR a los locales), se importa el de ellos.')}
         <span style="flex:1"></span>
-        ${nImp ? `<label class="c-tog" title="${REM_IMP_OCULTAR ? 'Mostrar también los remitos que ya están en el Dragonfish' : 'Ocultar los remitos que ya están en el Dragonfish'}. Naranja = ocultos"><input type="checkbox" ${REM_IMP_OCULTAR ? 'checked' : ''} onchange="REM_IMP_OCULTAR=this.checked; localStorage.setItem('merc_ocultar_importados', this.checked ? '1' : '0'); vistaMercaderia()"><span class="eico" style="width:30px;height:30px">${ico('ojo','s')}</span></label>` : ''}
-        ${ayuda('Remitos anunciados por la factura o por el PDF del remito. Mientras el stock viva en el Dragonfish, el módulo solo genera el TXT: se importa allá como remito de compra y el tránsito, la recepción y el stock los sigue haciendo el Dragon. Un renglón sin SKU frena el TXT (se resuelve en Equivalencias). El TXT se puede volver a bajar, pero importalo una sola vez. Si el proveedor manda su propio TXT para ese destino (FGR a los locales), acá no se genera: se importa el de ellos. El destino se elige en la columna Destino.')}</h3>
-      <div style="overflow-x:auto"><table class="tb-band">
+        <button class="act mini-ico" title="Cargar un remito a mano" onclick="abrirCargaRemito()">${ico('mas')}</button>
+        <button class="act gh mini-ico" title="Sucursales y códigos TXT" onclick="abrirSucursales()">${ico('ajustes')}</button></h3>
+      ${lista.length ? `<div style="overflow-x:auto"><table class="tb-band">
         <thead><tr><th>Remito</th><th>Proveedor</th><th>Fecha</th><th>Factura</th><th>Destino</th>
-          <th class="num" title="Renglones">Reng.</th><th class="ctr">Origen</th><th></th></tr></thead>
-        <tbody>${lista.slice(0,150).map(r => { const imp = remImportado(r); return `<tr${imp ? ' style="opacity:.6"' : ''}>
+          <th class="num" title="Renglones">Reng.</th><th class="ctr">Origen</th><th class="ctr" title="Ingreso al Dragon">Dragon</th></tr></thead>
+        <tbody>${lista.slice(0,200).map(r => { const imp = remImportado(r), dentro = _dentro(r); return `<tr>
           <td style="white-space:nowrap"><b ${r.archivo_nombre?`title="${esc(r.archivo_nombre)}" style="cursor:help"`:''}>${String(r.punto_venta).padStart(4,'0')}-${String(r.numero).padStart(8,'0')}</b></td>
-          <td class="prov"><span class="prov-nom">${esc(r.proveedor||'—')}</span></td>
-          <td>${fechaCorta(r.fecha)}</td>
-          <td style="white-space:nowrap">${r.factura ? esc(r.factura) : '<span class="mini" style="color:#b45309">sin factura</span>'}</td>
-          <td><select style="font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:${r.local_destino?'#fff':'#fffbeb'}"
+          <td class="prov"><span class="prov-nom" style="max-width:170px">${esc(r.proveedor||'—')}</span></td>
+          <td style="white-space:nowrap">${fechaCorta(r.fecha)}</td>
+          <td style="white-space:nowrap">${r.factura ? esc(r.factura)
+            : `<span class="mini" style="color:#b45309"${r.dias_sin_factura != null ? ` title="${r.dias_sin_factura} días sin factura"` : ''}>sin factura</span> <button class="act gh mini-ico" title="Asociar a una factura" onclick="asociarRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">${ico('link','s')}</button>`}</td>
+          <td>${dentro ? `<span class="mini">${esc(r.local_destino || r.destino || '—')}</span>`
+            : `<select style="font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;max-width:130px;background:${r.local_destino?'#fff':'#fffbeb'}"
                 onchange="cambiarDestinoRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero},this.value)">
                 <option value="" ${!r.local_destino?'selected':''}>a definir…</option>
                 ${(SUCS.length?SUCS:[{clave:'alcorta',nombre:'Alcorta'},{clave:'unicenter',nombre:'Unicenter'},{clave:'oficina',nombre:'Venta Online'}]).filter(x=>x.activo!==false)
                   .map(x=>`<option value="${esc(x.clave)}" ${r.local_destino===x.clave?'selected':''}>${esc(x.nombre||x.clave)}${x.codigo_txt?' · '+esc(x.codigo_txt):''}</option>`).join('')}
-              </select></td>
+              </select>`}</td>
           <td class="num" style="white-space:nowrap">${r.renglones||0}${r.sin_sku?` <span class="eico" style="background:#fee2e2;color:#991b1b;cursor:pointer" title="${r.sin_sku} renglones sin SKU: abrí el remito para asignarlos o desglosarlos por color" onclick="abrirRemitoDetalle('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">${ico('alerta','s')}</span>`:''}
             ${r.renglones?` <button class="act gh mini-ico" title="Ver los renglones del remito · desglosar por color" onclick="abrirRemitoDetalle('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">${ico('ojo','s')}</button>`:''}</td>
-          <td class="ctr">${r.origen==='factura'?`<span class="eico" title="Anunciado por la factura">${ico('factura','s')}</span>`:r.origen==='proveedor_pdf'?`<span class="eico" title="Leído del PDF del remito">${ico('pdf','s')}</span>`:r.origen==='txt_naitiva'?`<span class="eico" style="background:#dcfce7;color:#166534" title="TXT bajado de Naitiva (FGR): el módulo ya dejó el archivo con los desgloses en TXT › PARA IMPORTAR">${ico('archivo','s')}</span>`:esc(r.origen)}</td>
-          <td class="num" style="white-space:nowrap">
-            ${!r.factura?`<button class="act gh mini-ico" title="Asociar a una factura" onclick="asociarRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">${ico('link','s')}</button> `:''}
-            ${imp
-              ? `<span class="eico" style="background:#dcfce7;color:#166534" title="${esc(remImpTip(imp))}">${ico('ok','s')}</span>`
+          <td class="ctr">${r.origen==='factura'?`<span class="eico" title="Anunciado por la factura">${ico('factura','s')}</span>`
+            : r.origen==='proveedor_pdf'?`<span class="eico" title="Leído del PDF del remito">${ico('pdf','s')}</span>`
+            : r.origen==='fgr_txt'?`<span class="eico" title="TXT de FGR importado en el Dragon">${ico('archivo','s')}</span>`
+            : r.origen==='txt_naitiva'?`<span class="eico" title="TXT bajado de Naitiva">${ico('archivo','s')}</span>`
+            : r.origen==='manual'?`<span class="eico" title="Cargado a mano">${ico('lapiz','s')}</span>` : esc(r.origen)}</td>
+          <td class="ctr" style="white-space:nowrap">
+            ${dentro
+              ? `<span class="eico" style="background:#dcfce7;color:#166534" title="${esc(imp ? remImpTip(imp) : 'Ya está en el Dragonfish')}">${ico('ok','s')}</span>`
               : r.txt_proveedor
               ? `<span class="eico" style="background:#e0e7ff;color:#3730a3" title="El proveedor manda su propio TXT para este destino: se importa ESE en el Dragonfish. Generar otro duplicaría el ingreso.">${ico('inbox','s')}</span>`
               : `<button class="act mini-ico" ${(!r.renglones||r.sin_sku)?'disabled title="Faltan renglones o SKUs"':''}
               title="${r.txt_generado_at?'TXT generado el '+_fechaTs(r.txt_generado_at)+' y todavía no importado en el Dragonfish (se cruza todas las mañanas) — volver a bajar':'Generar el TXT para el importador'}"
               onclick="txtRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero},'${esc(r.local_destino||'')}')">${ico('bajar')}${r.txt_generado_at?' ✓':''}</button>`}</td>
         </tr>`; }).join('')}</tbody></table></div>
-      ${!lista.length ? '<div class="vacio">Todos los remitos esperados ya están en el Dragonfish.</div>' : ''}
-    </div>` : ''; })()}
+        ${lista.length > 200 ? `<p class="mini" style="margin-top:7px">Mostrando los 200 más nuevos de ${lista.length}.</p>` : ''}`
+      : '<div class="vacio">No hay remitos pendientes: todos entraron al Dragon y tienen su factura.</div>'}
+    </div>
     <div id="juegos-card"></div>
-    ${REM_SIN.length ? `<div class="card">
-      <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
-        <h3 style="font-size:15px;flex:1;display:flex;align-items:center;gap:8px">${ico('camion','s')} Remitos sin factura asociada · ${REM_SIN.length}
-          ${ayuda('Mercadería que entró por remito y ninguna factura la cubre todavía: el control anti doble conteo, el stock ya está adentro pero el gasto no. FGR se asocia solo cuando llega la factura (mismo número); si algo queda acá mucho tiempo, o falta la factura o vino con otro número: asociala a mano.')}</h3>
-        <button class="act mini-ico" title="Cargar un remito a mano" onclick="abrirCargaRemito()">${ico('mas')}</button>
-        <button class="act gh mini-ico" title="Sucursales y códigos TXT" onclick="abrirSucursales()">${ico('ajustes')}</button>
-      </div>
-      <div style="overflow-x:auto"><table class="tb-band">
-        <thead><tr><th>Remito</th><th>Proveedor</th><th>Fecha</th><th>Destino</th><th class="num">Renglones</th><th class="num">Días</th><th></th></tr></thead>
-        <tbody>${REM_SIN.slice(0,150).map(r => `<tr>
-          <td><b>${String(r.punto_venta).padStart(4,'0')}-${String(r.numero).padStart(8,'0')}</b></td>
-          <td class="prov"><span class="prov-nom">${esc(r.proveedor||'—')}</span>${r.origen==='manual'?` <span class="mini" title="Cargado a mano">${ico('lapiz','s')}</span>`:''}</td>
-          <td>${fechaCorta(r.fecha)}</td>
-          <td>${esc(r.destino||'—')}</td>
-          <td class="num">${r.renglones||0}</td>
-          <td class="num" style="color:${r.dias_sin_factura>30?'#dc2626':'inherit'};font-weight:${r.dias_sin_factura>30?'700':'400'}" ${r.dias_sin_factura>30?'title="Más de 30 días sin factura"':''}>${r.dias_sin_factura??''}</td>
-          <td class="num"><button class="act gh mini-ico" title="Asociar a una factura"
-            onclick="asociarRemito('${esc(r.proveedor_cuit)}',${r.punto_venta},${r.numero})">${ico('link','s')}</button></td>
-        </tr>`).join('')}</tbody></table></div>
-      ${REM_SIN.length>150?`<p class="mini" style="margin-top:7px">Mostrando los 150 más nuevos de ${REM_SIN.length}.</p>`:''}
-    </div>` : `<div class="card" style="display:flex;align-items:center;gap:10px">
-      <span style="flex:1" class="mini">${ico('camion','s')} No hay remitos sin factura. Cuando llegue mercadería antes que la factura, cargá el remito con el +.</span>
-      <button class="act mini-ico" title="Cargar un remito a mano" onclick="abrirCargaRemito()">${ico('mas')}</button>
-      <button class="act gh mini-ico" title="Sucursales y códigos TXT" onclick="abrirSucursales()">${ico('ajustes')}</button>
-    </div>`}
 `;
   if (typeof cargarJuegosCard === 'function') cargarJuegosCard();   // juegos.js — carga aparte, no frena la pestaña
 }
