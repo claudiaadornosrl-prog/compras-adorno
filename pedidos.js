@@ -33,7 +33,11 @@
 .ped-sub button{background:#fff;border:1px solid var(--bd);border-radius:20px;padding:6px 13px;font:inherit;font-size:13px;cursor:pointer;color:var(--mut);}
 .ped-sub button.on{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:700;}
 .ped-cat{max-height:290px;overflow-y:auto;border:1px solid var(--bd);border-radius:9px;margin:6px 0 12px;}
-.ped-cat table{font-size:12.5px;} .ped-cat th{position:sticky;top:0;background:#fff;z-index:1;}
+.ped-cat table{font-size:12.5px;} .ped-cat th{position:sticky;top:0;background:#fff;z-index:1;line-height:1.15;vertical-align:bottom;padding:5px 5px!important}
+.ped-cat th .sub{display:block;font-size:9.5px;color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0}
+.ped-cat td{padding:4px 4px!important}
+.ped-cat .desc{display:inline-block;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
+.ped-cat select.meses{font:inherit;font-size:9.5px;color:var(--primary);border:none;background:transparent;padding:0;cursor:pointer;font-weight:700}
 .ped-in{font:inherit;font-size:13px;padding:3px 6px;border:1px solid var(--bd);border-radius:6px;width:74px;text-align:right;}
 .ped-in.w{width:100%;text-align:left;}
 .ped-e-borrador{background:#f1f5f9;color:#475569;} .ped-e-enviado{background:#dbeafe;color:#1e40af;}
@@ -247,6 +251,8 @@ function _pedVistaPendientes(){
 // (marca manual en la ficha, o regla automática: facturas de mercadería, remitos,
 // artículos del stock a su nombre). Con PED_PROVS_TODOS se traen todos.
 let PED_PROVS_TODOS = false, PED_PROVS_CACHE = {};
+let PED_MESES = Number(localStorage.getItem('ped_meses') || 6) || 6;   // meses de venta que muestra el catálogo
+function pedMesesSet(v){ PED_MESES = Math.min(13, Math.max(1, Number(v) || 6)); localStorage.setItem('ped_meses', PED_MESES); pedBuscarCat(); }
 async function _pedProvs(){
   const k = PED_PROVS_TODOS ? 'todos' : 'merc';
   if (PED_PROVS_CACHE[k]){ PED_PROVS = PED_PROVS_CACHE[k]; return PED_PROVS; }
@@ -368,7 +374,7 @@ async function pedBuscarCat(){
   const todos = !!document.getElementById('ped-cat-todos')?.checked;
   document.getElementById('ped-cat').innerHTML = '<div class="mini" style="padding:8px">Buscando…</div>';
   const {data, error} = await sb.rpc('compras_pedido_catalogo', {p_cuit: pedEd.proveedor_cuit || null,
-    p_nombre: pedEd.proveedor_nombre, p_busca: q || null, p_todos: todos, p_prueba: MODO_PRUEBA});
+    p_nombre: pedEd.proveedor_nombre, p_busca: q || null, p_todos: todos, p_prueba: MODO_PRUEBA, p_meses: PED_MESES});
   if (error){ document.getElementById('ped-cat').innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return; }
   pedCat = data || [];
   // (28-sep, JP) Arriba lo que MÁS hay que pedir para completar el mínimo; después
@@ -419,24 +425,24 @@ function _pedCatHtml(){
       ${faltan.length ? `<button class="act mini-ico" style="width:34px;height:34px;justify-content:center" title="Agregar al pedido todo lo que falta para llegar al mínimo (${faltan.length} artículos, con la cantidad que falta)" onclick="pedAgregarBajoMinimo()">${ico('mas')}</button>` : ''}`; }, 0);
   if (!filas.length) return '<div class="mini" style="padding:8px">Ningún artículo de la lista está por debajo de su mínimo.</div>';
   return `<div class="ped-cat"><table>
-    <thead><tr><th>SKU</th><th>Descripción</th><th class="num" title="Stock Alcorta / Unicenter / Oficina (en rojo: por debajo de su mínimo)">Stock A · U · O</th>
+    <thead><tr><th>SKU</th><th>Descripción</th><th class="num" title="Stock Alcorta / Unicenter / Oficina (en rojo: por debajo de su mínimo)">Stock<span class="sub">A · U · O</span></th>
       <th class="num" title="Stock total: la suma de los tres puntos">Total</th>
-      <th class="num" title="Unidades vendidas en los últimos 6 meses entre todos los puntos de venta (facturas menos notas de crédito; se actualiza todas las mañanas)">Vend. 6 m</th>
-      <th class="num" title="Mínimo de reposición (umbral) Alcorta / Unicenter / Oficina — sale del Dragonfish">Mín. A · U · O</th>
-      <th class="num" title="Lo que hay que pedir para volver al mínimo: lo que les falta a los locales + el mínimo del depósito, menos lo que ya hay en Oficina y lo ya pedido">Falta p/ mín.</th>
-      <th class="num">$ compra</th><th class="num" title="Ya pedido y todavía no entregado (otros pedidos abiertos)">Ya pedido</th>
-      <th class="num">Cant.</th><th></th></tr></thead>
+      <th class="num" title="Unidades vendidas entre todos los puntos de venta en los últimos meses (facturas menos notas de crédito; el mes actual cuenta hasta ayer). Tocá los meses para cambiar cuántos se suman.">Vend.<span class="sub"><select class="meses" onchange="pedMesesSet(this.value)" onclick="event.stopPropagation()" title="Cuántos meses sumar">${[1,2,3,6,9,12].map(m => `<option value="${m}" ${m===PED_MESES?'selected':''}>${m} M</option>`).join('')}</select></span></th>
+      <th class="num" title="Mínimo de reposición (umbral) Alcorta / Unicenter / Oficina — sale del Dragonfish">Mín.<span class="sub">A · U · O</span></th>
+      <th class="num" title="Lo que hay que pedir para volver al mínimo: lo que les falta a los locales + el mínimo del depósito, menos lo que ya hay en Oficina y lo ya pedido">Falta<span class="sub">p/ mín.</span></th>
+      <th class="num" title="Precio de la lista COMPRA">$ compra</th><th class="num" title="Ya pedido y todavía no entregado (otros pedidos abiertos)">Pedido</th>
+      <th class="num" style="width:44px">Cant.</th><th></th></tr></thead>
     <tbody>${filas.map(({a, i}) => { const f = _pedFalta(a); return `<tr>
       <td title="${a.codigo_proveedor ? 'Código del proveedor: ' + esc(a.codigo_proveedor) : ''}"><b>${esc(a.sku)}</b></td>
-      <td>${esc(a.descripcion||'')}${_pedPackChip(_pedPk(a))}</td>
+      <td>${_pedPackChip(_pedPk(a))}<span class="desc" title="${esc(a.descripcion||'')}">${esc(a.descripcion||'')}</span></td>
       <td class="num">${_pedStk(a.stock_alcorta, a.min_alcorta)} · ${_pedStk(a.stock_unicenter, a.min_unicenter)} · ${_pedStk(a.stock_oficina, a.min_oficina)}</td>
       <td class="num"><b>${_pedN(a.stock_total)}</b></td>
-      <td class="num">${a.vendido_6m == null ? '<span class="mini" title="Todavía no hay ventas cargadas para este SKU">—</span>' : _pedN(a.vendido_6m)}</td>
+      <td class="num">${a.vendido == null ? '<span class="mini" title="Sin ventas en ese período">—</span>' : _pedN(a.vendido)}</td>
       <td class="num">${_pedMin(a.min_alcorta)} · ${_pedMin(a.min_unicenter)} · ${_pedMin(a.min_oficina)}</td>
       <td class="num">${f == null ? '<span class="mini">sin mín.</span>' : (f > 0 ? `<b style="color:var(--bad)">${_pedN(f)}</b>${_pedPk(a) > 1 ? ` <span class="mini">= ${_pedN(Math.ceil(f/_pedPk(a)))} pk</span>` : ''}` : '<span class="mini ped-ok">OK</span>')}</td>
       <td class="num">${a.precio_compra ? plata(a.precio_compra) : '—'}</td>
       <td class="num">${_pedYaPedido(a) ? `<b style="color:var(--warn)">${_pedN(_pedYaPedido(a))}</b>` : '—'}</td>
-      <td class="num"><input class="ped-in" id="ped-cq-${i}" inputmode="decimal" value="${f > 0 ? Math.ceil(f / _pedPk(a)) : 1}" onkeydown="if(event.key==='Enter')pedAgregarCat(${i})"
+      <td class="num"><input class="ped-in" style="width:40px" id="ped-cq-${i}" inputmode="decimal" value="${f > 0 ? Math.ceil(f / _pedPk(a)) : 1}" onkeydown="if(event.key==='Enter')pedAgregarCat(${i})"
             title="${_pedPk(a) > 1 ? 'Cantidad de PACKS (de a ' + _pedPk(a) + ' unidades)' : 'Unidades'}">${_pedPk(a) > 1 ? ' <span class="mini">pk</span>' : ''}</td>
       <td>${ya.has(String(a.sku).toUpperCase()) ? `<span class="eico" style="color:var(--ok);width:22px;height:22px" title="Ya está en el pedido">${ico('ok','s')}</span>`
             : `<button class="act op-ico" title="Agregar al pedido" onclick="pedAgregarCat(${i})">${ico('mas','s')}</button>`}</td></tr>`; }).join('')}
