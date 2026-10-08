@@ -4168,17 +4168,12 @@ async function vistaMercaderia(){
   const n = k => MERC.filter(m => m.estado === k);
   const deMas = n('mas_caro').reduce((a,m) => a + Number(m.dif||0), 0);
 
-  // (8-oct, JP) resumen en chips; tocar uno filtra la tabla de facturas FGR
-  const kchip = (k, tit) => `<button class="fchip" style="color:${MERC_EST[k].col}" title="${tit}" onclick="const s=document.getElementById('merc-filtro'); if(s){s.value='${k}'; renderMercTabla(); s.scrollIntoView({behavior:'smooth',block:'center'});}">${ico(MERC_EST[k].li,'s')} <b>${n(k).length}</b> ${MERC_EST[k].tx.toLowerCase()}</button>`;
-  c.innerHTML = `<div class="abar">
-      ${kchip('coincide', `Facturas de FGR ${filtro.anio} que coinciden al peso con remito y lista: ${n('coincide').length} de ${MERC.length}`)}
-      ${kchip('mas_caro', `Facturadas por encima de la lista COSTO: ${platac(deMas)} de más`)}
-      ${kchip('mas_barato', 'Facturadas por debajo de la lista: a favor nuestro')}
-      ${kchip('sin_remito', 'Sin remito asociado: no se pueden controlar')}
-    </div>
+  // (8-oct, JP) Mercaderia = remitos por entrar al Dragon + desgloses. El control de
+  // facturas contra remito y lista vive en la ventana de contabilizacion.
+  c.innerHTML = `
     ${(() => { const nImp = REM_ESP.filter(r => remImportado(r)).length; const lista = REM_IMP_OCULTAR ? REM_ESP.filter(r => !remImportado(r)) : REM_ESP; window._remEspLista = lista;
     return REM_ESP.length ? `<div class="card" style="border-left:4px solid var(--info)">
-      <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('bajar','s')} Remitos para importar al Dragonfish · ${lista.length}${nImp ? ` <span class="mini" style="font-weight:400">· ${nImp} ya en el Dragon</span>` : ''}
+      <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('bajar','s')} Remitos por entrar al Dragon · ${lista.length}${nImp ? ` <span class="mini" style="font-weight:400">· ${nImp} ya en el Dragon</span>` : ''}
         <span style="flex:1"></span>
         ${nImp ? `<label class="c-tog" title="${REM_IMP_OCULTAR ? 'Mostrar también los remitos que ya están en el Dragonfish' : 'Ocultar los remitos que ya están en el Dragonfish'}. Naranja = ocultos"><input type="checkbox" ${REM_IMP_OCULTAR ? 'checked' : ''} onchange="REM_IMP_OCULTAR=this.checked; localStorage.setItem('merc_ocultar_importados', this.checked ? '1' : '0'); vistaMercaderia()"><span class="eico" style="width:30px;height:30px">${ico('ojo','s')}</span></label>` : ''}
         ${ayuda('Remitos anunciados por la factura o por el PDF del remito. Mientras el stock viva en el Dragonfish, el módulo solo genera el TXT: se importa allá como remito de compra y el tránsito, la recepción y el stock los sigue haciendo el Dragon. Un renglón sin SKU frena el TXT (se resuelve en Equivalencias). El TXT se puede volver a bajar, pero importalo una sola vez. Si el proveedor manda su propio TXT para ese destino (FGR a los locales), acá no se genera: se importa el de ellos. El destino se elige en la columna Destino.')}</h3>
@@ -4237,23 +4232,7 @@ async function vistaMercaderia(){
       <button class="act mini-ico" title="Cargar un remito a mano" onclick="abrirCargaRemito()">${ico('mas')}</button>
       <button class="act gh mini-ico" title="Sucursales y códigos TXT" onclick="abrirSucursales()">${ico('ajustes')}</button>
     </div>`}
-    <div class="card">
-      <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('factura','s')} Facturas de Familia García Regueira · ${filtro.anio}
-        ${ayuda('Controladas contra el remito (qué vino y cuánto) y la lista COSTO vigente a la fecha (el precio con el descuento pactado de cada artículo). El desvío puede ser sobreprecio del proveedor o una lista desactualizada en el Dragonfish: el detalle por artículo lo dice.')}</h3>
-      <div class="filtros">
-        <select onchange="setF('anio',this.value)">${(()=>{const a=[];for(let y=new Date().getFullYear();y>=2025;y--)a.push(y);
-          return a.map(y=>`<option ${y==filtro.anio?'selected':''}>${y}</option>`).join('')})()}</select>
-        <select id="merc-filtro" onchange="renderMercTabla()">
-          <option value="">Todos los estados</option>
-          <option value="mas_caro">🔺 Facturadas de más</option>
-          <option value="mas_barato">🔻 Facturadas de menos</option>
-          <option value="coincide">✅ Coinciden</option>
-          <option value="sin_remito">❔ Sin remito</option>
-        </select>
-      </div>
-      <div id="merc-tabla"></div>
-    </div>`;
-  renderMercTabla();
+`;
   if (typeof cargarJuegosCard === 'function') cargarJuegosCard();   // juegos.js — carga aparte, no frena la pestaña
 }
 
@@ -5114,7 +5093,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="op-pdf.js?v=3"></script>
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=3"></script>
-<script src="juegos.js?v=3"></script>
+<script src="juegos.js?v=4"></script>
 <script src="manual.js?v=64"></script>
 </body>
 </html>
