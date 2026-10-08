@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v115-bandeja-un-renglon';
+const CACHE_VERSION = 'compras-v116-link-remito-comprobantes';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
