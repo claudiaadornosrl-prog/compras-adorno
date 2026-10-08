@@ -570,6 +570,8 @@ const ICONOS = {
   lupa: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
   basura: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   iva: '<text x="12" y="16.5" text-anchor="middle" font-size="11.5" font-weight="800" stroke="none" fill="currentColor" font-family="inherit">IVA</text>',
+  paleta: '<circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>',
+  caja: '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
   estrella: '<path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/>',
   hoja: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
   traducir: '<path d="M5 8l6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/>',
@@ -1909,7 +1911,7 @@ function _gRepartoHTML(){
       <td><select onchange="_gPartSet(${i},'categoria',this.value)">
         ${G_CATEGORIAS.map(c => `<option value="${c.clave}" ${x.categoria===c.clave?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select></td>
       <td class="num"><input type="text" inputmode="decimal" id="g-imp-${i}" class="g-imp" value="${x.importe == null ? '' : nmShow(x.importe)}" oninput="_gPartImp(${i}, this.value)"></td>
-      <td style="white-space:nowrap">${i === 0 ? `<button class="act op-ico" type="button" title="Agregar un renglón: otro local, otro mes o las dos cosas. Arranca con lo que falta repartir." onclick="_gPartAgregar()">${ico('mas','s')}</button>` : ''}${varias ? `<button class="act op-ico" type="button" style="background:var(--bad)" title="Quitar este renglón" onclick="_gPartQuitar(${i})">${ico('anular','s')}</button>` : ''}</td>
+      <td style="white-space:nowrap;vertical-align:middle">${i === 0 ? `<button class="act op-ico" type="button" title="Agregar un renglón: otro local, otro mes o las dos cosas. Arranca con lo que falta repartir." onclick="_gPartAgregar()">${ico('mas','s')}</button>` : ''}${varias ? `<button class="act op-ico" type="button" style="background:var(--bad)" title="Quitar este renglón" onclick="_gPartQuitar(${i})">${ico('anular','s')}</button>` : ''}</td>
     </tr>`;
   const gs = d.gestion_sug || {};
   return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:2px 0 6px">
@@ -2206,13 +2208,13 @@ function _desgloseImpositivo(d, neto){
 //  bloques aparte para que lo de la izquierda sea solo lo que dice el papel.
 // ═══════════════════════════════════════════════════════════════════════
 const _FX_ESTADO = {
-  ok:         ['✓ lista', '#166534', 'Precio e importe coinciden con la lista COSTO (con descuento) vigente a la fecha'],
-  ok_precio:  ['✓ precio', '#166534', 'El precio unitario coincide con la lista COMPRA; el descuento difiere de la lista COSTO'],
-  difiere:    ['≠ lista', '#b45309', 'Difiere de la lista del Dragonfish'],
-  sin_lista:  ['sin lista', '#64748b', 'El SKU no tiene precio cargado en el Dragonfish a esa fecha'],
-  sin_sku:    ['sin SKU', '#b91c1c', 'No se pudo traducir el código del proveedor: resolverlo en 🔗 Equivalencias'],
-  sin_stock:  ['no es stock', '#64748b', 'Renglón que se paga pero no entra al stock (cajas, fletes)'],
-  desglosado: ['🎨 por color', '#6d28d9', 'La factura lo trae como un solo renglón; en el remito está desglosado por color (📥 Remitos para importar → 👁)'],
+  ok:         ['✓ lista', '#166534', 'Coincide con la lista: precio e importe iguales a la lista COSTO (con descuento) vigente a la fecha', 'ok'],
+  ok_precio:  ['✓ precio', '#166534', 'Coincide el precio: el precio unitario es el de la lista COMPRA, pero el descuento difiere de la lista COSTO', 'ok'],
+  difiere:    ['≠ lista', '#b45309', 'Difiere de la lista del Dragonfish', 'alerta'],
+  sin_lista:  ['sin lista', '#64748b', 'Sin lista: el SKU no tiene precio cargado en el Dragonfish a esa fecha', 'pregunta'],
+  sin_sku:    ['sin SKU', '#b91c1c', 'Sin SKU: no se pudo traducir el código del proveedor. Asignalo con el eslabón de al lado o en Equivalencias', 'link'],
+  sin_stock:  ['no es stock', '#64748b', 'No es stock: renglón que se paga pero no entra al stock (cajas, fletes)', 'caja'],
+  desglosado: ['🎨 por color', '#6d28d9', 'Desglosado por color: la factura lo trae como un solo renglón; en el remito está abierto por color (Mercadería › Remitos para importar › ver)', 'paleta'],
 };
 const _fxPct = v => v == null ? '' : (v > 0 ? '+' : '') + Number(v).toLocaleString('es-AR', {maximumFractionDigits: 1}) + ' %';
 // (24-sep, JP) Un renglón = cant × p.unit × (1 − dto). Mismas cuentas que compras_doc_renglones / compras_renglones_guardar.
@@ -2331,7 +2333,7 @@ function _facturaRenglones(d, reng, opts = {}){
       <tbody>${reng.map((r, i) => { const est = _rengEstado(r), pun = _rengPun(r);
         return `<tr>
         <td class="num">${ed ? inp(i, 'cantidad', r.cantidad, 54) : Number(r.cantidad||0).toLocaleString('es-AR')}</td>
-        <td>${esc(r.descripcion || '')}${r.sku && r.descripcion_nuestra ? `<br><span class="mini" style="color:#0f766e" title="Nuestra descripción (Dragonfish) del SKU ${esc(r.sku)}">🏷 ${esc(r.descripcion_nuestra)}</span>` : ''}<br><span class="mini">${r.sku ? `<code>${esc(r.sku)}</code>${Number(r.pack) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="El proveedor lo vende en pack de ${Number(r.pack)}: al stock entran ${_rengN(Number(r.cantidad||0) * Number(r.pack))} unidades">📦 ×${Number(r.pack)} = ${_rengN(Number(r.cantidad||0) * Number(r.pack))} u.</span>` : ''}` : (r.estado === 'desglosado' ? `<span style="color:#6d28d9">🎨 desglosado por color en el remito</span>` : `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>`)}${(!r.sku && !r.sin_stock && r.estado !== 'desglosado' && opts.desde) ? ` <button class="act fx-eq-btn" title="Traducir el código del proveedor a un artículo nuestro. Se guarda como equivalencia y las próximas facturas de este proveedor lo reconocen solas." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${i})">🔗 Asignar SKU</button>` : ''}${r.lista_compra != null ? ` · lista ${plata(r.lista_compra)}` : ''}${r.lista_costo != null ? ` · costo ${plata(r.lista_costo)}` : ''}</span></td>
+        <td>${esc(r.descripcion || '')}${r.sku && r.descripcion_nuestra ? `<br><span class="mini" style="color:#0f766e" title="Nuestra descripción (Dragonfish) del SKU ${esc(r.sku)}">🏷 ${esc(r.descripcion_nuestra)}</span>` : ''}<br><span class="mini">${r.sku ? `<code>${esc(r.sku)}</code>${Number(r.pack) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="El proveedor lo vende en pack de ${Number(r.pack)}: al stock entran ${_rengN(Number(r.cantidad||0) * Number(r.pack))} unidades">📦 ×${Number(r.pack)} = ${_rengN(Number(r.cantidad||0) * Number(r.pack))} u.</span>` : ''}` : (r.estado === 'desglosado' ? `<span style="color:#6d28d9">🎨 desglosado por color en el remito</span>` : `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>`)}${(!r.sku && !r.sin_stock && r.estado !== 'desglosado' && opts.desde) ? ` <button class="act op-ico" title="Asignar SKU: traducir el código del proveedor a un artículo nuestro. Se guarda como equivalencia y las próximas facturas de este proveedor lo reconocen solas." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${i})">${ico('link','s')}</button>` : ''}${r.lista_compra != null ? ` · lista ${plata(r.lista_compra)}` : ''}${r.lista_costo != null ? ` · costo ${plata(r.lista_costo)}` : ''}</span></td>
         <td class="num">${ed ? inp(i, 'precio_unitario', r.precio_unitario, 96) : (r.precio_unitario != null ? plata(r.precio_unitario) : '—')}</td>
         <td class="num">${ed ? inp(i, 'descuento_pct', r.descuento_pct, 46) + ' %' : (Number(r.descuento_pct) ? Number(r.descuento_pct).toLocaleString('es-AR') + ' %' : '—')}</td>
         <td class="num" id="fx-pun-${i}">${pun != null ? plata(pun) : '—'}</td>
@@ -2354,7 +2356,8 @@ function _facturaRenglones(d, reng, opts = {}){
 function _fxChip(est){
   const e = _FX_ESTADO[est.estado] || _FX_ESTADO.sin_lista;
   const det = est.estado === 'difiere' ? [est.dif_precio_pct != null ? 'precio ' + _fxPct(est.dif_precio_pct) : '', est.dif_costo_pct != null ? 'vs costo ' + _fxPct(est.dif_costo_pct) : ''].filter(Boolean).join(' · ') : '';
-  return `<span class="chip" title="${esc(e[2])}" style="background:${e[1]}18;color:${e[1]}">${e[0]}</span>${det ? `<br><span class="mini" style="color:#b45309">${esc(det)}</span>` : ''}`;
+  // (8-oct, JP) solo ícono, el significado en el tooltip (y el detalle de la diferencia también)
+  return `<span class="eico" title="${esc(e[2])}${det ? ' · ' + esc(det) : ''}" style="background:${e[1]}18;color:${e[1]}">${ico(e[3] || 'info','s')}</span>`;
 }
 // ── Descuentos generales (editable en el control) ──
 function _descGeneralesHTML(d, reng){
