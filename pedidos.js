@@ -315,8 +315,8 @@ function _pedEditor(){
   if (!ov){ ov = document.createElement('div'); ov.id = 'ped-overlay'; document.body.appendChild(ov); }
   ov.onclick = ev => { if (ev.target === ov) pedCerrarModal(); };
   ov.innerHTML = `<div class="c-box">
-    <div class="c-head"><div style="flex:1"><b style="font-size:16px">${e.id ? `✏️ Pedido Nº ${_pedNro(e.numero)}` : '➕ Nuevo pedido'}</b>
-      <div style="font-size:12px;opacity:.85">${e.id ? _pedChip(e.estado) : 'Se guarda como borrador hasta que lo marques como enviado.'}</div></div>
+    <div class="c-head"><div style="flex:1;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b style="font-size:16px">${e.id ? `Pedido Nº ${_pedNro(e.numero)}` : 'Nuevo pedido'}</b>
+      ${e.id ? _pedChip(e.estado) : '<span class="mini" style="color:#fff;opacity:.85" title="Se guarda como borrador hasta que lo marques como enviado">borrador</span>'}</div>
       <button class="m-x" onclick="pedCerrarModal()">✕</button></div>
     <div class="c-body">
       <div class="ped-grid">
