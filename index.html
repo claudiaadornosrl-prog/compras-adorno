@@ -258,6 +258,12 @@ table.tb-band a.nro:hover{color:var(--primary);border-bottom-color:var(--primary
 .op-mas{display:inline-flex;align-items:center;gap:6px;margin-left:6px;vertical-align:middle}
 button.act.op-ico{background:var(--primary);color:#fff;border:none;padding:2px 4px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;margin-left:3px;vertical-align:middle}
 button.act.op-ico svg{width:11px;height:11px}
+.op-sec{border:1px solid var(--bd);border-radius:10px;margin-bottom:10px;overflow:hidden;background:#fff}
+.op-sec>h4{margin:0;padding:7px 11px;background:#f8fafc;border-bottom:1px solid var(--bd);font-size:11.5px;display:flex;gap:7px;align-items:center;color:var(--mut);text-transform:uppercase;letter-spacing:.4px}
+.op-sec table{margin:0;width:100%}.op-sec td{padding:7px 11px;border-top:1px solid #f1f5f9}.op-sec tr:first-child td{border-top:none}
+.op-sec tr.tot td{background:#fafafa;font-weight:700}
+.op-neto{display:flex;justify-content:space-between;align-items:center;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-weight:700;color:var(--primary-dark,#9a3412)}
+.op-neto b{font-size:18px}
 label.c-tog{cursor:pointer;display:inline-flex}label.c-tog input{display:none}
 label.c-tog .eico{width:38px;height:38px;color:#cbd5e1;border:1px solid var(--bd);background:#fff;cursor:pointer}
 #ctrl-overlay .c-fila label.c-tog{flex-direction:row;align-self:flex-end}
@@ -1358,49 +1364,53 @@ async function verOP(id){
     : e === 'por_confirmar' ? '<span class="chip" style="background:#fef3c7;color:#92400e">por confirmar</span>'
     : e === 'cancelado' ? '<span class="chip" style="background:#fee2e2;color:#991b1b">cancelado</span>'
     : e ? '<span class="chip" style="background:#e5e7eb;color:#374151">pendiente</span>' : '';
+  // (8-oct, JP) vista de la OP emitida: cabecera en un renglón, secciones con banda, neto destacado, ayudas en tooltip
+  const estChip = o.estado==='anulada' ? '<span class="chip" style="background:#fee2e2;color:#991b1b">anulada</span>'
+    : o.estado==='pagada' ? '<span class="chip" style="background:#dcfce7;color:#166534">pagada</span>'
+    : o.estado==='pago_parcial' ? '<span class="chip" style="background:#fef3c7;color:#92400e">pago parcial</span>'
+    : `<span class="chip" style="background:#dbeafe;color:#1e40af;cursor:help" title="Una orden emitida no se edita: si algún importe quedó mal, anulala y volvé a emitirla, así el pendiente de Tesorería y el certificado quedan diciendo lo mismo.">emitida</span>`;
+  const anul = o.estado==='anulada';
   openModalP(`
-    <h3 style="margin:0 0 3px">${esc(o.comprobante)}</h3>
-    <p class="mini" style="margin:0 0 12px">${esc(o.proveedor_nombre||'')} · CUIT ${esc(o.cuit_proveedor||'')} ·
-      ${_fecha(o.fecha)} · emitida por ${esc(o.emitida_por||'')}
-      ${o.estado==='anulada' ? ' · <b style="color:var(--bad)">ANULADA</b>' : o.estado==='pagada' ? ' · <b style="color:#166534">PAGADA</b>' : o.estado==='pago_parcial' ? ' · <b style="color:#92400e">PAGO PARCIAL</b>' : ''}</p>
-    ${(o.avisos && o.avisos.length) ? `<div class="alerta" style="margin-bottom:10px">
-      ${o.avisos.map(a => '· ' + esc(a)).join('<br>')}</div>` : ''}
-    <h4 style="font-size:13px;margin:0 0 5px">Comprobantes imputados</h4>
-    <table style="font-size:13px;margin-bottom:12px"><tbody>${f.map(x => `<tr>
-      <td class="mini">${_fecha(x.fecha)}</td>
-      <td>${esc(x.comprobante)}${x.archivo_path ? ` <a href="${_pdfUrl(x.archivo_path)}" target="_blank" rel="noopener">📄</a>` : ''}</td>
+    <h3 style="margin:0 0 4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">${ico('pago')} ${esc(o.comprobante)} ${estChip}</h3>
+    <p class="mini" style="margin:0 0 12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span class="prov-nom" style="display:inline-block;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;font-weight:600;color:var(--tx)" title="${esc(o.proveedor_nombre||'')}">${esc(o.proveedor_nombre||'')}</span>
+      · CUIT ${esc(o.cuit_proveedor||'')} · ${_fecha(o.fecha)} · <span title="Emitida por ${esc(o.emitida_por||'')}" style="cursor:help">${esc((o.emitida_por||'').split('@')[0])}</span></p>
+    ${(o.avisos && o.avisos.length) ? `<div class="aviso-amb" style="margin-bottom:10px">${o.avisos.map(a => `<div>${ico('alerta','s')} ${esc(a)}</div>`).join('')}</div>` : ''}
+
+    <div class="op-sec"><h4>${ico('factura','s')} Comprobantes imputados <span style="margin-left:auto;text-transform:none;letter-spacing:0">${f.length}</span></h4>
+    <table style="font-size:13px"><tbody>${f.map(x => `<tr>
+      <td class="mini" style="white-space:nowrap">${_fecha(x.fecha)}</td>
+      <td style="white-space:nowrap">${x.archivo_path ? `<a class="nro" href="${_pdfUrl(x.archivo_path)}" target="_blank" rel="noopener" title="Abrir el PDF">${esc(x.comprobante)}</a>` : esc(x.comprobante)}${x.es_nc ? ' <span class="chip" style="background:#fee2e2;color:#991b1b">NC</span>' : ''}</td>
       <td class="num mini" title="Neto, sin IVA ni percepciones"${x.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(x.neto)}</td>
       <td class="num"${x.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(x.total)}</td></tr>`).join('')}
-      <tr style="font-weight:700"><td colspan="2">Subtotal</td><td class="num mini">${plata(f.reduce((a,x) => a + Number(x.neto||0), 0))} neto</td><td class="num">${plata(o.subtotal)}</td></tr>
-    </tbody></table>
-    <h4 style="font-size:13px;margin:0 0 5px">${o.estado==='anulada' ? 'Retenciones <span style="color:var(--bad)">ANULADAS con la orden</span> (no se practicaron)' : 'Retenciones practicadas'}</h4>
-    <table style="font-size:13px${o.estado==='anulada' ? ';text-decoration:line-through;opacity:.6' : ''}"><tbody>${r.length ? r.map(x => `<tr>
+      <tr class="tot"><td colspan="2">Subtotal</td><td class="num mini" title="Neto sobre el que se calculan las retenciones">${plata(f.reduce((a,x) => a + Number(x.neto||0), 0))} <span style="font-weight:400">(neto)</span></td><td class="num">${plata(o.subtotal)}</td></tr>
+    </tbody></table></div>
+
+    <div class="op-sec"><h4>${ico('porcentaje','s')} ${anul ? 'Retenciones <span style="color:var(--bad)">anuladas con la orden</span>' : 'Retenciones practicadas'}
+      ${ayuda('Pasá el mouse por el código de cada retención para ver cómo se llegó al importe.' + (anul ? ' Al anularse la orden, no se practicaron.' : ''))}</h4>
+    <table style="font-size:13px${anul ? ';text-decoration:line-through;opacity:.6' : ''}"><tbody>${r.length ? r.map(x => `<tr>
       <td>${_opTip(x.calculo, x.codigo + ' · ' + (x.nombre||'').slice(0,38))}
-        ${x.editado ? ' <span class="chip" style="background:#fee2e2;color:#991b1b">a mano</span>' : ''}
-        ${x.aviso ? `<br><span class="mini" style="color:#b45309">${esc(x.aviso)}</span>` : ''}
-        ${x.editado ? `<br><span class="mini">el sistema había calculado ${plata(x.calculado)} · motivo: ${esc(x.motivo_edicion||'—')}</span>` : ''}</td>
-      <td class="num mini">${x.alicuota ? Number(x.alicuota)+'%' : '—'}${x.editado ? ' <span title="alícuota efectiva que resulta del importe puesto a mano">*</span>' : ''}</td>
+        ${x.editado ? ` <span class="eico" style="background:#fee2e2;color:#991b1b;width:22px;height:22px" title="Importe puesto a mano. El sistema había calculado ${plata(x.calculado)} · motivo: ${esc(x.motivo_edicion||'—')}">${ico('lapiz','s')}</span>` : ''}
+        ${x.aviso ? ` <span class="eico" style="background:#fef3c7;color:#92400e;width:22px;height:22px" title="${esc(x.aviso)}">${ico('alerta','s')}</span>` : ''}</td>
+      <td class="num mini" style="white-space:nowrap">${x.alicuota ? Number(x.alicuota)+'%' : '—'}${x.editado ? ' <span title="Alícuota efectiva que resulta del importe puesto a mano">*</span>' : ''}</td>
       <td class="num">${Number(x.importe) ? plata(x.importe) : '—'}</td></tr>`).join('')
       : '<tr><td colspan="3" class="mini">Sin retenciones.</td></tr>'}
-      <tr style="font-weight:700;border-top:2px solid var(--bd)">
-        <td colspan="2">Neto a pagar</td><td class="num" style="font-size:16px">${plata(o.neto_a_pagar)}</td></tr>
-    </tbody></table>
-    ${pg.length ? `<h4 style="font-size:13px;margin:12px 0 5px">Medio${pg.length>1?'s':''} de pago</h4>
+    </tbody></table></div>
+
+    <div class="op-neto"><span>Neto a pagar</span><b>${plata(o.neto_a_pagar)}</b></div>
+
+    ${pg.length ? `<div class="op-sec"><h4>${ico('pago','s')} Medio${pg.length>1?'s':''} de pago</h4>
     <table style="font-size:13px"><tbody>${pg.map(p => `<tr>
       <td>${esc(p.medio)}${p.cuenta ? ` <span class="mini">· ${esc(p.cuenta)}</span>` : ''}
         ${(p.cheque_numero || p.cheque_banco || p.cheque_fecha) ? `<br><span class="mini">${p.cheque_numero ? 'N° ' + esc(p.cheque_numero) + ' · ' : ''}${p.cheque_banco ? esc(p.cheque_banco) + ' · ' : ''}${p.cheque_emision ? 'emisión ' + _fecha(p.cheque_emision) + (p.dias_diferimiento != null ? ' + ' + p.dias_diferimiento + ' días' : '') + ' → ' : ''}${p.cheque_fecha ? 'pago ' + _fecha(p.cheque_fecha) : ''}</span>` : ''}
         ${p.notas ? `<br><span class="mini">${esc(p.notas)}</span>` : ''}</td>
-      <td>${_estPend(p.estado_pendiente)}${p.pagado_at ? ` <span class="mini">${_fecha(String(p.pagado_at).slice(0,10))}</span>` : ''}</td>
+      <td style="white-space:nowrap">${_estPend(p.estado_pendiente)}${p.pagado_at ? ` <span class="mini">${_fecha(String(p.pagado_at).slice(0,10))}</span>` : ''}</td>
       <td class="num">${plata(p.importe)}</td></tr>`).join('')}
-    </tbody></table>` : ''}
-    <p class="mini" style="margin-top:6px">Pasá el mouse por el código de cada retención para ver cómo se llegó al importe.</p>
-    ${o.estado === 'emitida' ? `<p class="mini" style="margin-top:8px">Una orden emitida no se edita:
-      si algún importe quedó mal, anulala y volvé a emitirla — así el pendiente de Tesorería
-      y el certificado quedan diciendo lo mismo.</p>` : ''}
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
-      ${o.estado !== 'anulada' ? `<button class="act gh" onclick="descargarOpPdf(${o.id})">⬇ Orden de pago (PDF)</button>
-      ${r.some(x => Number(x.importe) > 0) ? `<button class="act gh" onclick="descargarCertificadosPdf(${o.id})">⬇ Certificado de retención (PDF)</button>` : ''}` : ''}
-      <button class="act gh" onclick="cerrarModalP()">Cerrar</button></div>`);
+    </tbody></table></div>` : ''}
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;flex-wrap:wrap;align-items:center">
+      ${!anul ? `<button class="act gh" style="display:inline-flex;align-items:center;gap:6px" onclick="descargarOpPdf(${o.id})" title="Bajar la orden de pago en PDF">${ico('pdf','s')} Orden de pago</button>
+      ${r.some(x => Number(x.importe) > 0) ? `<button class="act gh" style="display:inline-flex;align-items:center;gap:6px" onclick="descargarCertificadosPdf(${o.id})" title="Bajar el certificado de retención en PDF (para el proveedor)">${ico('pdf','s')} Certificado</button>` : ''}` : ''}
+      <button class="act" onclick="cerrarModalP()">Cerrar</button></div>`);
 }
 
 async function anularOP(id, comp){
