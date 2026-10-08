@@ -555,6 +555,13 @@ const ICONOS = {
   pdf: '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/>',
   mas: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
   lapiz: '<path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+  guardar: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
+  mundo: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  chat: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+  mail: '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>',
+  telefono: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"/>',
+  lupa: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  apagado: '<path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>',
   bajar: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
   ajustes: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   subir: '<path d="M12 19V5"/><polyline points="5 12 12 5 19 12"/>',
@@ -1409,10 +1416,10 @@ async function vistaProveedores(){
   const c = document.getElementById('cont');
   c.innerHTML = `<div class="card">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
-      <input id="prov-q" placeholder="Buscar por nombre o CUIT…" value="${_mEscP(_provBusca)}"
+      <input id="prov-q" type="search" placeholder="Buscar por nombre o CUIT…" value="${_mEscP(_provBusca)}"
              style="flex:1;min-width:220px;padding:9px 11px;border:1px solid var(--bd);border-radius:9px;font-size:14px;font-family:inherit;">
-      <button class="btn" onclick="buscarProveedores()">🔍 Buscar</button>
-      <button class="btn" style="background:var(--primary);color:#fff;border-color:var(--primary);" onclick="altaProveedor()">➕ Nuevo proveedor</button>
+      <button class="act gh mini-ico" title="Buscar" onclick="buscarProveedores()">${ico('lupa')}</button>
+      <button class="act mini-ico" title="Nuevo proveedor" onclick="altaProveedor()">${ico('mas')}</button>
     </div>
     <div id="prov-lista"><div class="hint">Cargando…</div></div>
   </div>`;
@@ -1441,29 +1448,28 @@ async function buscarProveedores(){
     }
   } catch(e){ console.warn('arca', e); }
   cont.innerHTML = `
-    <div class="hint" style="margin-bottom:8px;">${_provCache.length} proveedor(es) · ordenados por cuántas facturas les cargamos</div>
-    <table><thead><tr>
+    <div class="mini" style="margin-bottom:8px;">${_provCache.length} proveedor(es) · ordenados por cuántas facturas les cargamos</div>
+    <table class="tb-band"><thead><tr>
       <th>Proveedor</th><th>CUIT</th><th class="num">Facturas</th><th class="num">Total comprado</th>
-      <th>Última</th><th>Condición de pago</th><th>Ficha</th><th></th></tr></thead><tbody>
-    ${_provCache.map((p,i) => `<tr>
-      <td><strong>${_mEscP(p.nombre)}</strong>
-        ${p.es_exterior ? '<span class="chip" style="background:#ede9fe;color:#5b21b6;margin-left:6px;">🌎 Exterior</span>' : ''}
-        ${p.origen === 'manual' ? '<span class="chip" style="background:#f1f5f9;color:#475569;margin-left:6px;">manual</span>' : ''}
-        ${!p.activo ? '<span class="chip" style="background:#fee2e2;color:#991b1b;margin-left:6px;">inactivo</span>' : ''}
-        ${p.copias_mismo_cuit > 1 ? `<div style="font-size:11px;color:#b45309;margin-top:2px;">⚠ Dragonfish tiene ${p.copias_mismo_cuit} fichas con este mismo CUIT — cargá los datos en una sola</div>` : ''}
+      <th>Última</th><th>Condición de pago</th><th class="ctr">Contacto</th><th class="ctr" title="Ficha completa">Ficha</th></tr></thead><tbody>
+    ${_provCache.map((p,i) => `<tr onclick="fichaProveedor(${i})" title="Abrir la ficha del proveedor">
+      <td class="prov" style="white-space:nowrap"><span class="prov-nom"><strong>${_mEscP(p.nombre)}</strong></span>
+        ${p.es_exterior ? `<span class="eico" style="background:#ede9fe;color:#5b21b6" title="Proveedor del exterior">${ico('mundo','s')}</span>` : ''}
+        ${p.origen === 'manual' ? `<span class="eico" style="color:#475569" title="Creado a mano en el módulo">${ico('lapiz','s')}</span>` : ''}
+        ${!p.activo ? `<span class="eico" style="background:#fee2e2;color:#991b1b" title="Inactivo">${ico('apagado','s')}</span>` : ''}
+        ${p.copias_mismo_cuit > 1 ? `<span class="eico" style="background:#fef3c7;color:#b45309" title="Dragonfish tiene ${p.copias_mismo_cuit} fichas con este mismo CUIT: cargá los datos en una sola">${ico('alerta','s')}</span>` : ''}
       </td>
-      <td style="font-variant-numeric:tabular-nums;">${_mEscP(p.cuit || '—')}
-        ${p.arca ? (p.arca.vigente === true ? '<span class="chip" title="ARCA: CUIT vigente" style="background:#dcfce7;color:#166534;margin-left:4px;">ARCA ✓</span>'
-                   : `<span class="chip" title="ARCA: ${_mEscP(p.arca.estado_clave || p.arca.error || 'sin dato')}" style="background:#fee2e2;color:#991b1b;margin-left:4px;">ARCA ⚠</span>`) : ''}</td>
+      <td style="font-variant-numeric:tabular-nums;white-space:nowrap">${_mEscP(p.cuit || '—')}
+        ${p.arca ? (p.arca.vigente === true ? `<span class="eico" title="ARCA: CUIT vigente" style="background:#dcfce7;color:#166534">${ico('ok','s')}</span>`
+                   : `<span class="eico" title="ARCA: ${_mEscP(p.arca.estado_clave || p.arca.error || 'sin dato')}" style="background:#fee2e2;color:#991b1b">${ico('alerta','s')}</span>`) : ''}</td>
       <td class="num">${p.facturas || 0}</td>
       <td class="num">${p.facturas ? _fmtP(p.total_comprado) : '—'}</td>
       <td>${p.ultima_compra ? p.ultima_compra.split('-').reverse().join('/') : '—'}</td>
-      <td>${_mEscP(p.condicion_pago || '—')}
-        ${p.retenciones_excluidas ? `<span class="chip" title="Certificado de exclusión en ${p.retenciones_excluidas} régimen(es)" style="background:#fef3c7;color:#92400e;margin-left:4px;">excl. ${p.retenciones_excluidas}</span>` : ''}
-        ${(p.descuentos||[]).length ? `<span class="chip" title="${_mEscP((p.descuentos||[]).map(d => (d.porcentaje||0)+'% '+(d.descripcion||'')).join(' · '))}" style="background:#dcfce7;color:#166534;margin-left:4px;">${(p.descuentos||[]).length} dto.</span>` : ''}
-        <div style="margin-top:3px;">${_contactoLinks({ whatsapp: p.whatsapp, email: p.email || p.email_op || p.df_email })}</div></td>
-      <td>${p.tiene_ficha ? '✅' : '<span style="color:var(--mut);">sin completar</span>'}</td>
-      <td><button class="btn" onclick="fichaProveedor(${i})">Abrir</button></td>
+      <td style="white-space:nowrap">${_mEscP(p.condicion_pago || '—')}
+        ${p.retenciones_excluidas ? `<span class="eico" title="Certificado de exclusión en ${p.retenciones_excluidas} régimen(es)" style="background:#fef3c7;color:#92400e">${ico('porcentaje','s')}</span>` : ''}
+        ${(p.descuentos||[]).length ? `<span class="eico" title="${(p.descuentos||[]).length} descuento(s): ${_mEscP((p.descuentos||[]).map(d => (d.porcentaje||0)+'% '+(d.descripcion||'')).join(' · '))}" style="background:#dcfce7;color:#166534">${ico('regalo','s')}</span>` : ''}</td>
+      <td class="ctr" style="white-space:nowrap" onclick="event.stopPropagation()">${_contactoIcos({ whatsapp: p.whatsapp, email: p.email || p.email_op || p.df_email })}</td>
+      <td class="ctr">${p.tiene_ficha ? `<span class="eico" style="color:var(--ok)" title="Ficha completa">${ico('ok','s')}</span>` : `<span class="eico" style="color:var(--mut)" title="Ficha sin completar">${ico('lapiz','s')}</span>`}</td>
     </tr>`).join('')}</tbody></table>`;
 }
 
@@ -1474,6 +1480,13 @@ function _waLink(tel){
   if (d.startsWith('15')) d = '11' + d.slice(2);
   if (!d.startsWith('54')) d = '54' + (d.length <= 10 ? '9' : '') + d;
   return 'https://wa.me/' + d;
+}
+// (8-oct, JP) versión compacta para la tabla: solo íconos, el dato en el tooltip
+function _contactoIcos(c){
+  const out = [];
+  if (c.whatsapp) out.push(`<a class="eico" style="background:#dcfce7;color:#166534;cursor:pointer" target="_blank" rel="noopener" href="${_waLink(c.whatsapp)}" title="WhatsApp ${_mEscP(c.whatsapp)}">${ico('chat','s')}</a>`);
+  if (c.email) out.push(`<a class="eico" style="background:#eff6ff;color:#1e40af;cursor:pointer" href="mailto:${_mEscP(c.email)}" title="Mail ${_mEscP(c.email)}">${ico('mail','s')}</a>`);
+  return out.join('') || '<span class="mini">—</span>';
 }
 function _contactoLinks(c){
   const out = [];
@@ -4707,22 +4720,18 @@ function pintarConceptos(){
   const t = concBusca.toLowerCase();
   const lista = CONC_LISTA.filter(x => !t ||
     (x.codigo + ' ' + (x.descripcion||'')).toLowerCase().includes(t));
-  c.innerHTML = `<div class="kpis">
-      <div class="kpi"><div class="lbl">Conceptos</div><div class="val">${CONC_LISTA.length}</div>
-        <div class="sub">${CONC_LISTA.filter(x=>x.activo).length} activos</div></div>
-      <div class="kpi" style="border-left-color:var(--info)"><div class="lbl">Creados a mano</div>
-        <div class="val">${CONC_LISTA.filter(x=>x.origen==='manual').length}</div>
-        <div class="sub">el resto vino del histórico</div></div>
+  // (8-oct, JP) resumen en chips, ayuda en tooltip, alta con "+"
+  c.innerHTML = `<div class="abar">
+      <span class="fchip" style="cursor:default" title="${CONC_LISTA.filter(x=>x.activo).length} activos"><b>${CONC_LISTA.length}</b> conceptos</span>
+      <span class="fchip" style="cursor:default" title="Creados desde el módulo; el resto vino del histórico del Dragonfish">${ico('lapiz','s')} <b>${CONC_LISTA.filter(x=>x.origen==='manual').length}</b> a mano</span>
     </div>
     <div class="card">
-      <h3 style="font-size:15px;margin-bottom:4px">Catálogo de conceptos contables</h3>
-      <p class="mini" style="margin-bottom:11px">Cada concepto es un SKU + su descripción, igual que los artículos
-        del Dragonfish. 🚨 Mientras el Dragonfish siga en uso, todo concepto creado acá hay que darlo de alta
-        también allá como artículo — sino la exportación lo rechaza.</p>
       <div class="filtros">
-        <input type="search" placeholder="Buscar por SKU o descripción…" value="${esc(concBusca)}"
+        <h3 style="font-size:15px;display:flex;align-items:center;gap:8px;margin-right:4px">${ico('etiquetas','s')} Catálogo
+          ${ayuda('Cada concepto es un SKU + su descripción, igual que los artículos del Dragonfish. Mientras el Dragonfish siga en uso, todo concepto creado acá hay que darlo de alta también allá como artículo; si no, la exportación lo rechaza.')}</h3>
+        <input type="search" placeholder="Buscar por SKU o descripción…" value="${esc(concBusca)}" style="flex:1"
                oninput="concBusca=this.value; pintarConceptos()">
-        <button class="act" onclick="toggleAltaConcepto()">➕ Nuevo concepto</button>
+        <button class="act mini-ico" title="Nuevo concepto" onclick="toggleAltaConcepto()">${ico('mas')}</button>
       </div>
       <div id="alta-conc" style="display:none;background:#fff7ed;border:1px solid var(--primary);border-radius:9px;padding:11px;margin-bottom:11px;">
         <div style="display:flex;gap:7px;flex-wrap:wrap;">
@@ -4737,7 +4746,7 @@ function pintarConceptos(){
         <thead><tr><th>SKU</th><th>Descripción</th><th>Alíc.</th><th class="num">Usos</th>
           <th style="text-align:center">Activo</th><th></th></tr></thead>
         <tbody>${lista.slice(0,150).map(x => `<tr class="${x.activo ? '' : 'dim'}" style="${x.activo?'':'opacity:.5'}">
-          <td><b>${esc(x.codigo)}</b>${x.origen==='manual' ? ' <span class="chip" style="background:#dbeafe;color:#1e40af">manual</span>' : ''}</td>
+          <td style="white-space:nowrap"><b>${esc(x.codigo)}</b>${x.origen==='manual' ? ` <span class="mini" title="Creado a mano en el módulo" style="color:#1e40af">${ico('lapiz','s')}</span>` : ''}</td>
           <td><input value="${esc(x.descripcion||'')}" id="cd-${esc(x.codigo)}" style="width:100%;min-width:200px;font-size:13px;padding:6px 8px"></td>
           <td><select id="ca-${esc(x.codigo)}" style="font-size:13px;padding:6px" onchange="if(this.value==='__otra'){const v=prompt('Alícuota de IVA (%)','');if(v===null||isNaN(Number(v.replace(',','.')))){this.value='21';return;}const o=document.createElement('option');o.value=String(Number(v.replace(',','.')));o.textContent=o.value+'%';this.insertBefore(o,this.lastElementChild);this.value=o.value;}">
             ${['21','10.5','27','0'].concat(x.alicuota && !['21','10.5','27','0'].includes(String(x.alicuota)) ? [String(x.alicuota)] : []).map(al=>`<option value="${al}" ${String(x.alicuota)===al?'selected':''}>${al==='0'?'No grav.':al+'%'}</option>`).join('')}
@@ -4746,10 +4755,10 @@ function pintarConceptos(){
           <td class="num">${x.usos_historicos||0}</td>
           <td style="text-align:center"><input type="checkbox" id="cx-${esc(x.codigo)}" ${x.activo?'checked':''}></td>
           <td class="num" style="white-space:nowrap">
-            <button class="act gh" style="font-size:12px;padding:5px 8px" title="Cambiar el SKU y arrastrar todo lo ya contabilizado"
-              onclick="abrirRenombreSKU('${esc(x.codigo)}')">✏ SKU</button>
-            <button class="act gh" style="font-size:12px;padding:5px 10px"
-              onclick="guardarConcepto('${esc(x.codigo)}')">Guardar</button></td>
+            <button class="act gh mini-ico" title="Cambiar el SKU y arrastrar todo lo ya contabilizado"
+              onclick="abrirRenombreSKU('${esc(x.codigo)}')">${ico('lapiz','s')}</button>
+            <button class="act gh mini-ico" title="Guardar los cambios de este renglón"
+              onclick="guardarConcepto('${esc(x.codigo)}')">${ico('guardar','s')}</button></td>
         </tr>`).join('')}</tbody></table></div>
       ${lista.length>150 ? `<p class="mini" style="margin-top:8px">Mostrando 150 de ${lista.length} — afiná la búsqueda.</p>` : ''}
     </div>`;
