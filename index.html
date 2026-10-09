@@ -295,6 +295,12 @@ main{padding:14px;max-width:1250px;margin:0 auto;}
 #prov-modal .pf-aviso{background:#fef3c7;color:#92400e;border-left:3px solid #d97706;border-radius:6px;padding:7px 10px;font-size:12.5px;margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 .pf-sec .pf-body{padding:8px 12px 12px;background:#fff;border-top:1px solid var(--bd);border-radius:0 0 10px 10px;}
 .pf-sec .hint{font-size:12px;color:var(--mut);line-height:1.5;}
+/* (v137) ficha de equivalencia: tres bloques, títulos con ℹ, botón + a la derecha del renglón */
+.eq-sec{border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fff;}
+.eq-sec h4{margin:0 0 8px;font-size:13.5px;display:flex;align-items:center;gap:7px;}
+.eq-sec .eq-cab{display:flex;gap:7px;margin-bottom:3px;}
+.eq-sec .c-linea{margin-bottom:6px;}
+.eq-sec .eq-cand{display:flex;align-items:center;gap:6px;width:100%;text-align:left;margin-bottom:5px;font-size:13px;padding:6px 10px;}
 /* (v134) .btn no tenía estilo: todos los botones de la ficha/alta de proveedores */
 #prov-modal .btn{display:inline-flex;align-items:center;gap:6px;background:#fff;color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:7px 12px;font-size:13px;font-family:inherit;cursor:pointer;text-decoration:none;line-height:1.2;white-space:nowrap;}
 #prov-modal .btn:hover{border-color:var(--primary);color:var(--primary-dark);}
@@ -4134,66 +4140,58 @@ function pintarMapeo(cargando){
     </div>
     <div class="c-body">
       ${cargando ? '<div class="vacio">Buscando parecidos en el catálogo…</div>' : `
-      ${!candidatos.length
-        ? `<div class="alerta">No encontré ningún artículo parecido. Puede que todavía no esté
-             dado de alta en el Dragonfish — en ese caso hay que crearlo primero.</div>`
-        : `<div class="mini" style="margin-bottom:7px">Artículos parecidos del catálogo
-             ${candidatos[0].origen === 'candidato_proveedor' ? 'de este proveedor' : ''}:</div>
-           ${candidatos.map(c => {
+      <!-- (v137, JP) 1º lo importante: a qué SKU nuestro se traduce; textos largos en ℹ -->
+      <div class="eq-sec">
+        <h4>${ico('traducir','s')} Se traduce a nuestro SKU
+          ${ayuda('Escribí o elegí el SKU nuestro. "Unid. por pack" = cuántas unidades de ese SKU trae 1 unidad del proveedor (pack de 2 → 2): así entran al stock las unidades correctas y el precio se controla por unidad. Si el proveedor vende un set que ustedes fraccionan, con el + agregás una fila por cada artículo nuestro y repartís el costo (por ejemplo 0,6 y 0,4): las partes tienen que sumar 100 %.')}
+          ${_packDeTexto(m.descripcion) > 1 ? `<span class="chip" style="background:#f5f3ff;color:#4c1d95;margin-left:auto;cursor:help" title="El proveedor lo describe como pack de ${_packDeTexto(m.descripcion)}. Si nuestro SKU es la unidad suelta (como MINIES o HOTEL2), poné ${_packDeTexto(m.descripcion)} en Unid. por pack. Si nuestro SKU ya es el set entero (como SET X 2 REPASADOR), dejá 1.">📦 pack de ${_packDeTexto(m.descripcion)}</span>` : ''}</h4>
+        <div class="mini eq-cab"><span style="flex:1;min-width:140px">SKU nuestro</span>
+          <span style="width:90px;text-align:right">Unid. por pack</span>
+          ${partesMapeo.length > 1 ? '<span style="width:100px;text-align:right">Parte del costo</span>' : ''}<span style="width:34px"></span></div>
+        ${partesMapeo.map((p,i) => `<div class="c-linea">
+          <input list="dl-skus" value="${esc(p.sku)}" placeholder="SKU nuestro" style="flex:1;min-width:140px"
+                 oninput="partesMapeo[${i}].sku=this.value.split(' ')[0].trim()">
+          <input type="number" step="1" min="1" value="${Number(p.cantidad)||1}" style="width:90px;text-align:right"
+                 title="Cuántas unidades de ESTE SKU trae 1 unidad del proveedor (pack de 2 = 2)"
+                 oninput="partesMapeo[${i}].cantidad=Number(this.value)||1">
+          <input type="number" step="0.01" min="0" max="1" value="${p.proporcion}" style="width:100px;text-align:right;${partesMapeo.length > 1 ? '' : 'display:none'}"
+                 title="Qué parte del costo va a este artículo (0,6 = 60 %)"
+                 oninput="partesMapeo[${i}].proporcion=Number(this.value); pintarSumaMapeo()">
+          ${i === partesMapeo.length - 1
+            ? `<button class="act gh mini-ico" title="Se fracciona en otro artículo nuestro: agrega una fila más" onclick="partesMapeo.push({sku:'',cantidad:1,proporcion:0}); pintarMapeo()">${ico('mas','s')}</button>`
+            : `<button class="act gh mini-ico" title="Sacar esta fila" onclick="partesMapeo.splice(${i},1); pintarMapeo()">${ico('anular','s')}</button>`}
+        </div>`).join('')}
+        <div id="map-suma" class="mini" style="margin-top:4px;${partesMapeo.length > 1 ? '' : 'display:none'}">${
+          okSuma ? '<span style="color:var(--ok)">✓ Las partes del costo suman 100 %.</span>'
+                 : `<span style="color:var(--warn)">⚠ Las partes suman ${Math.round(suma*100)} %, tienen que dar 100 %.</span>`}</div>
+      </div>
+
+      <div class="eq-sec">
+        <h4>${ico('etiquetas','s')} Códigos del proveedor para este mismo artículo
+          ${ayuda('Si el proveedor factura el mismo artículo con más de un código (por ejemplo en blíster y a granel), agregalos con el +: todos se traducen a lo mismo. La descripción es opcional, sirve para reconocerlo.')}</h4>
+        ${_mapeoCodigos().map((k, i) => `<div class="c-linea">
+          <input value="${esc(k.codigo)}" placeholder="código del proveedor" style="width:170px" ${i === 0 && !m._editar ? 'readonly title="Es el código que estás traduciendo"' : ''}
+                 oninput="enMapeo._codigos[${i}].codigo=this.value.trim()">
+          <input value="${esc(k.descripcion)}" placeholder="cómo lo llama él (opcional)" style="flex:1;min-width:160px"
+                 oninput="enMapeo._codigos[${i}].descripcion=this.value">
+          ${i === _mapeoCodigos().length - 1
+            ? `<button class="act gh mini-ico" title="Otro código del proveedor para este mismo artículo" onclick="enMapeo._codigos.push({codigo:'',descripcion:'',ids:[]}); pintarMapeo()">${ico('mas','s')}</button>`
+            : `<button class="act gh mini-ico" title="Sacar este código" onclick="enMapeo._codigos.splice(${i},1); pintarMapeo()">${ico('anular','s')}</button>`}
+        </div>`).join('')}
+      </div>
+
+      <div class="eq-sec">
+        <h4>${ico('lupa','s')} Parecidos en el catálogo${candidatos.length && candidatos[0].origen === 'candidato_proveedor' ? ' de este proveedor' : ''}
+          ${ayuda('Sugerencias por parecido de texto: tocá una y se carga arriba como SKU nuestro. El parecido no entiende de colores ni de talles; los que dan menos de 0,75 conviene mirarlos dos veces, ahí es donde confunde variantes.')}</h4>
+        ${!candidatos.length
+          ? `<div class="mini">No encontré ningún artículo parecido. Puede que todavía no esté dado de alta en el Dragonfish: en ese caso hay que crearlo primero.</div>`
+          : candidatos.map(c => {
              const bueno = Number(c.parecido) >= 0.75;
-             return `<button class="act gh" style="display:block;width:100%;text-align:left;margin-bottom:6px;
-                       border-color:${bueno ? 'var(--ok)' : 'var(--bd)'}"
-                     onclick="elegirSku('${esc(c.sku)}')">
+             return `<button class="act gh eq-cand" style="border-color:${bueno ? 'var(--ok)' : 'var(--bd)'}" onclick="elegirSku('${esc(c.sku)}')">
                <b>${esc(c.sku)}</b> · ${esc(c.descripcion || '')}
-               <span class="mini" style="float:right;color:${bueno ? 'var(--ok)' : 'var(--mut)'}">
-                 ${bueno ? '✓ ' : ''}parecido ${c.parecido}</span></button>`;
+               <span class="mini" style="margin-left:auto;color:${bueno ? 'var(--ok)' : 'var(--mut)'}">${bueno ? '✓ ' : ''}${c.parecido}</span></button>`;
            }).join('')}
-           <p class="mini" style="margin:4px 0 12px">
-             🚨 El parecido es de texto, no entiende de colores ni de talles. Los que dan menos de 0,75
-             conviene mirarlos dos veces: en las pruebas, ahí es donde confunde variantes.</p>`}
-
-      <h4 style="font-size:14px;margin:14px 0 7px">Se traduce a</h4>
-      ${_packDeTexto(m.descripcion) > 1 ? `<div class="alerta" style="background:#f5f3ff;border-left-color:#7c3aed;color:#4c1d95;margin-bottom:8px">
-        📦 El proveedor lo describe como pack de <b>${_packDeTexto(m.descripcion)}</b>. Si nuestro SKU es la unidad suelta
-        (como MINIES o HOTEL2), poné <b>${_packDeTexto(m.descripcion)}</b> en "Unid. por pack". Si nuestro SKU ya es el set
-        entero (como SET X 2 REPASADOR), dejá 1.</div>` : ''}
-      <div class="mini" style="display:flex;gap:7px;margin-bottom:3px"><span style="flex:1;min-width:140px">SKU nuestro</span>
-        <span style="width:90px;text-align:right" title="Cuántas unidades nuestras trae 1 unidad del proveedor">Unid. por pack</span>
-        ${partesMapeo.length > 1 ? '<span style="width:110px;text-align:right">Parte del costo</span>' : ''}</div>
-      ${partesMapeo.map((p,i) => `<div class="c-linea">
-        <input list="dl-skus" value="${esc(p.sku)}" placeholder="SKU nuestro" style="flex:1;min-width:140px"
-               oninput="partesMapeo[${i}].sku=this.value.split(' ')[0].trim()">
-        <input type="number" step="1" min="1" value="${Number(p.cantidad)||1}" style="width:90px;text-align:right"
-               title="Cuántas unidades de ESTE SKU trae 1 unidad del proveedor (pack de 2 = 2). Con esto entran al stock las unidades correctas y el precio se controla por unidad."
-               oninput="partesMapeo[${i}].cantidad=Number(this.value)||1">
-        <input type="number" step="0.01" min="0" max="1" value="${p.proporcion}" style="width:110px;text-align:right;${partesMapeo.length > 1 ? '' : 'display:none'}"
-               title="Qué parte del costo va a este artículo"
-               oninput="partesMapeo[${i}].proporcion=Number(this.value); pintarSumaMapeo()">
-        ${partesMapeo.length > 1
-          ? `<button class="act gh" onclick="partesMapeo.splice(${i},1); pintarMapeo()">✕</button>` : ''}
-      </div>`).join('')}
-      <button class="act gh" style="font-size:12.5px;padding:5px 10px"
-              onclick="partesMapeo.push({sku:'',cantidad:1,proporcion:0}); pintarMapeo()">
-        + Se fracciona en otro artículo</button>
-      <div id="map-suma" class="mini" style="margin-top:7px">${
-        okSuma ? '<span style="color:var(--ok)">✓ Las partes del costo suman 100 %.</span>'
-               : `<span style="color:var(--warn)">⚠ Las partes suman ${Math.round(suma*100)} %, tienen que dar 100 %.</span>`}</div>
-      <p class="mini" style="margin-top:9px">
-        Si ellos venden un set que ustedes fraccionan, agregá una fila por cada artículo nuestro
-        y repartí el costo. Por ejemplo 0,6 y 0,4 si uno vale más que el otro.</p>
-
-      <h4 style="font-size:14px;margin:16px 0 4px">Códigos del proveedor para este mismo artículo</h4>
-      <p class="mini" style="margin:0 0 7px">Si el proveedor lo factura con más de un código (por ejemplo en blíster y a granel),
-        agregalos acá: todos se traducen a lo mismo.</p>
-      ${_mapeoCodigos().map((k, i) => `<div class="c-linea">
-        <input value="${esc(k.codigo)}" placeholder="código del proveedor" style="width:170px" ${i === 0 && !m._editar ? 'readonly title="Es el código que estás traduciendo"' : ''}
-               oninput="enMapeo._codigos[${i}].codigo=this.value.trim()">
-        <input value="${esc(k.descripcion)}" placeholder="cómo lo llama él (opcional)" style="flex:1;min-width:160px"
-               oninput="enMapeo._codigos[${i}].descripcion=this.value">
-        ${_mapeoCodigos().length > 1 ? `<button class="act gh" onclick="enMapeo._codigos.splice(${i},1); pintarMapeo()" title="Sacar este código">✕</button>` : ''}
-      </div>`).join('')}
-      <button class="act gh" style="font-size:12.5px;padding:5px 10px"
-              onclick="enMapeo._codigos.push({codigo:'',descripcion:'',ids:[]}); pintarMapeo()">+ Otro código del proveedor</button>
+      </div>
       `}
     </div>
     <div class="c-pie">
@@ -5283,6 +5281,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=3"></script>
 <script src="juegos.js?v=5"></script>
-<script src="manual.js?v=70"></script>
+<script src="manual.js?v=71"></script>
 </body>
 </html>
