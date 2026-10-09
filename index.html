@@ -3948,20 +3948,28 @@ async function guardarRegimenNuevo(){
 //  cada una con su parte del costo, y las partes tienen que sumar 100 %.
 // ═══════════════════════════════════════════════════════════════════════
 let PENDIENTES = [], enMapeo = null, partesMapeo = [], candidatos = [], EQUIV_HECHAS = [];
+// (v138, JP) descartados ("no es un artículo"), filtro por proveedor y sugerencias en la fila
+let EQ_IGNORADOS = [], EQ_PROV = '', EQ_VER_IGNORADOS = false, _eqSugCargando = false;
+const _eqClaveIgn = r => (r.cuit || '') + '|' + (r.codigo_proveedor || '') + '|' + (r.codigo_proveedor ? '' : String(r.descripcion || '').toUpperCase().trim());
 
 async function vistaEquivalencias(){
   const c = document.getElementById('cont');
   c.innerHTML = '<div class="vacio">Buscando artículos sin traducir…</div>';
 
-  const [pend, hechas] = await Promise.all([
+  const [pend, hechas, ign, usoR] = await Promise.all([
     sb.from('compras_renglones')
       .select('codigo_proveedor,descripcion,cantidad,importe,documento_id,compras_documentos(cuit_emisor,proveedor_nombre)')
       .is('sku', null).limit(500),
     sb.from('compras_equivalencias')
       .select('id,cuit_proveedor,codigo_proveedor,descripcion_proveedor,sku,cantidad_por_unidad,proporcion_costo,veces_usada,creada_por,creada_at')
       .order('creada_at', {ascending:false}).limit(600),
+    sb.from('compras_equiv_ignorados').select('id,cuit_proveedor,codigo_proveedor,descripcion_clave,descripcion,motivo,creado_por,creado_at').order('creado_at', {ascending:false}),
+    sb.rpc('compras_equiv_uso'),   // (v138) uso real: veces_usada nunca se incrementó, se cuenta en vivo
   ]);
+  const uso = {}; (usoR.error ? [] : (usoR.data || [])).forEach(u => { uso[u.cuit_proveedor + '|' + (u.codigo_proveedor || '') + '|' + (u.descripcion_clave || '') + '|' + u.sku] = Number(u.renglones) || 0; });
   if (pend.error){ c.innerHTML = `<div class="alerta">${esc(pend.error.message)}</div>`; return; }
+  EQ_IGNORADOS = ign.error ? [] : (ign.data || []);
+  const ignSet = new Set(EQ_IGNORADOS.map(x => x.cuit_proveedor + '|' + (x.codigo_proveedor || '') + '|' + (x.descripcion_clave || '')));
 
   // un renglón por código distinto: el trabajo es por código, no por factura
   const porCodigo = {};
@@ -3971,6 +3979,7 @@ async function vistaEquivalencias(){
     if (!porCodigo[k]) porCodigo[k] = {...r, cuit: d.cuit_emisor, prov: d.proveedor_nombre, veces: 0};
     porCodigo[k].veces++;
   });
+  Object.values(porCodigo).forEach(r => { r.ignorado = ignSet.has(_eqClaveIgn(r)); });
   PENDIENTES = Object.values(porCodigo).sort((a,b) => b.veces - a.veces);
   // Una equivalencia = un código del proveedor (puede tener varias partes si se fracciona)
   const grupos = {};
@@ -3984,8 +3993,9 @@ async function vistaEquivalencias(){
   const familias = {};
   Object.values(grupos).forEach(g => {
     const firma = g.cuit + '|' + g.partes.map(p => `${p.sku}:${Number(p.cantidad_por_unidad)||1}:${Number(p.proporcion_costo)||1}`).sort().join('+');
-    const fam = familias[firma] = familias[firma] || {...g, codigos: []};
+    const fam = familias[firma] = familias[firma] || {...g, codigos: [], usada: 0};
     fam.codigos.push({codigo: g.codigo_proveedor, descripcion: g.descripcion, ids: g.partes.map(p => p.id), creada_at: g.creada_at});
+    fam.usada += g.partes.reduce((a, p) => a + (uso[g.cuit + '|' + (g.codigo_proveedor || '') + '|' + (g.codigo_proveedor ? '' : (g.descripcion || '').toUpperCase().trim()) + '|' + p.sku] || 0), 0);
     if (g.creada_at > fam.creada_at) fam.creada_at = g.creada_at;
   });
   EQUIV_HECHAS = Object.values(familias).map(fm => { fm.codigos.sort((a, b) => String(a.creada_at).localeCompare(String(b.creada_at))); return fm; });
@@ -4003,35 +4013,50 @@ let EQ_BUSCA = '';
 function _eqCoincide(txt){ const q = EQ_BUSCA.trim().toLowerCase(); return !q || q.split(/\s+/).every(p => txt.includes(p)); }
 function _pintarEquivalencias(){
   const c = document.getElementById('cont'); if (!c) return;
-  const PEND = PENDIENTES.filter(p => _eqCoincide([p.prov, p.cuit, p.codigo_proveedor, p.descripcion].join(' ').toLowerCase()));
-  const HECHAS = EQUIV_HECHAS.filter(g => _eqCoincide([g.prov, g.cuit, ...(g.codigos || []).map(k => k.codigo + ' ' + k.descripcion), ...g.partes.map(p => p.sku)].join(' ').toLowerCase()));
-  const hayFiltro = !!EQ_BUSCA.trim();
+  const PEND = PENDIENTES.filter(p => (EQ_VER_IGNORADOS ? p.ignorado : !p.ignorado) && (!EQ_PROV || p.cuit === EQ_PROV) && _eqCoincide([p.prov, p.cuit, p.codigo_proveedor, p.descripcion].join(' ').toLowerCase()));
+  const HECHAS = EQUIV_HECHAS.filter(g => (!EQ_PROV || g.cuit === EQ_PROV) && _eqCoincide([g.prov, g.cuit, ...(g.codigos || []).map(k => k.codigo + ' ' + k.descripcion), ...g.partes.map(p => p.sku)].join(' ').toLowerCase()));
+  const hayFiltro = !!EQ_BUSCA.trim() || !!EQ_PROV;
+  const nIgn = PENDIENTES.filter(p => p.ignorado).length, nPend = PENDIENTES.length - nIgn;
+  // proveedores con algo pendiente o cargado, para el desplegable
+  const provs = {}; PENDIENTES.forEach(p => { if (p.cuit) provs[p.cuit] = p.prov || p.cuit; }); EQUIV_HECHAS.forEach(g => { if (g.cuit && !provs[g.cuit]) provs[g.cuit] = g.prov || g.cuit; });
+  const provOpts = Object.entries(provs).sort((a, b) => a[1].localeCompare(b[1]));
 
   // (8-oct, JP) resumen en chips, buscador en la misma barra, importación como ícono, ayudas en tooltip
   c.innerHTML = `<div class="abar">
-      <span class="fchip" style="cursor:default;color:#92400e" title="Códigos del proveedor que todavía no tienen nuestro SKU: se resuelven una sola vez">${ico('alerta','s')} <b>${PENDIENTES.length}</b> sin traducir</span>
+      <span class="fchip" style="cursor:default;color:#92400e" title="Códigos del proveedor que todavía no tienen nuestro SKU: se resuelven una sola vez">${ico('alerta','s')} <b>${nPend}</b> sin traducir</span>
       <span class="fchip" style="cursor:default;color:#166534" title="Equivalencias cargadas: ya funcionan solas">${ico('ok','s')} <b>${EQUIV_HECHAS.length}</b> cargadas</span>
+      ${nIgn ? `<button class="fchip ${EQ_VER_IGNORADOS ? 'on' : ''}" type="button" title="Renglones marcados como 'no es un artículo' (servicios, cargos): no se traducen. Tocá para verlos y, si hace falta, volverlos a la lista." onclick="EQ_VER_IGNORADOS=!EQ_VER_IGNORADOS;_pintarEquivalencias()">${ico('anular','s')} <b>${nIgn}</b> no son artículos</button>` : ''}
+      <select id="eq-prov" title="Ver solo un proveedor" style="padding:7px 10px;border:1px solid var(--bd);border-radius:999px;font-size:13px;font-family:inherit;max-width:220px;${EQ_PROV ? 'border-color:var(--primary);background:#fff7ed;font-weight:700' : ''}"
+              onchange="EQ_PROV=this.value;_pintarEquivalencias()">
+        <option value="">Todos los proveedores</option>
+        ${provOpts.map(([cu, no]) => `<option value="${esc(cu)}" ${EQ_PROV === cu ? 'selected' : ''}>${esc(no)}</option>`).join('')}</select>
       <input id="eq-busca" type="search" value="${esc(EQ_BUSCA)}" placeholder="Buscar por proveedor, código, descripción o SKU nuestro…"
              style="flex:1;min-width:220px;padding:8px 11px;border:1px solid var(--bd);border-radius:999px;font-size:13.5px;font-family:inherit"
              oninput="EQ_BUSCA=this.value; clearTimeout(window._eqT); window._eqT=setTimeout(()=>{const p=this.selectionStart; _pintarEquivalencias(); const i=document.getElementById('eq-busca'); if(i){i.focus(); try{i.setSelectionRange(p,p);}catch(_){}}}, 350)">
-      ${hayFiltro ? `<span class="mini">${PEND.length} · ${HECHAS.length}</span><button class="act gh mini-ico" title="Limpiar la búsqueda" onclick="EQ_BUSCA='';_pintarEquivalencias()">${ico('anular','s')}</button>` : ''}
+      ${hayFiltro ? `<span class="mini">${PEND.length} · ${HECHAS.length}</span><button class="act gh mini-ico" title="Limpiar la búsqueda y el proveedor" onclick="EQ_BUSCA='';EQ_PROV='';_pintarEquivalencias()">${ico('anular','s')}</button>` : ''}
       <button class="act mini-ico" title="Importar desde Excel: cargá la lista de artículos del proveedor de una vez; el sistema propone nuestro SKU fila por fila y vos revisás antes de guardar" onclick="abrirImportarEquiv()">${ico('excel')}</button>
     </div>
 
     <div class="card">
-      <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('traducir','s')} Artículos que el proveedor nombra distinto
-        ${ayuda('Familia García Regueira comparte catálogo con nosotros, así que sus facturas no aparecen acá: el código de ellos ya es nuestro SKU. Los que sí aparecen son los del resto de los proveedores. Cada código se resuelve una sola vez y de ahí en más el sistema lo traduce solo.')}</h3>
+      <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico(EQ_VER_IGNORADOS ? 'anular' : 'traducir','s')} ${EQ_VER_IGNORADOS ? 'Marcados como "no es un artículo"' : 'Artículos que el proveedor nombra distinto'}
+        ${ayuda(EQ_VER_IGNORADOS ? 'Renglones de facturas que no son mercadería (servicios, cargos, comisiones): no se traducen a ningún SKU. Con ↩ vuelven a la lista de pendientes.' : 'Familia García Regueira comparte catálogo con nosotros, así que sus facturas no aparecen acá: el código de ellos ya es nuestro SKU. Los que sí aparecen son los del resto de los proveedores. Cada código se resuelve una sola vez y de ahí en más el sistema lo traduce solo. La columna Sugerencia es lo que el sistema propone por parecido de texto: con ✓ se acepta sin abrir la ficha (solo las de 0,75 o más; las otras conviene mirarlas). Lo que no es un artículo (un servicio, un cargo) se saca de la lista con ⊘.')}</h3>
       ${!PEND.length
-        ? `<div class="vacio">${hayFiltro ? 'Nada sin traducir que coincida con la búsqueda.' : 'No hay artículos esperando traducción.'}</div>`
+        ? `<div class="vacio">${hayFiltro ? 'Nada que coincida con la búsqueda.' : EQ_VER_IGNORADOS ? 'No hay renglones marcados.' : 'No hay artículos esperando traducción.'}</div>`
         : `<div style="overflow-x:auto"><table class="tb-band">
             <thead><tr><th>Proveedor</th><th>Su código</th><th>Cómo lo llama él</th>
-              <th class="num">Veces</th><th></th></tr></thead>
-            <tbody>${PEND.slice(0,200).map(p => { const i = PENDIENTES.indexOf(p); return `<tr onclick="abrirMapeo(${i})" title="Traducir a nuestro SKU">
+              <th class="num">Veces</th>${EQ_VER_IGNORADOS ? '<th>Marcado</th>' : '<th>Sugerencia</th>'}<th></th></tr></thead>
+            <tbody>${PEND.slice(0,200).map(p => { const i = PENDIENTES.indexOf(p); return `<tr ${EQ_VER_IGNORADOS ? '' : `onclick="abrirMapeo(${i})" title="Traducir a nuestro SKU"`}>
               <td class="prov"><span class="prov-nom">${esc(p.prov || p.cuit || '—')}</span></td>
               <td><code>${esc(p.codigo_proveedor || '—')}</code></td>
               <td>${esc(p.descripcion || '')}</td>
               <td class="num">${p.veces}</td>
-              <td class="num"><button class="act mini-ico" title="Traducir a nuestro SKU" onclick="event.stopPropagation(); abrirMapeo(${i})">${ico('traducir','s')}</button></td>
+              ${EQ_VER_IGNORADOS
+                ? `<td class="mini">${(x => x ? `${_fechaTs(x.creado_at)} · ${esc(x.creado_por || '')}` : '')(EQ_IGNORADOS.find(x => x.cuit_proveedor + '|' + (x.codigo_proveedor || '') + '|' + (x.descripcion_clave || '') === _eqClaveIgn(p)))}</td>
+                   <td class="num" onclick="event.stopPropagation()"><button class="act gh mini-ico" title="Volver a la lista de pendientes" onclick="restaurarIgnorado(${i})">↩</button></td>`
+                : `<td id="sug-${i}" onclick="event.stopPropagation()">${_eqSugCelda(p, i)}</td>
+                   <td class="num" style="white-space:nowrap" onclick="event.stopPropagation()">
+                     <button class="act mini-ico" title="Traducir a nuestro SKU (abre la ficha)" onclick="abrirMapeo(${i})">${ico('traducir','s')}</button>
+                     <button class="act gh mini-ico" title="No es un artículo (servicio, cargo, comisión): sacarlo de la lista" onclick="ignorarPendiente(${i})">${ico('anular','s')}</button></td>`}
             </tr>`; }).join('')}</tbody></table></div>`}
     </div>
 
@@ -4040,12 +4065,13 @@ function _pintarEquivalencias(){
         ${ayuda('Con el lápiz se corrige una traducción mal hecha: los renglones de facturas y los remitos que todavía no se importaron pasan solos al SKU nuevo. Lo que ya se importó al Dragonfish no se toca. Si el proveedor factura el mismo artículo con más de un código (en blíster, a granel…), desde el lápiz se le agregan los otros códigos.')}</h3>
       <div style="overflow-x:auto"><table class="tb-band">
         <thead><tr><th>Proveedor</th><th>Su código</th><th>Cómo lo llama él</th><th>Nuestro SKU</th>
-          <th>Cargada</th><th></th></tr></thead>
+          <th class="num" title="Cuántos renglones de facturas y remitos tradujo esta equivalencia">Usada</th><th>Cargada</th><th></th></tr></thead>
         <tbody>${HECHAS.map(g => { const i = EQUIV_HECHAS.indexOf(g); return `<tr onclick="editarEquivalencia(${i})" title="Editar la equivalencia">
           <td class="prov"><span class="prov-nom">${esc(g.prov || g.cuit)}</span></td>
           <td>${g.codigos.map(k => `<code>${esc(k.codigo || '—')}</code>`).join('<br>')}${g.codigos.length > 1 ? ` <span class="chip" style="background:#e0f2fe;color:#075985" title="El proveedor factura este mismo artículo con ${g.codigos.length} códigos distintos">${g.codigos.length} códigos</span>` : ''}</td>
           <td>${g.codigos.map(k => esc(k.descripcion || '')).join('<br>')}</td>
           <td>${g.partes.map(h => `<b>${esc(h.sku)}</b>${Number(h.cantidad_por_unidad) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="1 unidad del proveedor = ${Number(h.cantidad_por_unidad)} de este SKU">📦 ×${Number(h.cantidad_por_unidad)}</span>` : ''}${g.partes.length > 1 ? ' <span class="mini">' + Math.round((h.proporcion_costo || 1) * 100) + ' %</span>' : ''}`).join('<br>')}</td>
+          <td class="num" style="${g.usada ? '' : 'color:var(--mut)'}" title="${g.usada ? g.usada + ' renglón(es) traducidos con esta equivalencia' : 'Todavía no tradujo ningún renglón'}">${g.usada || '—'}</td>
           <td class="mini" title="${esc(g.creada_por || '')}">${_fechaTs(g.creada_at)}</td>
           <td class="num" style="white-space:nowrap" onclick="event.stopPropagation()">
             <button class="act gh mini-ico" title="Editar: corregir el SKU o agregar otro código del proveedor" onclick="editarEquivalencia(${i})">${ico('lapiz','s')}</button>
@@ -4053,6 +4079,57 @@ function _pintarEquivalencias(){
         </tr>`; }).join('')}</tbody></table></div>
       ${!HECHAS.length ? '<div class="vacio">Ninguna equivalencia coincide con la búsqueda.</div>' : ''}
     </div>` : ''}`;
+  if (!EQ_VER_IGNORADOS) _eqCargarSugerencias(PEND.slice(0,200));
+}
+
+// (v138, JP) Sugerencia en la fila: mejor candidato del sistema; ✓ acepta sin abrir la ficha (parecido ≥ 0,75)
+function _eqSugCelda(p, i){
+  if (p.sug === undefined) return '<span class="mini">…</span>';
+  if (!p.sug) return '<span class="mini">sin parecido</span>';
+  const bueno = Number(p.sug.parecido) >= 0.75, pack = _packDeTexto(p.descripcion) > 1;
+  return `<span style="white-space:nowrap"><b>${esc(p.sug.sku)}</b> <span class="mini" style="color:${bueno ? 'var(--ok)' : 'var(--mut)'}" title="${esc(p.sug.descripcion || '')} · parecido ${p.sug.parecido}">${p.sug.parecido}</span>
+    ${bueno ? `<button class="act mini-ico" style="background:var(--ok);margin-left:4px" title="${pack ? 'Aceptar (abre la ficha porque el proveedor lo describe como pack: hay que decir cuántas unidades trae)' : 'Aceptar: ' + esc(p.codigo_proveedor || p.descripcion) + ' → ' + esc(p.sug.sku)}" onclick="aceptarSugerencia(${i})">${ico('ok','s')}</button>` : ''}</span>`;
+}
+async function _eqCargarSugerencias(lista){
+  if (_eqSugCargando) return; _eqSugCargando = true;
+  try {
+    const falta = lista.filter(p => p.sug === undefined);
+    for (let k = 0; k < falta.length; k += 15){
+      const lote = falta.slice(k, k + 15);
+      const {data, error} = await sb.rpc('compras_sugerir_pendientes', {p_items: lote.map(p => ({cuit: p.cuit, codigo: p.codigo_proveedor || '', descripcion: p.descripcion || ''}))});
+      if (error){ console.warn('sugerencias', error.message); break; }
+      lote.forEach(p => { p.sug = null; });
+      (data || []).forEach(x => { const p = lote[x.idx]; if (p) p.sug = {sku: x.sku, descripcion: x.descripcion, parecido: x.parecido, origen: x.origen}; });
+      lote.forEach(p => { const i = PENDIENTES.indexOf(p), td = document.getElementById('sug-' + i); if (td) td.innerHTML = _eqSugCelda(p, i); });
+      if (!document.getElementById('eq-busca')) break;   // se fue de la pantalla
+    }
+  } finally { _eqSugCargando = false; }
+}
+async function aceptarSugerencia(i){
+  const p = PENDIENTES[i]; if (!p || !p.sug) return;
+  if (_packDeTexto(p.descripcion) > 1){ abrirMapeo(i); return; }
+  const r = await sb.rpc('compras_guardar_equivalencia', {p_cuit: p.cuit, p_codigo: (p.codigo_proveedor || '').trim() || null,
+    p_descripcion: (p.descripcion || '').trim() || null, p_partes: [{sku: p.sug.sku, cantidad: 1, proporcion: 1}]});
+  if (r.error){ alert('No se pudo guardar: ' + r.error.message); return; }
+  vistaEquivalencias();
+}
+async function ignorarPendiente(i){
+  const p = PENDIENTES[i]; if (!p) return;
+  const motivo = prompt(`"${p.descripcion || p.codigo_proveedor}" de ${p.prov || p.cuit}\n\nSe saca de la lista porque no es un artículo. ¿Qué es? (opcional: servicio, cargo, comisión…)`, '');
+  if (motivo === null) return;
+  const {error} = await sb.from('compras_equiv_ignorados').upsert({cuit_proveedor: p.cuit, codigo_proveedor: p.codigo_proveedor || '',
+    descripcion_clave: p.codigo_proveedor ? '' : String(p.descripcion || '').toUpperCase().trim(), descripcion: p.descripcion || null, motivo: motivo.trim() || null},
+    {onConflict: 'cuit_proveedor,codigo_proveedor,descripcion_clave'});
+  if (error){ alert('No se pudo marcar: ' + error.message); return; }
+  vistaEquivalencias();
+}
+async function restaurarIgnorado(i){
+  const p = PENDIENTES[i]; if (!p) return;
+  const x = EQ_IGNORADOS.find(x => x.cuit_proveedor + '|' + (x.codigo_proveedor || '') + '|' + (x.descripcion_clave || '') === _eqClaveIgn(p));
+  if (!x) return;
+  const {error} = await sb.from('compras_equiv_ignorados').delete().eq('id', x.id);
+  if (error){ alert('No se pudo: ' + error.message); return; }
+  vistaEquivalencias();
 }
 
 // Desde el renglón de una factura (modal de control o resumen): mismo modal de 🔗 Equivalencias.
@@ -5281,6 +5358,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=3"></script>
 <script src="juegos.js?v=5"></script>
-<script src="manual.js?v=71"></script>
+<script src="manual.js?v=72"></script>
 </body>
 </html>
