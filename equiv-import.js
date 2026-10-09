@@ -44,6 +44,17 @@ function _eqiElegirProv(v){
   EQI.prov = p; EQI.items = []; _eqiPintar();
 }
 
+// (v139, JP) Excel modelo: solo los títulos, en el orden que el importador espera. Columnas B y D son de ayuda, no se importan.
+async function _eqiPlantilla(){
+  if (!window.XLSX) await _cargarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+  const aoa = [['Código del proveedor', 'Descripción del proveedor', 'Nuestro SKU', 'Nuestra descripción'],
+               ['21109/074', 'POLYWOOD CUCH. P/MESA BLX12 ROJ', 'POLY1', 'CUCHARA POLYWOOD MESA ROJA (ejemplo: borrá esta fila)']];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch: 22}, {wch: 42}, {wch: 16}, {wch: 42}];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Equivalencias');
+  XLSX.writeFile(wb, 'Modelo equivalencias' + (EQI && EQI.prov ? ' - ' + String(EQI.prov.nombre || '').replace(/[\/:*?"<>|]/g, '') : '') + '.xlsx');
+}
+
 async function _eqiArchivo(inp){
   const f = inp.files && inp.files[0]; if (!f) return;
   try {
@@ -218,17 +229,22 @@ function _eqiPintar(cargando){
   let cuerpo;
   if (cargando) cuerpo = `<div class="vacio" id="eqi-prog">${esc(cargando)}</div>`;
   else if (!EQI.items.length) cuerpo = `
-    <p class="mini" style="margin-bottom:10px">Sirve para cargar de una vez las equivalencias de todos los artículos de un
-      proveedor. Solo importan dos columnas: <b>cómo factura el proveedor</b> (su código de artículo o su descripción,
-      tal cual aparece en la factura) y <b>nuestro SKU</b>. Si el Excel no trae nuestro SKU, el sistema propone uno
-      por parecido y vos revisás antes de guardar.</p>
-    <div class="c-fila" style="margin-top:0;border-top:none;padding-top:0">
+    <!-- (v139, JP) explicación en ℹ, botón de archivo prolijo y plantilla Excel para descargar -->
+    <div class="c-fila" style="margin-top:0;border-top:none;padding-top:0;align-items:flex-end">
       <label style="flex:1;min-width:260px">1 · Proveedor
         <input list="eqi-dl-provs" value="${esc(prov ? _pedProvTxt(prov) : '')}" placeholder="Escribí el nombre o el CUIT…"
                onchange="_eqiElegirProv(this.value)">
         <datalist id="eqi-dl-provs">${(PED_PROVS||[]).map(p => `<option value="${esc(_pedProvTxt(p))}">`).join('')}</datalist></label>
       <label style="flex:1;min-width:220px">2 · Archivo (Excel o CSV)
-        <input type="file" accept=".xlsx,.xls,.csv,.ods" onchange="_eqiArchivo(this)"></label>
+        <span style="display:flex;gap:6px;align-items:center">
+          <input type="file" id="eqi-file" accept=".xlsx,.xls,.csv,.ods" style="display:none" onchange="_eqiArchivo(this)">
+          <button class="act" type="button" style="white-space:nowrap" onclick="document.getElementById('eqi-file').click()">${ico('clip','s')} Elegir archivo</button>
+          <span class="mini" id="eqi-file-nom" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${EQI.archivo ? esc(EQI.archivo) : 'ningún archivo elegido'}</span>
+        </span></label>
+      <span style="display:flex;gap:6px;align-items:center;padding-bottom:1px">
+        <button class="act gh" type="button" style="white-space:nowrap" title="Baja un Excel vacío con las cuatro columnas en el orden correcto: Código del proveedor · Descripción del proveedor · Nuestro SKU · Nuestra descripción" onclick="_eqiPlantilla()">${ico('excel','s')} Modelo de Excel</button>
+        ${typeof ayuda === 'function' ? ayuda('Sirve para cargar de una vez las equivalencias de todos los artículos de un proveedor. Solo importan dos columnas: cómo factura el proveedor (su código de artículo o su descripción, tal cual aparece en la factura) y nuestro SKU. Si el Excel no trae nuestro SKU, el sistema propone uno por parecido y vos revisás antes de guardar. Usá el Modelo de Excel para no mezclar el código del proveedor con su descripción en una misma celda.') : ''}
+      </span>
     </div>
     ${EQI.filas.length ? `
       <div class="mini" style="margin-top:12px">📄 <b>${esc(EQI.archivo)}</b> · ${nDatos} filas con datos</div>
