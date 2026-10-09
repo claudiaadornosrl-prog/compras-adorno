@@ -291,6 +291,8 @@ main{padding:14px;max-width:1250px;margin:0 auto;}
 .pf-sec[open]>summary .chev{transform:rotate(90deg);}
 .pf-sec>summary .res{margin-left:auto;font-weight:500;color:var(--mut);font-size:12px;text-align:right;}
 .pf-sec>summary .res.ok{color:#166534;}
+.pf-sec>summary .res.warn{color:#b45309;font-weight:700;}
+#prov-modal .pf-aviso{background:#fef3c7;color:#92400e;border-left:3px solid #d97706;border-radius:6px;padding:7px 10px;font-size:12.5px;margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 .pf-sec .pf-body{padding:8px 12px 12px;background:#fff;border-top:1px solid var(--bd);border-radius:0 0 10px 10px;}
 .pf-sec .hint{font-size:12px;color:var(--mut);line-height:1.5;}
 /* (v134) .btn no tenía estilo: todos los botones de la ficha/alta de proveedores */
@@ -1070,7 +1072,15 @@ async function _opCalcular(){
     const cu = await sb.from('tesoreria_cuentas').select('id,nombre,tipo,moneda,local,pagadora').eq('activa', true).eq('pagadora', true).order('orden_display');
     OP_CUENTAS = cu.error ? [] : (cu.data || []);
   }
-  const av = data.avisos || [], pp = data.pagos_posibles || [];
+  const av = [...(data.avisos || [])], pp = data.pagos_posibles || [];
+  // (v135) constancia de ARCA del proveedor: vieja (> 6 meses), no vigente o nunca consultada
+  try {
+    const ac = await sb.from('compras_arca_consultas').select('consultado_at,vigente,estado_clave').eq('cuit', String(opSel||'').replace(/\D/g,'')).order('consultado_at', {ascending:false}).limit(1);
+    const c = (ac.data || [])[0], m = _mesesDesde(c?.consultado_at);
+    if (!c) av.push('Nunca se consultó la constancia de ARCA de este proveedor. Hacelo desde su ficha (🏢 Proveedores) antes de pagar.');
+    else if (m > 6) av.push(`La constancia de ARCA de este proveedor tiene ${Math.floor(m)} meses: conviene volver a consultarla desde su ficha antes de pagar (la condición de IVA y la vigencia pueden haber cambiado).`);
+    else if (c.vigente !== true) av.push(`ARCA informa este CUIT como NO vigente (${c.estado_clave || 'sin estado'}). Revisalo antes de pagar.`);
+  } catch(_){}
   cont.innerHTML = `
     ${pp.length ? `<div class="alerta" style="margin-bottom:10px;border-left:4px solid #b45309">
        <b>⚠ Puede que este pago YA esté hecho.</b><br>
@@ -1594,7 +1604,15 @@ const _h4P = t => `<h4 style="margin:18px 0 8px;font-size:13px;letter-spacing:.4
 // (v133) apartado plegable de la ficha: título + resumen a la derecha (se actualiza con _resP)
 const _secP = (id, icon, titulo, resumen, body, abierto) =>
   `<details class="pf-sec" id="sec-${id}" ${abierto ? 'open' : ''}><summary>${ico('chevron','s chev')}${ico(icon,'s')} ${titulo}<span class="res" id="res-${id}">${resumen}</span></summary><div class="pf-body">${body}</div></details>`;
-function _resP(id, txt, ok){ const r = document.getElementById('res-'+id); if (r){ r.textContent = txt; r.classList.toggle('ok', !!ok); } }
+function _resP(id, txt, ok, warn){ const r = document.getElementById('res-'+id); if (r){ r.textContent = txt; r.classList.toggle('ok', !!ok && !warn); r.classList.toggle('warn', !!warn); } }
+// (v135) meses desde una fecha (para la antigüedad de la constancia de ARCA)
+const _mesesDesde = d => d ? (Date.now() - new Date(d).getTime()) / 2592000000 : null;
+// (v135) CBU: 22 dígitos y dos dígitos verificadores (módulo 10, pesos 7-1-3-9)
+function cbuValido(cbu){
+  const d = String(cbu||'').replace(/\D/g,''); if (d.length !== 22) return false;
+  const dv = (str, pesos) => { let t = 0; for (let i = 0; i < str.length; i++) t += Number(str[i]) * pesos[i % pesos.length]; return (10 - t % 10) % 10; };
+  return dv(d.slice(0,7), [7,1,3,9,7,1,3]) === Number(d[7]) && dv(d.slice(8,21), [3,9,7,1,3,9,7,1,3,9,7,1,3]) === Number(d[21]);
+}
 const _nP = (n, uno, varios) => n + ' ' + (n === 1 ? uno : varios);
 
 function _renderContactos(){
@@ -1662,6 +1680,8 @@ async function fichaProveedor(i){
   _fContactos = JSON.parse(JSON.stringify(p.contactos || []));
   _fDescuentos = JSON.parse(JSON.stringify(p.descuentos || []));
   _fRet = [];
+  // (v135) ARCA ↔ ficha: la condición de IVA que informa ARCA vs la cargada
+  const ivaDif = !!(p.arca && p.arca.cond_iva && !p.es_exterior && p.arca.cond_iva !== (p.cond_iva || ''));
   openModalP(`
     <h3 style="margin:0 0 4px;">🏢 ${_mEscP(p.nombre)}</h3>
     <div class="hint" style="margin-bottom:8px;">
@@ -1670,12 +1690,13 @@ async function fichaProveedor(i){
       ${p.facturas ? ` · ${p.facturas} facturas por ${_fmtP(p.total_comprado)}` : ' · todavía sin facturas cargadas'}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">${_contactoLinks({ whatsapp: p.whatsapp, telefono: p.telefono || p.df_telefono, email: p.email || p.email_op || p.df_email })}</div>
-    ${p.origen === 'dragonfish' ? `<div class="hint" style="background:#eff6ff;border-left:3px solid #3b82f6;padding:8px 10px;border-radius:6px;margin-bottom:8px;">
-      Nombre y CUIT${p.df_email ? ', mail (' + _mEscP(p.df_email) + ')' : ''}${p.df_telefono ? ' y teléfono (' + _mEscP(p.df_telefono) + ')' : ''} vienen del Dragonfish y se actualizan solos cada 4 horas: si hay que corregirlos, se corrigen allá. Todo lo de abajo es del módulo y no se pisa.</div>` : ''}
 
     ${_secP('datos', 'tarjeta', 'Datos comerciales',
+      ivaDif ? `⚠ IVA: ARCA dice ${_mEscP(_condIvaTxt[p.arca.cond_iva] || p.arca.cond_iva)}` :
       [p.condicion_pago ? 'paga a ' + _mEscP(p.condicion_pago) : 'sin condición de pago', p.cond_iva ? _mEscP(p.cond_iva) : null, p.cbu ? 'CBU cargado' : null].filter(Boolean).join(' · '), `
     <div class="hint" style="margin-bottom:10px;">Lo que el módulo necesita para pagarle y para los listados del estudio. Si no lo tenés, dejalo vacío: se puede completar después.</div>
+    ${ivaDif ? `<div class="pf-aviso" id="pf-iva-aviso">${ico('alerta','s')} La ficha dice <b>${_mEscP(_condIvaTxt[p.cond_iva] || p.cond_iva || 'sin definir')}</b> pero ARCA informa <b>${_mEscP(_condIvaTxt[p.arca.cond_iva] || p.arca.cond_iva)}</b>. Impacta en retenciones y Libro IVA.
+      <button class="btn" type="button" onclick="document.getElementById('pf-iva').value='${_mEscP(p.arca.cond_iva)}';document.getElementById('pf-iva').dispatchEvent(new Event('change'));this.closest('.pf-aviso').remove();_resP('datos','IVA tomado de ARCA · guardá la ficha',true)">${ico('ok','s')} Usar lo de ARCA</button></div>` : ''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <label>Condición de pago<select id="pf-cond">${cp.map(v => `<option value="${v}" ${(p.condicion_pago||'')===v?'selected':''}>${v||'— sin definir —'}</option>`).join('')}</select></label>
       <label>Condición frente al IVA<select id="pf-iva">
@@ -1743,10 +1764,22 @@ async function fichaProveedor(i){
     <div class="hint" style="margin-bottom:10px;">Lo que ARCA informa de este CUIT: si está vigente, condición de IVA, domicilio fiscal, actividad e impuestos en los que está inscripto.</div>
     <div id="pf-arca">${p.arca ? _arcaCard(p.arca) : '<div class="hint">Todavía no se consultó.</div>'}</div>
     <button class="btn" type="button" style="margin-top:10px;" onclick="validarArca('${_mEscP(p.cuit)}','pf-arca', true).then(c=>{if(c)_resP('arca',_arcaResumen(c),c.vigente===true)})">${ico('refrescar','s')} ${p.arca ? 'Volver a consultar' : 'Consultar en ARCA'}</button>`, false) : ''}
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;position:sticky;bottom:-20px;background:#fff;padding:10px 0;">
-      <button class="btn" onclick="cerrarModalP()">Cancelar</button>
+    <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:14px;position:sticky;bottom:-20px;background:#fff;padding:10px 0;">
+      <span id="pf-guardado" class="mini" style="color:#16a34a;font-weight:700;opacity:0;transition:opacity .3s;margin-right:auto;">✓ guardado</span>
+      <button class="btn" onclick="cerrarFichaProveedor()">Cerrar</button>
       <button class="btn primary" onclick="guardarFichaProveedor('${_mEscP(p.codigo)}','${_mEscP(p.cuit||'')}')">${ico('guardar','s')} Guardar</button>
     </div>`);
+  if (ivaDif) _resP('datos', document.getElementById('res-datos').textContent, false, true);
+  // 4) mail para la OP: es el dato que traba algo
+  if (!p.es_exterior && !(p.email_op || '').trim()) _resP('empresa', 'falta mail para la OP', false, true);
+  // 1) constancia de ARCA vieja (> 6 meses) o nunca consultada
+  if (p.cuit && !p.es_exterior){ const m = _mesesDesde(p.arca?.consultado_at);
+    if (m == null) _resP('arca', 'sin consultar', false, true);
+    else if (m > 6) _resP('arca', _arcaResumen(p.arca) + ` · hace ${Math.floor(m)} meses, volver a consultar`, false, true);
+    else _resP('arca', _arcaResumen(p.arca), p.arca.vigente === true, p.arca.vigente !== true); }
+  // 3) foto del formulario para avisar si se cierra con cambios sin guardar
+  _pfFoto = _pfEstado();
+  document.getElementById('prov-modal').onclick = e => { if (e.target.id === 'prov-modal') cerrarFichaProveedor(); };
   document.getElementById('pf-ext').addEventListener('change', e => {
     document.getElementById('pf-pais-wrap').style.display = e.target.checked ? '' : 'none';
   });
@@ -1758,6 +1791,17 @@ async function fichaProveedor(i){
   }
 }
 
+// (v135) todo lo editable de la ficha, serializado, para saber si hay cambios sin guardar
+let _pfFoto = '';
+function _pfEstado(){
+  const m = document.getElementById('prov-modal'); if (!m) return '';
+  const campos = [...m.querySelectorAll('input,select,textarea')].map(el => el.type === 'checkbox' ? (el.checked ? '1' : '0') : el.value);
+  return JSON.stringify([campos, _fContactos, _fDescuentos, _fRet]);
+}
+function cerrarFichaProveedor(){
+  if (_pfFoto && _pfEstado() !== _pfFoto && !confirm('Tenés cambios sin guardar en la ficha.\n\n¿Cerrar igual y perderlos?')) return;
+  _pfFoto = ''; cerrarModalP();
+}
 async function guardarFichaProveedor(codigo, cuit){
   const g = id => (document.getElementById(id)?.value || '').trim();
   const datos = { condicion_pago:g('pf-cond'), cond_iva:g('pf-iva'), cbu:g('pf-cbu'), alias_cbu:g('pf-alias'),
@@ -1771,6 +1815,12 @@ async function guardarFichaProveedor(codigo, cuit){
                      modo: g('pf-min-modo') || 'cualquiera', nota: g('pf-min-nota') } };
   const volMal = datos.descuentos.find(d => ['monto_minimo','cantidad_minima'].includes(d.tipo) && !(d.umbral > 0 && d.porcentaje > 0));
   if (volMal) return alert('El descuento "' + (volMal.descripcion || volMal.tipo) + '" es por volumen: necesita el "Desde" y el %.');
+  // 5) CBU: 22 dígitos con sus dos dígitos verificadores; uno mal cargado se descubre cuando el banco rechaza la transferencia
+  if (datos.cbu && !cbuValido(datos.cbu)){
+    const d = datos.cbu.replace(/\D/g,'');
+    return alert(d.length !== 22 ? `El CBU tiene ${d.length} dígitos y tiene que tener 22. Revisalo.` : 'El CBU no pasa la verificación del banco (dígitos verificadores): hay algún número mal copiado. Revisalo.');
+  }
+  datos.cbu = datos.cbu.replace(/\D/g,'');
   const { error } = await sb.rpc('compras_proveedor_guardar', { p_codigo: codigo, p_datos: datos });
   if (error) return alert('No se pudo guardar: ' + error.message);
   if (cuit && _fRet.length){
@@ -1779,7 +1829,11 @@ async function guardarFichaProveedor(codigo, cuit){
         cert_numero: r.cert_numero || null, cert_vigencia_hasta: r.cert_vigencia_hasta || null, notas: r.notas || null })) });
     if (e2) return alert('Ficha guardada, pero las retenciones no: ' + e2.message);
   }
-  cerrarModalP(); await buscarProveedores();
+  // (v135, JP) Guardar no cierra: queda "✓ guardado", se refresca la lista de atrás y la foto para el aviso de cambios
+  _pfFoto = _pfEstado();
+  const ok = document.getElementById('pf-guardado'); if (ok){ ok.style.opacity = '1'; setTimeout(() => { ok.style.opacity = '0'; }, 2000); }
+  _resP('empresa', (document.getElementById('pf-mail').value || '').trim() ? (n => n ? _nP(n, 'dato', 'datos') : 'sin cargar')(['pf-tel','pf-wa','pf-email','pf-mail','pf-web'].filter(id => (document.getElementById(id).value||'').trim()).length) : 'falta mail para la OP', !!(document.getElementById('pf-mail').value||'').trim(), !(document.getElementById('pf-mail').value||'').trim());
+  await buscarProveedores();
 }
 
 async function altaProveedor(){
@@ -5231,6 +5285,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=3"></script>
 <script src="juegos.js?v=5"></script>
-<script src="manual.js?v=68"></script>
+<script src="manual.js?v=69"></script>
 </body>
 </html>
