@@ -1766,7 +1766,7 @@ async function fichaProveedor(i){
     <button class="btn" type="button" style="margin-top:10px;" onclick="validarArca('${_mEscP(p.cuit)}','pf-arca', true).then(c=>{if(c)_resP('arca',_arcaResumen(c),c.vigente===true)})">${ico('refrescar','s')} ${p.arca ? 'Volver a consultar' : 'Consultar en ARCA'}</button>`, false) : ''}
     <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:14px;position:sticky;bottom:-20px;background:#fff;padding:10px 0;">
       <span id="pf-guardado" class="mini" style="color:#16a34a;font-weight:700;opacity:0;transition:opacity .3s;margin-right:auto;">✓ guardado</span>
-      <button class="btn" onclick="cerrarFichaProveedor()">Cerrar</button>
+      <button class="btn" onclick="cerrarFichaProveedor()">Cancelar</button>
       <button class="btn primary" onclick="guardarFichaProveedor('${_mEscP(p.codigo)}','${_mEscP(p.cuit||'')}')">${ico('guardar','s')} Guardar</button>
     </div>`);
   if (ivaDif) _resP('datos', document.getElementById('res-datos').textContent, false, true);
@@ -1829,11 +1829,9 @@ async function guardarFichaProveedor(codigo, cuit){
         cert_numero: r.cert_numero || null, cert_vigencia_hasta: r.cert_vigencia_hasta || null, notas: r.notas || null })) });
     if (e2) return alert('Ficha guardada, pero las retenciones no: ' + e2.message);
   }
-  // (v135, JP) Guardar no cierra: queda "✓ guardado", se refresca la lista de atrás y la foto para el aviso de cambios
-  _pfFoto = _pfEstado();
-  const ok = document.getElementById('pf-guardado'); if (ok){ ok.style.opacity = '1'; setTimeout(() => { ok.style.opacity = '0'; }, 2000); }
-  _resP('empresa', (document.getElementById('pf-mail').value || '').trim() ? (n => n ? _nP(n, 'dato', 'datos') : 'sin cargar')(['pf-tel','pf-wa','pf-email','pf-mail','pf-web'].filter(id => (document.getElementById(id).value||'').trim()).length) : 'falta mail para la OP', !!(document.getElementById('pf-mail').value||'').trim(), !(document.getElementById('pf-mail').value||'').trim());
-  await buscarProveedores();
+  // (v136, JP) Guardar cierra la ficha; el aviso de cambios sin guardar queda solo para Cerrar / click afuera
+  _pfFoto = ''; cerrarModalP();
+  if (document.getElementById('prov-lista')) await buscarProveedores();
 }
 
 async function altaProveedor(){
@@ -5285,6 +5283,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=3"></script>
 <script src="juegos.js?v=5"></script>
-<script src="manual.js?v=69"></script>
+<script src="manual.js?v=70"></script>
 </body>
 </html>
