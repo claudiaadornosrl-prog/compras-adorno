@@ -1785,7 +1785,7 @@ async function fichaProveedor(i){
     else _resP('arca', _arcaResumen(p.arca), p.arca.vigente === true, p.arca.vigente !== true); }
   // 3) foto del formulario para avisar si se cierra con cambios sin guardar
   _pfFoto = _pfEstado();
-  document.getElementById('prov-modal').onclick = e => { if (e.target.id === 'prov-modal') cerrarFichaProveedor(); };
+  document.getElementById('prov-modal').onclick = null;   // (v140, JP) click afuera no cierra
   document.getElementById('pf-ext').addEventListener('change', e => {
     document.getElementById('pf-pais-wrap').style.display = e.target.checked ? '' : 'none';
   });
@@ -1993,7 +1993,7 @@ function openModalP(html){
   let m = document.getElementById('prov-modal');
   if (!m){ m = document.createElement('div'); m.id = 'prov-modal';
     m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
-    m.onclick = e => { if (e.target === m) cerrarModalP(); }; document.body.appendChild(m); }
+    document.body.appendChild(m); }   // (v140, JP) click afuera no cierra
   m.innerHTML = `<div style="background:#fff;border-radius:12px;padding:20px;width:min(880px,96vw);max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);">${html}</div>`;
   const h3 = m.querySelector('h3'); if (h3){ h3.style.cursor = 'move'; h3.title = 'Arrastrá desde acá para mover la ventana'; }
   m.querySelectorAll('input,select,textarea').forEach(el => {
@@ -2934,7 +2934,6 @@ function pintarControl(){
   if (!ov){
     ov = document.createElement('div');
     ov.id = 'ctrl-overlay';
-    ov.addEventListener('click', e => { if (e.target === ov) cerrarControl(); });
     document.body.appendChild(ov);
     document.body.style.overflow = 'hidden';
   }
@@ -4283,7 +4282,6 @@ function pintarMapeo(cargando){
   if (!ov){
     ov = document.createElement('div');
     ov.id = 'map-overlay'; ov.className = 'ctrl-like';
-    ov.addEventListener('click', e => { if (e.target === ov) cerrarMapeo(); });
     document.body.appendChild(ov);
     document.body.style.overflow = 'hidden';
   }
@@ -4547,7 +4545,6 @@ async function abrirRemitoDetalle(cuit, pv, num){
   if (!ov){
     ov = document.createElement('div'); ov.id = 'rdet-overlay';
     document.body.appendChild(ov); document.body.style.overflow = 'hidden';
-    ov.addEventListener('click', e => { if (e.target === ov) cerrarRemitoDetalle(); });
   }
   _rdetPintar();
 }
@@ -4711,7 +4708,6 @@ async function abrirSucursales(){
   ov.id = 'suc-overlay';
   document.body.appendChild(ov);
   document.body.style.overflow = 'hidden';
-  ov.addEventListener('click', e => { if (e.target === ov) cerrarSucursales(); });
   pintarSucursales();
 }
 function cerrarSucursales(){
@@ -4783,7 +4779,6 @@ function pintarCargaRemito(){
     ov.id = 'rem-overlay';
     document.body.appendChild(ov);
     document.body.style.overflow = 'hidden';
-    ov.addEventListener('click', e => { if (e.target === ov) cerrarCargaRemito(); });
   }
   ov.innerHTML = `<div class="c-box">
     <div class="c-head">
@@ -4884,7 +4879,6 @@ async function abrirDetalleMerc(docId, numero){
     ov.id = 'merc-overlay';
     ov.className = '';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9998;display:flex;align-items:flex-start;justify-content:center;padding:18px 12px;overflow-y:auto;';
-    ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
     document.body.appendChild(ov);
   }
   ov.innerHTML = `<div class="c-box"><div class="c-body"><div class="vacio">Cargando el renglón por renglón…</div></div></div>`;
@@ -5149,7 +5143,6 @@ async function abrirResumenDoc(docId){
     ov = document.createElement('div');
     ov.id = 'res-overlay';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9998;display:flex;align-items:flex-start;justify-content:center;padding:18px 12px;overflow-y:auto;';
-    ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
     document.body.appendChild(ov);
   }
   ov.innerHTML = `<div class="c-box"><div class="c-body"><div class="vacio">Cargando…</div></div></div>`;
@@ -5228,7 +5221,6 @@ function abrirSinFactura(){
   if (!ov){
     ov = document.createElement('div');
     ov.id = 'sf-overlay';
-    ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
     document.body.appendChild(ov);
   }
   const hoy = new Date().toISOString().slice(0,10);
@@ -5356,8 +5348,8 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="op-pdf.js?v=3"></script>
 <script src="pedidos.js?v=13"></script>
-<script src="equiv-import.js?v=4"></script>
-<script src="juegos.js?v=5"></script>
-<script src="manual.js?v=73"></script>
+<script src="equiv-import.js?v=5"></script>
+<script src="juegos.js?v=6"></script>
+<script src="manual.js?v=74"></script>
 </body>
 </html>

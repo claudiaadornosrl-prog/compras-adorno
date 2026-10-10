@@ -187,7 +187,6 @@ function editarJuego(juego, skuNuevo) {
   let ov = document.getElementById('jg-overlay');
   if (!ov) { ov = document.createElement('div'); ov.id = 'jg-overlay'; document.body.appendChild(ov); }
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9998;display:flex;align-items:flex-start;justify-content:center;padding:30px 12px;overflow:auto';
-  ov.onclick = e => { if (e.target === ov) cerrarEditorJuego(); };
   _jgePintar();
 }
 function cerrarEditorJuego() { document.getElementById('jg-overlay')?.remove(); JGE = null; }

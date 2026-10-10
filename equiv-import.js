@@ -319,7 +319,6 @@ function _eqiPintar(cargando){
   let ov = document.getElementById('eqi-overlay');
   if (!ov){
     ov = document.createElement('div'); ov.id = 'eqi-overlay';
-    ov.addEventListener('click', e => { if (e.target === ov && confirm('¿Cerrar sin guardar?')) _eqiCerrar(); });
     document.body.appendChild(ov); document.body.style.overflow = 'hidden';
   }
   ov.innerHTML = html;
