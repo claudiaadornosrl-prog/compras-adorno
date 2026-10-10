@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v147-mes-cerrado';
+const CACHE_VERSION = 'compras-v148-pack-por-codigo';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './firma-jp.jpg', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

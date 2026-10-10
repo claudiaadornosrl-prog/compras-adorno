@@ -4214,9 +4214,11 @@ async function vistaEquivalencias(){
   // se muestran juntos. Familia = mismo proveedor + mismas partes (sku, pack, proporción).
   const familias = {};
   Object.values(grupos).forEach(g => {
-    const firma = g.cuit + '|' + g.partes.map(p => `${p.sku}:${Number(p.cantidad_por_unidad)||1}:${Number(p.proporcion_costo)||1}`).sort().join('+');
+    // (v148, JP) la firma ya no incluye el pack: POLY3 en blíster ×3 (código A) y en caja ×12 (código B) son el mismo artículo
+    const firma = g.cuit + '|' + g.partes.map(p => `${p.sku}:${Number(p.proporcion_costo)||1}`).sort().join('+');
     const fam = familias[firma] = familias[firma] || {...g, codigos: [], usada: 0};
-    fam.codigos.push({codigo: g.codigo_proveedor, descripcion: g.descripcion, ids: g.partes.map(p => p.id), creada_at: g.creada_at});
+    fam.codigos.push({codigo: g.codigo_proveedor, descripcion: g.descripcion, ids: g.partes.map(p => p.id), creada_at: g.creada_at,
+                      pack: g.partes.length === 1 ? (Number(g.partes[0].cantidad_por_unidad) || 1) : null});
     fam.usada += g.partes.reduce((a, p) => a + (uso[g.cuit + '|' + (g.codigo_proveedor || '') + '|' + (g.codigo_proveedor ? '' : (g.descripcion || '').toUpperCase().trim()) + '|' + p.sku] || 0), 0);
     if (g.creada_at > fam.creada_at) fam.creada_at = g.creada_at;
   });
@@ -4290,9 +4292,9 @@ function _pintarEquivalencias(){
           <th class="num" title="Cuántos renglones de facturas y remitos tradujo esta equivalencia">Usada</th><th>Cargada</th><th></th></tr></thead>
         <tbody>${HECHAS.map(g => { const i = EQUIV_HECHAS.indexOf(g); return `<tr onclick="editarEquivalencia(${i})" title="Editar la equivalencia">
           <td class="prov"><span class="prov-nom">${esc(g.prov || g.cuit)}</span></td>
-          <td>${g.codigos.map(k => `<code>${esc(k.codigo || '—')}</code>`).join('<br>')}${g.codigos.length > 1 ? ` <span class="chip" style="background:#e0f2fe;color:#075985" title="El proveedor factura este mismo artículo con ${g.codigos.length} códigos distintos">${g.codigos.length} códigos</span>` : ''}</td>
+          <td>${g.codigos.map(k => `<code>${esc(k.codigo || '—')}</code>${k.pack > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="Con este código el proveedor lo vende de a ${k.pack}: 1 unidad facturada = ${k.pack} de nuestro SKU">📦 ×${k.pack}</span>` : ''}`).join('<br>')}${g.codigos.length > 1 ? ` <span class="chip" style="background:#e0f2fe;color:#075985" title="El proveedor factura este mismo artículo con ${g.codigos.length} códigos distintos${new Set(g.codigos.map(k => k.pack)).size > 1 ? ', con presentaciones distintas (packs)' : ''}">${g.codigos.length} códigos</span>` : ''}</td>
           <td>${g.codigos.map(k => esc(k.descripcion || '')).join('<br>')}</td>
-          <td>${g.partes.map(h => `<b>${esc(h.sku)}</b>${Number(h.cantidad_por_unidad) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="1 unidad del proveedor = ${Number(h.cantidad_por_unidad)} de este SKU">📦 ×${Number(h.cantidad_por_unidad)}</span>` : ''}${g.partes.length > 1 ? ' <span class="mini">' + Math.round((h.proporcion_costo || 1) * 100) + ' %</span>' : ''}`).join('<br>')}</td>
+          <td>${g.partes.map(h => `<b>${esc(h.sku)}</b>${g.partes.length > 1 && Number(h.cantidad_por_unidad) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="1 unidad del proveedor = ${Number(h.cantidad_por_unidad)} de este SKU">📦 ×${Number(h.cantidad_por_unidad)}</span>` : ''}${g.partes.length > 1 ? ' <span class="mini">' + Math.round((h.proporcion_costo || 1) * 100) + ' %</span>' : ''}`).join('<br>')}</td>
           <td class="num" style="${g.usada ? '' : 'color:var(--mut)'}" title="${g.usada ? g.usada + ' renglón(es) traducidos con esta equivalencia' : 'Todavía no tradujo ningún renglón'}">${g.usada || '—'}</td>
           <td class="mini" title="${esc(g.creada_por || '')}">${_fechaTs(g.creada_at)}</td>
           <td class="num" style="white-space:nowrap" onclick="event.stopPropagation()">
@@ -4394,7 +4396,7 @@ async function editarEquivalencia(i){
   const g = EQUIV_HECHAS[i]; if (!g) return;
   enMapeo = {cuit: g.cuit, codigo_proveedor: g.codigo_proveedor, descripcion: g.descripcion, prov: g.prov,
              veces: 0, _editar: true, _skusViejos: g.partes.map(p => p.sku),
-             _codigos: (g.codigos || [{codigo: g.codigo_proveedor, descripcion: g.descripcion}]).map(k => ({codigo: k.codigo || '', descripcion: k.descripcion || '', ids: k.ids || []})),
+             _codigos: (g.codigos || [{codigo: g.codigo_proveedor, descripcion: g.descripcion}]).map(k => ({codigo: k.codigo || '', descripcion: k.descripcion || '', ids: k.ids || [], pack: k.pack || null})),
              _codigosOrig: (g.codigos || []).map(k => ({codigo: k.codigo || '', descripcion: k.descripcion || ''}))};
   partesMapeo = g.partes.map(p => ({sku: p.sku, cantidad: Number(p.cantidad_por_unidad) || 1, proporcion: Number(p.proporcion_costo) || 1}));
   candidatos = []; pintarMapeo(true);
@@ -4467,12 +4469,16 @@ function pintarMapeo(cargando){
 
       <div class="eq-sec">
         <h4>${ico('etiquetas','s')} Códigos del proveedor para este mismo artículo
-          ${ayuda('Si el proveedor factura el mismo artículo con más de un código (por ejemplo en blíster y a granel), agregalos con el +: todos se traducen a lo mismo. La descripción es opcional, sirve para reconocerlo.')}</h4>
+          ${ayuda('Si el proveedor factura el mismo artículo con más de un código (por ejemplo en blíster y a granel), agregalos con el +: todos se traducen a lo mismo. Cada código puede tener SU pack: el mismo POLY3 viene en blíster de 3 con un código y en caja de 12 con otro; con 1 unidad facturada del código de la caja entran 12 al stock. Vacío = usa el pack de arriba. La descripción es opcional.')}</h4>
+        ${partesMapeo.length === 1 && _mapeoCodigos().length > 1 ? `<div class="mini eq-cab"><span style="width:170px">Código</span><span style="flex:1">Cómo lo llama él</span><span style="width:90px;text-align:right">Unid. por pack</span><span style="width:34px"></span></div>` : ''}
         ${_mapeoCodigos().map((k, i) => `<div class="c-linea">
           <input value="${esc(k.codigo)}" placeholder="código del proveedor" style="width:170px" ${i === 0 && !m._editar ? 'readonly title="Es el código que estás traduciendo"' : ''}
                  oninput="enMapeo._codigos[${i}].codigo=this.value.trim()">
           <input value="${esc(k.descripcion)}" placeholder="cómo lo llama él (opcional)" style="flex:1;min-width:160px"
                  oninput="enMapeo._codigos[${i}].descripcion=this.value">
+          ${partesMapeo.length === 1 && _mapeoCodigos().length > 1 ? `<input type="number" step="1" min="1" value="${k.pack || ''}" placeholder="${Number(partesMapeo[0].cantidad) || 1}" style="width:90px;text-align:right"
+                 title="Cuántas unidades de nuestro SKU trae 1 unidad facturada con ESTE código (vacío = ${Number(partesMapeo[0].cantidad) || 1}, el pack de arriba)"
+                 oninput="enMapeo._codigos[${i}].pack=Number(this.value)||null">` : ''}
           ${i === _mapeoCodigos().length - 1
             ? `<button class="act gh mini-ico" title="Otro código del proveedor para este mismo artículo" onclick="enMapeo._codigos.push({codigo:'',descripcion:'',ids:[]}); pintarMapeo()">${ico('mas','s')}</button>`
             : `<button class="act gh mini-ico" title="Sacar este código" onclick="enMapeo._codigos.splice(${i},1); pintarMapeo()">${ico('anular','s')}</button>`}
@@ -4550,9 +4556,12 @@ async function guardarMapeo(){
   }
   let res = null, retraducidos = 0;
   for (const k of codigos){
+    // (v148) pack propio del código (blíster ×3 vs caja ×12): solo cuando se traduce a UN SKU nuestro
+    const partesK = (partes.length === 1 && k.pack > 0) ? [{...partes[0], cantidad: Math.round(k.pack)}] : partes;
+    if (partesK.some(p => !Number.isInteger(p.cantidad) || p.cantidad <= 0)){ alert(`El pack del código ${k.codigo || k.descripcion} tiene que ser un entero mayor a 0.`); return; }
     const r = await sb.rpc('compras_guardar_equivalencia', {
       p_cuit: enMapeo.cuit, p_codigo: (k.codigo || '').trim() || null,
-      p_descripcion: (k.descripcion || '').trim() || enMapeo.descripcion || null, p_partes: partes,
+      p_descripcion: (k.descripcion || '').trim() || enMapeo.descripcion || null, p_partes: partesK,
     });
     if (r.error){ alert(`No se pudo guardar el código ${k.codigo || k.descripcion}: ` + r.error.message); return; }
     res = r.data; retraducidos += Number(r.data?.retraducidos) || 0;
@@ -5620,6 +5629,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=81"></script>
+<script src="manual.js?v=82"></script>
 </body>
 </html>
