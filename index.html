@@ -1542,6 +1542,9 @@ let _provCache = [], _provBusca = '';
 // (v132, JP) filtros rápidos sobre la lista ya traída; inactivos ocultos por defecto
 let _provFil = { mercaderia:false, exterior:false, inactivos:false, sinficha:false };
 const _provEsMerc = p => p.compra_mercaderia === true || (p.compra_mercaderia == null && p.mercaderia_auto);
+// (v146, JP) razón social: la que cargamos en la ficha manda; la del Dragon queda de referencia
+const _provNom = p => (p.nombre_propio || '').trim() || p.nombre || '';
+const _saldoChip = v => { const n = Number(v) || 0; return n ? `<span class="chip" style="background:${n > 0 ? '#fee2e2;color:#991b1b' : '#dcfce7;color:#166534'}" title="${n > 0 ? 'Le debemos' : 'Saldo a favor nuestro'}">${_fmtP(Math.abs(n))}</span>` : '<span class="mini">—</span>'; };
 function toggleProvFiltro(k){ _provFil[k] = !_provFil[k]; pintarProveedores(); }
 
 async function vistaProveedores(){
@@ -1568,7 +1571,7 @@ async function buscarProveedores(){
   _provBusca = (document.getElementById('prov-q')?.value || '').trim();
   const cont = document.getElementById('prov-lista');
   cont.innerHTML = '<div class="hint">Buscando…</div>';
-  const { data, error } = await sb.rpc('compras_proveedores_listar', { p_busca: _provBusca || null, p_limite: 60 });
+  const { data, error } = await sb.rpc('compras_proveedores_listar', { p_busca: _provBusca || null, p_limite: 60, p_prueba: MODO_PRUEBA });
   if (error){ cont.innerHTML = `<div class="hint" style="color:#b91c1c;">No pude traer los proveedores: ${_mEscP(error.message)}</div>`; return; }
   _provCache = data || [];
   if (!_provCache.length){ cont.innerHTML = '<div class="hint">No encontré ningún proveedor con ese nombre o CUIT.</div>'; return; }
@@ -1601,9 +1604,9 @@ function pintarProveedores(){
     </div>
     ${!lista.length ? '<div class="hint">Ningún proveedor cumple con los filtros marcados.</div>' : `<table class="tb-band"><thead><tr>
       <th>Proveedor</th><th>CUIT</th><th class="num">Facturas</th><th class="num">Total comprado</th>
-      <th>Última</th><th>Condición de pago</th><th class="ctr">Contacto</th><th class="ctr" title="Ficha completa">Ficha</th></tr></thead><tbody>
+      <th>Última</th><th class="num" title="Cuenta corriente: facturas contabilizadas que todavía no se pagaron (las notas de crédito restan)">Saldo CC</th><th>Condición de pago</th><th class="ctr">Contacto</th><th class="ctr" title="Ficha completa">Ficha</th></tr></thead><tbody>
     ${lista.map(p => { const i = _provCache.indexOf(p); return `<tr onclick="fichaProveedor(${i})" title="Abrir la ficha del proveedor">
-      <td class="prov" style="white-space:nowrap"><span class="prov-nom"><strong>${_mEscP(p.nombre)}</strong></span>
+      <td class="prov" style="white-space:nowrap"><span class="prov-nom" title="${p.nombre_propio && p.nombre_propio !== p.nombre ? 'En el Dragonfish: ' + _mEscP(p.nombre) : ''}"><strong>${_mEscP(_provNom(p))}</strong></span>${p.sku ? ` <code class="mini" title="SKU del proveedor" style="background:#f1f5f9;padding:1px 5px;border-radius:5px">${_mEscP(p.sku)}</code>` : ''}
         ${_provEsMerc(p) ? `<span class="eico" style="background:#dcfce7;color:#166534" title="Le compramos mercadería${p.compra_mercaderia == null ? ' (automático)' : ''}: aparece al armar pedidos">${ico('camion','s')}</span>` : ''}
         ${p.es_exterior ? `<span class="eico" style="background:#ede9fe;color:#5b21b6" title="Proveedor del exterior">${ico('mundo','s')}</span>` : ''}
         ${p.origen === 'manual' ? `<span class="eico" style="color:#475569" title="Creado a mano en el módulo">${ico('mano','s')}</span>` : ''}
@@ -1616,6 +1619,7 @@ function pintarProveedores(){
       <td class="num">${p.facturas || 0}</td>
       <td class="num">${p.facturas ? _fmtP(p.total_comprado) : '—'}</td>
       <td>${p.ultima_compra ? p.ultima_compra.split('-').reverse().join('/') : '—'}</td>
+      <td class="num">${_saldoChip(p.saldo_cc)}</td>
       <td style="white-space:nowrap">${_mEscP(p.condicion_pago || '—')}
         ${p.retenciones_excluidas ? `<span class="eico" title="Certificado de exclusión en ${p.retenciones_excluidas} régimen(es)" style="background:#fef3c7;color:#92400e">${ico('porcentaje','s')}</span>` : ''}
         ${(p.descuentos||[]).length ? `<span class="eico" title="${(p.descuentos||[]).length} descuento(s): ${_mEscP((p.descuentos||[]).map(d => (d.porcentaje||0)+'% '+(d.descripcion||'')).join(' · '))}" style="background:#dcfce7;color:#166534">${ico('regalo','s')}</span>` : ''}</td>
@@ -1731,9 +1735,9 @@ async function fichaProveedor(i){
   // (v135) ARCA ↔ ficha: la condición de IVA que informa ARCA vs la cargada
   const ivaDif = !!(p.arca && p.arca.cond_iva && !p.es_exterior && p.arca.cond_iva !== (p.cond_iva || ''));
   openModalP(`
-    <h3 style="margin:0 0 4px;">🏢 ${_mEscP(p.nombre)}</h3>
+    <h3 style="margin:0 0 4px;">🏢 ${_mEscP(_provNom(p))}${p.sku ? ` <code style="font-size:13px;background:#f1f5f9;padding:2px 7px;border-radius:6px;margin-left:6px">${_mEscP(p.sku)}</code>` : ''}</h3>
     <div class="hint" style="margin-bottom:8px;">
-      ${p.cuit ? 'CUIT ' + _mEscP(p.cuit) : '<em>sin CUIT</em>'} · código ${_mEscP(p.codigo)} ·
+      ${p.cuit ? 'CUIT ' + _mEscP(p.cuit) : '<em>sin CUIT</em>'} · código ${_mEscP(p.codigo)}${Number(p.saldo_cc) ? ` · saldo CC ${_saldoChip(p.saldo_cc)}` : ''} ·
       ${p.origen === 'dragonfish' ? 'viene de Dragonfish' : 'cargado a mano'}
       ${p.facturas ? ` · ${p.facturas} facturas por ${_fmtP(p.total_comprado)}` : ' · todavía sin facturas cargadas'}
     </div>
@@ -1741,11 +1745,15 @@ async function fichaProveedor(i){
 
     ${_secP('datos', 'tarjeta', 'Datos comerciales',
       ivaDif ? `⚠ IVA: ARCA dice ${_mEscP(_condIvaTxt[p.arca.cond_iva] || p.arca.cond_iva)}` :
-      [p.condicion_pago ? 'paga a ' + _mEscP(p.condicion_pago) : 'sin condición de pago', p.cond_iva ? _mEscP(p.cond_iva) : null, p.cbu ? 'CBU cargado' : null].filter(Boolean).join(' · '), `
+      [p.sku ? 'SKU ' + _mEscP(p.sku) : 'sin SKU', p.condicion_pago ? 'paga a ' + _mEscP(p.condicion_pago) : 'sin condición de pago', p.cond_iva ? _mEscP(p.cond_iva) : null, p.cbu ? 'CBU cargado' : null].filter(Boolean).join(' · '), `
     <div class="hint" style="margin-bottom:10px;">Lo que el módulo necesita para pagarle y para los listados del estudio. Si no lo tenés, dejalo vacío: se puede completar después.</div>
     ${ivaDif ? `<div class="pf-aviso" id="pf-iva-aviso">${ico('alerta','s')} La ficha dice <b>${_mEscP(_condIvaTxt[p.cond_iva] || p.cond_iva || 'sin definir')}</b> pero ARCA informa <b>${_mEscP(_condIvaTxt[p.arca.cond_iva] || p.arca.cond_iva)}</b>. Impacta en retenciones y Libro IVA.
       <button class="btn" type="button" onclick="document.getElementById('pf-iva').value='${_mEscP(p.arca.cond_iva)}';document.getElementById('pf-iva').dispatchEvent(new Event('change'));this.closest('.pf-aviso').remove();_resP('datos','IVA tomado de ARCA · guardá la ficha',true)">${ico('ok','s')} Usar lo de ARCA</button></div>` : ''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <label>Razón social<input id="pf-nombre" value="${_mEscP(p.nombre_propio || p.nombre || '')}" placeholder="${_mEscP(p.nombre || '')}">
+        <div class="hint" style="font-weight:400;margin-top:3px;">${p.origen === 'dragonfish' ? 'En el Dragonfish figura como "' + _mEscP(p.nombre) + '"; si la corregís acá, el módulo usa la tuya.' : 'Nombre con el que se ve en todo el módulo.'}</div></label>
+      <label>SKU del proveedor<input id="pf-sku" value="${_mEscP(p.sku || '')}" placeholder="ej.: ESPALMA" maxlength="20" style="text-transform:uppercase">
+        <div class="hint" style="font-weight:400;margin-top:3px;">Código corto nuestro para identificarlo (en el Dragonfish se repetía el CUIT). Tiene que ser único.</div></label>
       <label>Condición de pago<select id="pf-cond">${cp.map(v => `<option value="${v}" ${(p.condicion_pago||'')===v?'selected':''}>${v||'— sin definir —'}</option>`).join('')}</select></label>
       <label>Condición frente al IVA<select id="pf-iva">
         ${[['','— sin definir —'],['RI','Responsable Inscripto'],['MT','Monotributo'],['EX','Exento'],['NI','No inscripto'],['CF','Consumidor Final'],['EXT','Del exterior']]
@@ -1852,7 +1860,10 @@ function cerrarFichaProveedor(){
 }
 async function guardarFichaProveedor(codigo, cuit){
   const g = id => (document.getElementById(id)?.value || '').trim();
-  const datos = { condicion_pago:g('pf-cond'), cond_iva:g('pf-iva'), cbu:g('pf-cbu'), alias_cbu:g('pf-alias'),
+  const _pOrig = _provCache.find(x => x.codigo === codigo) || {};
+  const nombreForm = g('pf-nombre');
+  const datos = { sku: g('pf-sku').toUpperCase(), nombre_propio: (nombreForm && nombreForm !== (_pOrig.nombre || '')) ? nombreForm : '',
+    condicion_pago:g('pf-cond'), cond_iva:g('pf-iva'), cbu:g('pf-cbu'), alias_cbu:g('pf-alias'),
     email_op:g('pf-mail'), moneda_habitual:g('pf-moneda'), domicilio:g('pf-dom'), notas:g('pf-notas'),
     pais:g('pf-pais'), es_exterior: !!document.getElementById('pf-ext')?.checked,
     compra_mercaderia: g('pf-merc') === 'si' ? true : g('pf-merc') === 'no' ? false : null,
@@ -3257,12 +3268,77 @@ document.addEventListener('focusout', e => {
 }, true);
 
 function vistaListados(){
-  const subs = [['gestion','barras','Gestión','Cuánto se compró: por tipo de gasto, mes a mes y por proveedor'],['estudio','factura','Para el estudio','Libro IVA compras, percepciones, retenciones y Libro IVA Digital']];
-  setTimeout(() => { if (listSub === 'estudio') cargarListadosEstudio(); }, 0);
+  const subs = [['gestion','barras','Gestión','Cuánto se compró: por tipo de gasto, mes a mes y por proveedor'],['estudio','factura','Para el estudio','Libro IVA compras, percepciones, retenciones y Libro IVA Digital'],['cc','pago','Cuenta corriente','Qué le debemos a cada proveedor: facturas contabilizadas menos pagos']];
+  setTimeout(() => { if (listSub === 'estudio') cargarListadosEstudio(); if (listSub === 'cc') cargarCuentaCorriente(); }, 0);
   return `<div class="abar">${subs.map(([k,i,t,tip]) =>
         `<button class="fchip ${listSub===k?'on':''}" title="${tip}" onclick="listSub='${k}'; render()">${ico(i,'s')} ${t}</button>`).join('')}</div>
     ${listSub === 'gestion' ? _listGestion()
+      : listSub === 'cc' ? `<div id="list-cc"><div class="vacio">Cargando…</div></div>`
       : `<div id="list-estudio"><div class="vacio">Cargando…</div></div>`}`;
+}
+
+// ═══ 💳 CUENTA CORRIENTE de proveedores (v146, JP) ═══════════════════════
+//  La arma el módulo solo: facturas contabilizadas (aprobadas) que todavía no se pagaron,
+//  las NC restan. Un pago es una OP PAGADA; la emitida sin pagar se ve pero no descuenta.
+//  No se lee del Dragonfish. Clientes: pendiente de definir de dónde salen (no hay ventas acá).
+let LIST_CC = null, CC_BUSCA = '', CC_SOLO_SALDO = true;
+async function cargarCuentaCorriente(){
+  const c = document.getElementById('list-cc'); if (!c) return;
+  const {data, error} = await sb.rpc('compras_cuenta_corriente', {p_prueba: MODO_PRUEBA});
+  if (error){ c.innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return; }
+  LIST_CC = data || []; _pintarCuentaCorriente();
+}
+function _pintarCuentaCorriente(){
+  const c = document.getElementById('list-cc'); if (!c || !LIST_CC) return;
+  const q = CC_BUSCA.trim().toLowerCase();
+  const L = LIST_CC.filter(x => (!CC_SOLO_SALDO || Math.abs(Number(x.saldo)) >= 0.5) && (!q || [x.nombre, x.cuit, x.sku].join(' ').toLowerCase().includes(q)));
+  const tot = L.reduce((a, x) => a + (Number(x.saldo) || 0), 0);
+  c.innerHTML = `<div class="card">
+    <div class="abar" style="margin-bottom:10px">
+      <span class="fchip" style="cursor:default"><b>${L.length}</b> proveedor${L.length === 1 ? '' : 'es'} <span class="mini">· debemos <b style="color:#991b1b">${plata(tot)}</b></span></span>
+      <button class="fchip ${CC_SOLO_SALDO ? 'on' : ''}" type="button" onclick="CC_SOLO_SALDO=!CC_SOLO_SALDO;_pintarCuentaCorriente()" title="Ocultar los proveedores con saldo cero">${ico('ojo','s')} ${CC_SOLO_SALDO ? 'Solo con saldo' : 'Todos'}</button>
+      <input type="search" value="${esc(CC_BUSCA)}" placeholder="Buscar proveedor, CUIT o SKU…" style="flex:1;min-width:200px;padding:8px 11px;border:1px solid var(--bd);border-radius:999px;font-size:13.5px;font-family:inherit"
+             oninput="CC_BUSCA=this.value;clearTimeout(window._ccT);window._ccT=setTimeout(()=>{const p=this.selectionStart;_pintarCuentaCorriente();const i=document.querySelector('#list-cc input[type=search]');if(i){i.focus();try{i.setSelectionRange(p,p);}catch(_){}}},350)">
+      ${ayuda('Saldo = facturas contabilizadas (más notas de débito, menos notas de crédito) que todavía no están pagadas. Un pago es una orden de pago PAGADA; la emitida sin pagar se ve en el detalle pero no descuenta. Lo arma el módulo con sus propios datos, no se lee del Dragonfish.')}
+    </div>
+    ${!L.length ? '<div class="vacio">Ningún proveedor con saldo.</div>' : `<div style="overflow-x:auto"><table class="tb-band">
+      <thead><tr><th>Proveedor</th><th>CUIT</th><th class="num">Facturas pend.</th><th class="num">Saldo</th><th>Última factura</th><th>Último pago</th><th class="num" title="Pagado en los últimos 12 meses (OPs del módulo)">Pagado 12 m</th><th></th></tr></thead>
+      <tbody>${L.map(x => `<tr onclick="abrirCC('${esc(x.cuit)}')" title="Ver el detalle de la cuenta">
+        <td class="prov"><span class="prov-nom"><strong>${esc(x.nombre || x.cuit)}</strong></span>${x.sku ? ` <code class="mini" style="background:#f1f5f9;padding:1px 5px;border-radius:5px">${esc(x.sku)}</code>` : ''}</td>
+        <td class="mini" style="white-space:nowrap">${_cuitFmt(x.cuit)}</td>
+        <td class="num">${x.facturas_pend}</td>
+        <td class="num"><b style="color:${Number(x.saldo) > 0 ? '#991b1b' : '#166534'}">${plata(x.saldo)}</b></td>
+        <td class="mini">${x.ultima_factura ? _fecha(x.ultima_factura) : '—'}</td>
+        <td class="mini">${x.ultimo_pago ? _fecha(x.ultimo_pago) : '—'}</td>
+        <td class="num">${Number(x.pagado_12m) ? plata(x.pagado_12m) : '—'}</td>
+        <td class="num"><button class="act gh mini-ico" title="Ver movimientos" onclick="event.stopPropagation();abrirCC('${esc(x.cuit)}')">${ico('lista','s')}</button></td>
+      </tr>`).join('')}</tbody>
+      <tfoot><tr style="font-weight:700;background:#f8fafc"><td colspan="3">Total</td><td class="num">${plata(tot)}</td><td colspan="4"></td></tr></tfoot>
+    </table></div>`}
+  </div>`;
+}
+async function abrirCC(cuit){
+  const x = (LIST_CC || []).find(y => y.cuit === cuit) || {cuit};
+  const {data, error} = await sb.rpc('compras_cc_movimientos', {p_cuit: cuit, p_prueba: MODO_PRUEBA});
+  if (error){ alert(error.message); return; }
+  const M = data || [];
+  const pend = M.filter(m => m.clase !== 'OP' && ['contabilizado_sin_controlar','controlado_sin_op','con_op_sin_pagar'].includes(m.estado));
+  openModalP(`
+    <h3 style="margin:0 0 4px;">💳 ${esc(x.nombre || cuit)}</h3>
+    <div class="hint" style="margin-bottom:10px;">CUIT ${_cuitFmt(cuit)} · saldo <b style="color:${Number(x.saldo) > 0 ? '#991b1b' : '#166534'}">${plata(x.saldo || 0)}</b> · ${pend.length} comprobante${pend.length === 1 ? '' : 's'} sin pagar</div>
+    ${!M.length ? '<div class="vacio">Sin movimientos.</div>' : `<div style="overflow:auto;max-height:60vh"><table class="tb-band" style="font-size:12.5px">
+      <thead><tr><th>Fecha</th><th>Comprobante</th><th>Detalle</th><th class="num">Debe</th><th class="num">Haber</th><th>Estado</th></tr></thead>
+      <tbody>${M.map(m => { const esPend = m.clase !== 'OP' && ['contabilizado_sin_controlar','controlado_sin_op','con_op_sin_pagar'].includes(m.estado);
+        return `<tr style="${m.clase === 'OP' ? 'background:#f0fdf4' : esPend ? 'background:#fff7ed' : ''}" ${m.doc_id ? `onclick="abrirResumenDoc(${m.doc_id})" title="Abrir el comprobante"` : m.op_id ? `onclick="verOP(${m.op_id})" title="Abrir la orden de pago"` : ''}>
+        <td class="mini" style="white-space:nowrap">${_fecha(m.fecha)}</td>
+        <td style="white-space:nowrap">${esc(m.comprobante)}</td>
+        <td class="mini">${esc(m.detalle || '')}</td>
+        <td class="num">${Number(m.debe) ? plata(m.debe) : ''}</td>
+        <td class="num">${Number(m.haber) ? plata(m.haber) : ''}</td>
+        <td>${m.clase === 'OP' ? `<span class="chip" style="background:${m.estado === 'pagada' ? '#dcfce7;color:#166534' : '#fef3c7;color:#92400e'}">${esc(m.estado)}</span>` : chipPago(m.estado)}</td>
+      </tr>`; }).join('')}</tbody></table></div>`}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn" onclick="cerrarModalP()">Cerrar</button></div>`);
 }
 
 function _listMes(delta){
@@ -5507,6 +5583,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=79"></script>
+<script src="manual.js?v=80"></script>
 </body>
 </html>
