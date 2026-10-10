@@ -210,6 +210,8 @@ function _manualSecciones() {
       icon: '📄', titulo: 'Comprobantes',
       desc: 'Facturas, notas de crédito, notas de débito Y remitos: todo lo YA contabilizado (histórico desde 2019 + lo que se aprueba en la Bandeja). Lo que espera control no aparece acá hasta que le das el OK.',
       pasos: [
+        'Arriba hay un filtro por estado de pago (sin contabilizar, contabilizada sin controlar, controlada sin OP, con OP sin pagar, pagada): se combina con el año, el mes, el tipo y el buscador.',
+        '📝 Nota del comprobante: desde la ficha de control (botón "Agregar nota" abajo) o desde el resumen se le carga un texto libre (un reclamo, una diferencia, por qué se contabilizó así). Queda guardada con quién y cuándo, se ve en el resumen y en la grilla aparece una hojita naranja al lado del proveedor.',
         'Buscá por proveedor, número o CUIT (escribí la palabra entera: busca cuando dejás de tipear medio segundo, o al apretar Enter). Filtrá por año, mes, tipo de gasto y clase (solo facturas / solo NC / solo ND / solo remitos).',
         'Los remitos aparecen abajo en su propia tabla, con la factura a la que están vinculados (o "sin factura"), el destino y el estado del stock. Tocar un remito con factura abre esa factura. Si la factura ya está asociada pero todavía no se controló, aparece su número con el chip "en Bandeja" (no dice "sin factura"): el remito ya está vinculado, falta aprobar la factura.',
         'El total del encabezado es FC + ND − NC.',
