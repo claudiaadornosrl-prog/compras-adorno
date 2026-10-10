@@ -577,11 +577,21 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keypress', e => { if (e.key === 'Enter' && document.getElementById('login').style.display !== 'none') entrar(); });
 
 // ── Arranque ────────────────────────────────────────────────────────────
+// (v147, JP) Mes enviado al estudio = cerrado: la base rechaza cambios a los comprobantes de ese mes
+// salvo para el administrador. Acá solo se avisa y se bloquea el botón; el candado real es el trigger.
+let MESES_CERRADOS = new Set(), SOY_ADMIN = false;
+async function cargarMesesCerrados(){
+  const [m, a] = await Promise.all([sb.from('compras_meses_cerrados').select('periodo,cerrado_por,cerrado_at,nota').order('periodo'), sb.rpc('compras_soy_admin')]);
+  MESES_CERRADOS = new Map((m.data || []).map(x => [String(x.periodo).slice(0,7), x]));
+  SOY_ADMIN = a.data === true;
+}
+const _mesDoc = d => String(d.fecha_ingreso || d.fecha_emision || '').slice(0,7);
+const docCerrado = d => !!(d && MESES_CERRADOS.get && MESES_CERRADOS.get(_mesDoc(d)));
 async function arrancar(){
   document.getElementById('login').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   renderTabs();
-  await cargarTodo();
+  await Promise.all([cargarTodo(), cargarMesesCerrados()]);
   // (22-sep) llegada desde Gastos: ?doc=ID abre directo el resumen del comprobante
   const _docUrl = Number(new URLSearchParams(location.search).get('doc'));
   if (_docUrl && typeof abrirResumenDoc === 'function'){ irA('facturas'); abrirResumenDoc(_docUrl); }
@@ -2975,12 +2985,13 @@ function pintarControl(){
       </div>
     </div>
 
+    ${docCerrado(d) ? `<div class="aviso-amb" style="margin:0 17px 10px"><div>${ico('candado','s')} El mes ${esc(_mesDoc(d).split('-').reverse().join('/'))} ya se envió al estudio${SOY_ADMIN ? ': podés modificarlo porque sos el administrador, pero el listado que recibió el estudio ya no va a coincidir.' : ': este comprobante no se puede modificar. Si hace falta, pedíselo a JP.'}</div></div>` : ''}
     <div class="c-pie">
-      <button class="act gh" onclick="rechazarDoc()" style="color:var(--bad);border-color:var(--bad)">Rechazar</button>
+      <button class="act gh" onclick="rechazarDoc()" style="color:var(--bad);border-color:var(--bad)" ${docCerrado(d) && !SOY_ADMIN ? 'disabled style="opacity:.4"' : ''}>Rechazar</button>
       <button class="act gh ico-btn" id="ctrl-nota-btn" onclick="abrirNotaDoc(${d.id}, 'control')" title="${d.nota ? esc(d.nota) : 'Agregar una nota a este comprobante (queda guardada y se ve en el resumen)'}" style="${d.nota ? 'background:#fef3c7;border-color:#d97706;color:#92400e' : ''}">${ico('hoja','s')} ${d.nota ? 'Nota' : 'Agregar nota'}</button>
       <div style="flex:1"></div>
       <button class="act gh" onclick="cerrarControl()">Cancelar</button>
-      <button class="act" onclick="contabilizar()">✓ Contabilizar</button>
+      ${docCerrado(d) && !SOY_ADMIN ? `<button class="act" disabled style="opacity:.4" title="Mes enviado al estudio: no se puede modificar">${ico('candado','s')} Mes cerrado</button>` : `<button class="act" onclick="contabilizar()">✓ Contabilizar</button>`}
     </div>
     <datalist id="dl-alic"><option value="21"></option><option value="10.5"></option><option value="27"></option><option value="0">No gravado</option><option value="2.5"></option><option value="5"></option></datalist>
     <datalist id="dl-conceptos">${CONCEPTOS.map(c =>
@@ -3207,7 +3218,7 @@ function tabla(lista, bandeja){
       <td class="mini"><b>${d.numero_interno ?? '—'}</b></td>
       <td>${fechaCorta(d.fecha_emision)}</td>
       <td class="mini">${d.fecha_ingreso ? fechaCorta(d.fecha_ingreso) : '—'}</td>
-      <td class="prov"><span class="prov-nom" title="${esc(d.proveedor_nombre || d.cuit_emisor || '')}">${esc(d.proveedor_nombre || d.cuit_emisor || '—')}</span>${d.archivo_alerta ? ` <span title="${esc(d.archivo_alerta)}" style="color:var(--bad)">${ico('clip','s')}</span>` : ''}${d.nota ? ` <span title="${esc(d.nota)}" style="color:#b45309">${ico('hoja','s')}</span>` : ''}</td>
+      <td class="prov"><span class="prov-nom" title="${esc(d.proveedor_nombre || d.cuit_emisor || '')}">${esc(d.proveedor_nombre || d.cuit_emisor || '—')}</span>${d.archivo_alerta ? ` <span title="${esc(d.archivo_alerta)}" style="color:var(--bad)">${ico('clip','s')}</span>` : ''}${d.nota ? ` <span title="${esc(d.nota)}" style="color:#b45309">${ico('hoja','s')}</span>` : ''}${docCerrado(d) ? ` <span title="Mes enviado al estudio: no se modifica" style="color:var(--mut)">${ico('candado','s')}</span>` : ''}</td>
       <td class="oculta-mov">${d.archivo_path ? `<a class="nro" href="${pdfUrl(d.archivo_path)}" target="_blank" rel="noopener" title="Abrir el PDF" onclick="event.stopPropagation()">${nro}</a>` : nro}</td>
       <td class="ctr">${letraTipo(d.tipo_gasto)}</td>
       <td class="num">${plata(d.total)}</td>
@@ -3455,6 +3466,17 @@ function _pintarEstudio(){
   const malos = R.filter(x => Math.abs(Number(x.descuadre)||0) > 1);
   const avisos = R.filter(x => x.alerta);
   const mesTxt = _listRotulo();
+  // (v147) cierre del mes: solo cuando el selector es un mes calendario entero (por fecha de ingreso)
+  const mesEntero = _listEsMesEntero() && listPor === 'ingreso', mesKey = mesEntero ? listPer.ing.desde.slice(0,7) : null;
+  const cerrado = mesKey ? MESES_CERRADOS.get(mesKey) : null;
+  const cierreHTML = !mesEntero ? '' : `<div class="card" style="border-left:4px solid ${cerrado ? '#166534' : '#d97706'};display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div style="flex:1;min-width:240px"><b>${ico(cerrado ? 'candado' : 'avion','s')} ${cerrado ? 'Mes enviado al estudio' : 'Mes todavía abierto'}</b>
+        <div class="mini">${cerrado ? `Cerrado el ${_fechaTs(cerrado.cerrado_at)} por ${esc(String(cerrado.cerrado_por||'').split('@')[0])}${cerrado.nota ? ' · ' + esc(cerrado.nota) : ''}. Los comprobantes de ${esc(mesTxt)} ya no se modifican (solo el administrador).`
+          : `Cuando le mandes los listados de ${esc(mesTxt)} al estudio, marcalo acá: desde ese momento los comprobantes del mes quedan bloqueados y solo el administrador puede tocarlos.`}</div></div>
+      ${SOY_ADMIN ? (cerrado ? `<button class="act gh" onclick="reabrirMes('${mesKey}')" title="Volver a permitir cambios en este mes">${ico('candado','s')} Reabrir el mes</button>`
+                             : `<button class="act" onclick="cerrarMes('${mesKey}')" title="Marcar que los listados de este mes ya se enviaron al estudio">${ico('avion','s')} Enviado al estudio · cerrar ${esc(mesTxt)}</button>`)
+                 : `<span class="mini">${cerrado ? '' : 'Lo cierra JP.'}</span>`}
+    </div>`;
   const fila = listPer[_listFila()];
 
   c.innerHTML = `
@@ -3494,6 +3516,7 @@ function _pintarEstudio(){
           : ''}</p>
     </div>
 
+    ${cierreHTML}
     <div class="kpis">
       <div class="kpi"><div class="lbl">Comprobantes</div><div class="val">${R.length}</div>
         <div class="sub">${R.filter(x=>x.es_nc).length} notas de crédito</div></div>
@@ -3620,6 +3643,20 @@ function _pintarEstudio(){
     </div>`;
 }
 
+async function cerrarMes(mesKey){
+  const [y, m] = mesKey.split('-');
+  const nota = prompt(`Marcar ${MESES[+m-1]} ${y} como ENVIADO AL ESTUDIO.\n\nDesde ahora los comprobantes de ese mes no se pueden modificar (solo vos). Podés dejar una nota (opcional):`, '');
+  if (nota === null) return;
+  const {error} = await sb.from('compras_meses_cerrados').insert({periodo: mesKey + '-01', nota: nota.trim() || null});
+  if (error){ alert('No se pudo cerrar: ' + error.message); return; }
+  await cargarMesesCerrados(); cargarListadosEstudio();
+}
+async function reabrirMes(mesKey){
+  if (!confirm('¿Reabrir el mes? Los comprobantes se van a poder modificar de nuevo, y el listado que recibió el estudio puede dejar de coincidir.')) return;
+  const {error} = await sb.from('compras_meses_cerrados').delete().eq('periodo', mesKey + '-01');
+  if (error){ alert('No se pudo reabrir: ' + error.message); return; }
+  await cargarMesesCerrados(); cargarListadosEstudio();
+}
 const _n0 = v => Number(v) ? Number(v).toLocaleString('es-AR', {maximumFractionDigits:0}) : '—';
 const _fecha = f => f ? f.split('-').reverse().join('/') : '';
 
@@ -4143,8 +4180,8 @@ async function vistaEquivalencias(){
 
   const [pend, hechas, ign, usoR] = await Promise.all([
     sb.from('compras_renglones')
-      .select('codigo_proveedor,descripcion,cantidad,importe,documento_id,compras_documentos(cuit_emisor,proveedor_nombre)')
-      .is('sku', null).limit(500),
+      .select('codigo_proveedor,descripcion,cantidad,importe,documento_id,compras_documentos!inner(cuit_emisor,proveedor_nombre,tipo_gasto)')
+      .is('sku', null).eq('compras_documentos.tipo_gasto', 'mercaderia').limit(500),   // (v147, JP) solo facturas tipo M
     sb.from('compras_equivalencias')
       .select('id,cuit_proveedor,codigo_proveedor,descripcion_proveedor,sku,cantidad_por_unidad,proporcion_costo,veces_usada,creada_por,creada_at')
       .order('creada_at', {ascending:false}).limit(600),
@@ -4224,7 +4261,7 @@ function _pintarEquivalencias(){
 
     <div class="card">
       <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico(EQ_VER_IGNORADOS ? 'anular' : 'traducir','s')} ${EQ_VER_IGNORADOS ? 'Marcados como "no es un artículo"' : 'Artículos que el proveedor nombra distinto'}
-        ${ayuda(EQ_VER_IGNORADOS ? 'Renglones de facturas que no son mercadería (servicios, cargos, comisiones): no se traducen a ningún SKU. Con ↩ vuelven a la lista de pendientes.' : 'Familia García Regueira comparte catálogo con nosotros, así que sus facturas no aparecen acá: el código de ellos ya es nuestro SKU. Los que sí aparecen son los del resto de los proveedores. Cada código se resuelve una sola vez y de ahí en más el sistema lo traduce solo. La columna Sugerencia es lo que el sistema propone por parecido de texto: con ✓ se acepta sin abrir la ficha (solo las de 0,75 o más; las otras conviene mirarlas). Lo que no es un artículo (un servicio, un cargo) se saca de la lista con ⊘.')}</h3>
+        ${ayuda(EQ_VER_IGNORADOS ? 'Renglones de facturas que no son mercadería (servicios, cargos, comisiones): no se traducen a ningún SKU. Con ↩ vuelven a la lista de pendientes.' : 'Solo entran renglones de facturas contabilizadas como MERCADERÍA (tipo M): los gastos, servicios e inversiones no se traducen a SKU. Familia García Regueira comparte catálogo con nosotros, así que sus facturas no aparecen acá: el código de ellos ya es nuestro SKU. Los que sí aparecen son los del resto de los proveedores. Cada código se resuelve una sola vez y de ahí en más el sistema lo traduce solo. La columna Sugerencia es lo que el sistema propone por parecido de texto: con ✓ se acepta sin abrir la ficha (solo las de 0,75 o más; las otras conviene mirarlas). Lo que no es un artículo (un servicio, un cargo) se saca de la lista con ⊘.')}</h3>
       ${!PEND.length
         ? `<div class="vacio">${hayFiltro ? 'Nada que coincida con la búsqueda.' : EQ_VER_IGNORADOS ? 'No hay renglones marcados.' : 'No hay artículos esperando traducción.'}</div>`
         : `<div style="overflow-x:auto"><table class="tb-band">
@@ -5583,6 +5620,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=80"></script>
+<script src="manual.js?v=81"></script>
 </body>
 </html>

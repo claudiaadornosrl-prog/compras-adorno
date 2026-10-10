@@ -181,6 +181,7 @@ function _manualSecciones() {
       desc: 'Cada proveedor nombra sus artículos a su manera. Una equivalencia dice "el código X de este proveedor es nuestro SKU Y"; se carga una vez y de ahí en más el sistema traduce solo las facturas y los remitos.',
       pasos: [
         'De a uno: en la pestaña 🔗 Equivalencias, lista "Artículos que el proveedor nombra distinto" → Traducir. También desde el renglón de una factura, con 🔗 Asignar SKU.',
+        'Solo entran renglones de facturas contabilizadas como MERCADERÍA (tipo M): los gastos, servicios e inversiones no se traducen a SKU.',
         'Más rápido: la columna Sugerencia muestra el SKU que el sistema propone y su parecido. Si da 0,75 o más aparece un ✓ verde: se acepta ahí mismo sin abrir la ficha (si la descripción dice pack, se abre la ficha para poner cuántas unidades trae). Las de menos de 0,75 conviene mirarlas con Traducir.',
         'Lo que no es un artículo (cargos de Mercado Pago, servicios, comisiones) nunca va a tener SKU: con ⊘ se saca de la lista y queda en el chip "N no son artículos", desde donde se puede volver a la lista con ↩.',
         'El desplegable de proveedores filtra las dos tablas; sirve para sentarse a resolver los de un proveedor de una vez. En las cargadas, la columna Usada dice cuántos renglones tradujo cada equivalencia (— = ninguno todavía).',
@@ -282,6 +283,7 @@ function _manualSecciones() {
       icon: '📊', titulo: 'Listados',
       desc: 'Dos miradas del mismo período: la de gestión (cuánto se gastó) y la del estudio contable (cuánto crédito fiscal hay).',
       pasos: [
+        '🔒 Mes enviado al estudio: en "Para el estudio", con un mes entero elegido por fecha de ingreso, aparece la tarjeta del cierre. Cuando los listados ya se mandaron, JP lo marca como enviado y desde ahí los comprobantes de ese mes quedan bloqueados (no se contabilizan, no se corrigen, no se rechazan); solo el administrador puede tocarlos, y puede reabrir el mes. Lo que sigue permitido siempre: el estado de pago, la orden de pago y la nota. En la grilla, el candado gris marca los comprobantes de meses cerrados.',
         '💳 Cuenta corriente: qué le debemos a cada proveedor. Saldo = facturas contabilizadas (ND suman, NC restan) que todavía no están pagadas; un pago es una orden de pago PAGADA (la emitida sin pagar se ve pero no descuenta). Tocando el proveedor se abre el detalle: cada comprobante y cada OP, con su estado; desde ahí se abre el comprobante o la OP. Lo arma el módulo con sus propios datos, no se lee del Dragonfish.',
         'Cada tabla de "Para el estudio" tiene sus descargas a la derecha del título: Excel (ícono verde), Formato estudio (hoja: las mismas columnas del Subdiario que se manda hoy, solo en IVA Compras) y PDF. Lo que se ve en pantalla es exactamente lo que sale en el archivo. El Libro IVA Digital (TXT de ARCA) sigue arriba, al lado del selector de mes.',
         '📈 Gestión — reemplaza la planilla de gastos: por tipo de gasto (gastos, mercadería, inversiones, no-actividad) con su porcentaje, mes a mes, y los 25 proveedores más grandes. Respeta los filtros de arriba.',
