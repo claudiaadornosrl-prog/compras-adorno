@@ -281,6 +281,7 @@ function _manualSecciones() {
       icon: '📊', titulo: 'Listados',
       desc: 'Dos miradas del mismo período: la de gestión (cuánto se gastó) y la del estudio contable (cuánto crédito fiscal hay).',
       pasos: [
+        'Cada tabla de "Para el estudio" tiene sus descargas a la derecha del título: Excel (ícono verde), Formato estudio (hoja: las mismas columnas del Subdiario que se manda hoy, solo en IVA Compras) y PDF. Lo que se ve en pantalla es exactamente lo que sale en el archivo. El Libro IVA Digital (TXT de ARCA) sigue arriba, al lado del selector de mes.',
         '📈 Gestión — reemplaza la planilla de gastos: por tipo de gasto (gastos, mercadería, inversiones, no-actividad) con su porcentaje, mes a mes, y los 25 proveedores más grandes. Respeta los filtros de arriba.',
         '🧾 Para el estudio — elegís el MES con los desplegables de mes y año (o con las flechas ‹ ›) y salen los tres listados de ese mes completo. El desplegable «El mes elige por fecha de» dice si ese mes es de INGRESO (default: el mes en que se contabilizó) o de EMISIÓN.',
         'Abajo hay DOS filtros que se pueden usar a la vez: Fecha de ingreso (Desde/Hasta) y Fecha de emisión (Desde/Hasta). Se combinan: el comprobante tiene que cumplir los dos. Un “Desde” vacío es desde el principio y un “Hasta” vacío es sin tope (ej.: ingreso de septiembre + emisión hasta el 31/01 = lo que se contabilizó en septiembre pero se emitió en enero o antes). Con ✕ se saca un filtro.',

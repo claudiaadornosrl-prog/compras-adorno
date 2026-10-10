@@ -402,6 +402,9 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 .fx-tbl .fx-nuestra{font-size:11.5px;color:#0f766e;overflow:hidden;text-overflow:ellipsis}
 .fx-tbl .fx-listas{white-space:nowrap;color:var(--mut)}
 .fx-tbl .fx-listas b{font-weight:600;color:var(--tx)}
+/* (v145, JP) descargas de cada listado: íconos a la derecha del título de la tabla */
+.list-dl{margin-left:auto;display:inline-flex;gap:4px}
+.list-dl button.act.mini-ico{padding:4px 6px}
 .fx-tbl tfoot td{border-top:2px solid var(--bd);}
 .fx-tbl .chip{font-size:11px;padding:2px 7px;white-space:nowrap;}
 .fx-pie{display:grid;grid-template-columns:1fr 280px;gap:16px;margin:10px 0 4px;padding-top:10px;border-top:2px solid var(--bd);}
@@ -3399,9 +3402,7 @@ function _pintarEstudio(){
             <option value="emision" ${listPor==='emision'?'selected':''}>Emisión</option>
           </select></div>
         <div style="flex:1"></div>
-        <button class="act gh" style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;font-size:12.5px" onclick="_bajarFormatoEstudio()" title="Bajar en Excel con las mismas columnas que el Subdiario que le mandás hoy al estudio">${ico('excel','s')} Formato estudio</button>
-        <button class="act" style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;font-size:12.5px" onclick="_bajarIvaCompras()" title="Bajar en Excel el IVA Compras completo: una columna por alícuota, descuadre y alertas">${ico('excel','s')} IVA Compras</button>
-        <button class="act gh" style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;font-size:12.5px" onclick="libroIvaDigital()" title="Archivos TXT del Libro IVA Digital de ARCA (RG 4597): compras y ventas">${ico('archivo','s')} Libro IVA Digital</button>
+        <button class="act gh ico-btn" style="padding:6px 10px;font-size:12.5px" onclick="libroIvaDigital()" title="Archivos TXT del Libro IVA Digital de ARCA (RG 4597): compras y ventas">${ico('archivo','s')} Libro IVA Digital</button>
       </div>
       <div class="lp-rangos">
         ${[['ing','Fecha de ingreso','Mes en que se contabilizó (si el comprobante no la tiene, cuenta la emisión)'],
@@ -3460,7 +3461,11 @@ function _pintarEstudio(){
 
     <div class="card">
       <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('factura','s')} IVA Compras · ${esc(mesTxt)}
-        ${ayuda('Un renglón por comprobante, con el neto abierto por alícuota. Es lo que va al Libro IVA Compras.')}</h3>
+        ${ayuda('Un renglón por comprobante, con el neto abierto por alícuota. Es lo que va al Libro IVA Compras. Descargas: Excel completo (una columna por alícuota, descuadre y alertas), Formato estudio (las mismas columnas del Subdiario que se manda hoy) y PDF.')}
+        ${R.length ? `<span class="list-dl">
+          <button class="act gh mini-ico" title="Excel · IVA Compras completo (una columna por alícuota, descuadre y alertas)" onclick="_bajarIvaCompras()">${ico('excel','s')}</button>
+          <button class="act gh mini-ico" title="Excel · Formato estudio: las mismas columnas del Subdiario que se manda hoy" onclick="_bajarFormatoEstudio()">${ico('hoja','s')}</button>
+          <button class="act gh mini-ico" title="PDF · IVA Compras" onclick="_pdfIvaCompras()">${ico('pdf','s')}</button></span>` : ''}</h3>
       <div style="overflow-x:auto;max-height:520px"><table style="font-size:12.5px">
         <thead><tr><th>Fecha</th><th>Comprobante</th><th>CUIT</th><th>Proveedor</th><th>IVA</th>
           <th class="num">Neto 21%</th><th class="num">Neto 10,5%</th><th class="num">Neto 27%</th>
@@ -3493,8 +3498,10 @@ function _pintarEstudio(){
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
         <div><h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('inbox','s')} Percepciones sufridas
-          ${ayuda('Lo que los proveedores le percibieron a la empresa. Son crédito contra el impuesto correspondiente, igual que el IVA. Abajo, el detalle por comprobante y jurisdicción: el mismo corte del listado que se manda hoy.')}</h3></div>
-        ${LIST_PDET && LIST_PDET.length ? `<button class="act gh mini-ico" title="Bajar el detalle en Excel" onclick="_bajarPercepciones()">${ico('excel','s')}</button>` : ''}
+          ${ayuda('Lo que los proveedores le percibieron a la empresa. Son crédito contra el impuesto correspondiente, igual que el IVA. Abajo, el detalle por comprobante y jurisdicción: el mismo corte del listado que se manda hoy.')}
+          ${LIST_PDET && LIST_PDET.length ? `<span class="list-dl">
+            <button class="act gh mini-ico" title="Excel · detalle de percepciones" onclick="_bajarPercepciones()">${ico('excel','s')}</button>
+            <button class="act gh mini-ico" title="PDF · detalle de percepciones" onclick="_pdfPercepciones()">${ico('pdf','s')}</button></span>` : ''}</h3></div>
       </div>
       ${LIST_PERC && LIST_PERC.length ? `<table><tbody>${LIST_PERC.map(p=>`<tr>
         <td>${esc(p.impuesto)}</td><td class="mini">${p.comprobantes} comprobantes</td>
@@ -3515,7 +3522,10 @@ function _pintarEstudio(){
 
     <div class="card">
       <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('porcentaje','s')} Retenciones practicadas
-        ${ayuda('Lo que la empresa le retuvo a sus proveedores al pagarles, agrupado por quincena (que es como se declara). Se llena solo con las órdenes de pago que emita el módulo.')}</h3>
+        ${ayuda('Lo que la empresa le retuvo a sus proveedores al pagarles, agrupado por quincena (que es como se declara). Se llena solo con las órdenes de pago que emita el módulo.')}
+        ${LIST_RET && LIST_RET.length ? `<span class="list-dl">
+          <button class="act gh mini-ico" title="Excel · retenciones por quincena (lo que recibe el estudio)" onclick="_bajarRetenciones()">${ico('excel','s')}</button>
+          <button class="act gh mini-ico" title="PDF · retenciones por quincena" onclick="_pdfRetenciones()">${ico('pdf','s')}</button></span>` : ''}</h3>
       ${LIST_RET && LIST_RET.length ? `<div style="overflow-x:auto"><table>
         <thead><tr><th>Quincena</th><th>Fecha</th><th>OP</th><th>Proveedor</th><th>Régimen</th>
           <th class="num">Base</th><th class="num">Alíc.</th><th class="num">Retenido</th><th>Certificado</th></tr></thead>
@@ -3528,8 +3538,6 @@ function _pintarEstudio(){
           <td class="num">${_n0(r.base_calculo)}</td><td class="num">${Number(r.alicuota||0)}%</td>
           <td class="num"><b>${plata(r.importe)}</b></td><td class="mini">${esc(r.certificado_nro||'—')}</td></tr>`).join('')}
         </tbody></table></div>
-        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-          <button class="act gh" onclick="_bajarRetenciones()">⬇ Retenciones quincenal (CSV)</button></div>
         ${LIST_RET.some(r=>r.editado) ? `<p class="mini" style="margin-top:8px">Las filas naranjas tienen
           el importe puesto a mano: el motivo es lo que explica el número en el certificado.</p>` : ''}`
       : `<div class="vacio">Todavía no hay retenciones en este período: se practican al emitir órdenes de pago.</div>`}
@@ -3589,6 +3597,65 @@ function _bajarFormatoEstudio(){
     ].join(';');
   }));
   _csvBajar(`Subdiario IVA compras ${_listRotulo(true)}.csv`, filas);
+}
+
+// ── (v145, JP) PDF de los listados del estudio: A4 apaisado, tabla con totales, pie con página ──
+//  Mismo contenido que el Excel de cada tabla. Usa jspdf-autotable (se carga la primera vez).
+async function _pdfListado(titulo, columnas, filas, opts = {}){
+  if (!window.jspdf) await _cargarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  if (!window.jspdf.jsPDF.API.autoTable) await _cargarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit: 'mm', format: 'a4', orientation: opts.vertical ? 'portrait' : 'landscape'});
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+  const periodo = _listRotulo(false);
+  const cab = () => {
+    doc.setFillColor(234, 88, 12); doc.rect(0, 0, W, 13, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.text(titulo, 10, 8.5);
+    doc.setFontSize(8.5); doc.setFont('helvetica', 'normal'); doc.text(`Claudia Adorno SRL · CUIT 30-70967311-0 · ${periodo}${MODO_PRUEBA ? ' · AMBIENTE DE PRUEBA' : ''}`, W - 10, 8.5, {align: 'right'});
+  };
+  doc.autoTable({
+    startY: 17, margin: {left: 8, right: 8, top: 17, bottom: 12},
+    head: [columnas.map(c => c.t)], body: filas, foot: opts.totales ? [opts.totales] : undefined,
+    styles: {font: 'helvetica', fontSize: 7.4, cellPadding: 1.4, overflow: 'ellipsize', textColor: [15,23,42], lineColor: [226,232,240], lineWidth: 0.1},
+    headStyles: {fillColor: [248,250,252], textColor: [100,116,139], fontStyle: 'bold', fontSize: 7},
+    footStyles: {fillColor: [248,250,252], textColor: [15,23,42], fontStyle: 'bold'},
+    alternateRowStyles: {fillColor: [252,252,253]},
+    columnStyles: Object.fromEntries(columnas.map((c, i) => [i, {halign: c.num ? 'right' : 'left', cellWidth: c.w || 'auto', fontStyle: c.b ? 'bold' : 'normal'}])),
+    showFoot: 'lastPage', didDrawPage: cab,
+    didParseCell: h => { if (h.section === 'body' && opts.filaRoja && opts.filaRoja(filas[h.row.index], h.row.index)) h.cell.styles.textColor = [153,27,27]; },
+  });
+  const n = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= n; i++){ doc.setPage(i); doc.setFontSize(7); doc.setTextColor(100,116,139);
+    doc.text(`${titulo} · ${periodo} · generado ${_fechaTs(new Date().toISOString())} · página ${i} de ${n}`, W / 2, H - 5, {align: 'center'}); }
+  doc.save(`${titulo} ${_listRotulo(true)}.pdf`);
+}
+const _lstN = v => Number(v) ? Number(v).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '';
+function _pdfIvaCompras(){
+  if (!LIST_IVA || !LIST_IVA.length){ alert('No hay comprobantes en el período.'); return; }
+  const R = LIST_IVA, s = k => R.reduce((a, x) => a + (Number(x[k]) || 0), 0);
+  const cols = [{t:'Fecha', w:16}, {t:'Comprobante', w:30}, {t:'CUIT', w:21}, {t:'Proveedor', w:46}, {t:'IVA', w:9},
+    {t:'Neto 21%', num:1}, {t:'Neto 10,5%', num:1}, {t:'Neto 27%', num:1}, {t:'No grav./ex.', num:1}, {t:'IVA 21%', num:1},
+    {t:'IVA 10,5%', num:1}, {t:'IVA 27%', num:1}, {t:'Ajuste', num:1}, {t:'Percep.', num:1}, {t:'Total', num:1, b:1}];
+  const filas = R.map(x => [_fecha(x.fecha_emision), x.comprobante, _cuitFmt(x.cuit_emisor), (x.proveedor_nombre||'').slice(0,40), x.cond_iva || '',
+    _lstN(x.neto_21), _lstN(x.neto_105), _lstN(x.neto_27), _lstN(Number(x.no_gravado)+Number(x.exento)), _lstN(x.iva_21), _lstN(x.iva_105), _lstN(x.iva_27),
+    _lstN(x.iva_otros), _lstN(Number(x.percep_iva)+Number(x.percep_iibb_caba)+Number(x.percep_iibb_ba)+Number(x.otros_tributos)), _lstN(x.total)]);
+  const tot = ['Totales', `${R.length} comprobantes`, '', '', '', _lstN(s('neto_21')), _lstN(s('neto_105')), _lstN(s('neto_27')), _lstN(s('no_gravado')+s('exento')),
+    _lstN(s('iva_21')), _lstN(s('iva_105')), _lstN(s('iva_27')), _lstN(s('iva_otros')), _lstN(s('percep_iva')+s('percep_iibb_caba')+s('percep_iibb_ba')+s('otros_tributos')), _lstN(s('total'))];
+  _pdfListado('IVA Compras', cols, filas, {totales: tot, filaRoja: x => x && R[filas.indexOf(x)] && R[filas.indexOf(x)].es_nc});
+}
+function _pdfPercepciones(){
+  if (!LIST_PDET || !LIST_PDET.length){ alert('No hay percepciones en el período.'); return; }
+  const cols = [{t:'Fecha', w:20}, {t:'Comprobante', w:40}, {t:'CUIT', w:28}, {t:'Proveedor'}, {t:'Impuesto', w:34}, {t:'Jurisdicción', w:34}, {t:'Percepción', num:1, b:1, w:28}];
+  const filas = LIST_PDET.map(p => [_fecha(p.fecha_emision), p.comprobante, _cuitFmt(p.cuit), (p.proveedor||'').slice(0,45), p.impuesto, p.jurisdiccion || '—', _lstN(p.importe)]);
+  _pdfListado('Percepciones sufridas', cols, filas, {vertical: true, totales: ['Total', `${LIST_PDET.length} renglones`, '', '', '', '', _lstN(LIST_PDET.reduce((a, p) => a + Number(p.importe || 0), 0))]});
+}
+function _pdfRetenciones(){
+  if (!LIST_RET || !LIST_RET.length){ alert('No hay retenciones en el período.'); return; }
+  const cols = [{t:'Quincena', w:18}, {t:'Fecha', w:16}, {t:'Orden de pago', w:26}, {t:'CUIT', w:22}, {t:'Proveedor', w:50}, {t:'Régimen', w:60},
+    {t:'Base', num:1}, {t:'Alíc.', num:1, w:11}, {t:'Retenido', num:1, b:1}, {t:'Certificado', w:22}, {t:'A mano / motivo', w:32}];
+  const filas = LIST_RET.map(r => [r.quincena, _fecha(r.fecha), r.orden_pago || ('#' + r.orden_pago_id), _cuitFmt(r.cuit), (r.proveedor||'').slice(0,40),
+    `${r.regimen_codigo || ''} ${r.regimen_nombre || ''}`.trim(), _lstN(r.base_calculo), Number(r.alicuota || 0) + ' %', _lstN(r.importe), r.certificado_nro || '—', r.editado ? 'SÍ · ' + (r.motivo_edicion || '') : '']);
+  _pdfListado('Retenciones practicadas', cols, filas, {totales: ['Total', '', '', '', '', `${LIST_RET.length} retenciones`, _lstN(LIST_RET.reduce((a, r) => a + Number(r.base_calculo || 0), 0)), '', _lstN(LIST_RET.reduce((a, r) => a + Number(r.importe || 0), 0)), '', '']});
 }
 
 function _bajarPercepciones(){
@@ -5440,6 +5507,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=78"></script>
+<script src="manual.js?v=79"></script>
 </body>
 </html>
