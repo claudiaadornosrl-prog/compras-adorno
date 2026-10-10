@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v140-click-afuera';
+const CACHE_VERSION = 'compras-v141-ret-ecuacion';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

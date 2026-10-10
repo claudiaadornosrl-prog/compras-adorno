@@ -410,6 +410,15 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
   border-radius:9px;padding:9px 11px;font-size:12px;line-height:1.45;width:min(420px,80vw);box-shadow:0 8px 24px rgba(0,0,0,.25);white-space:normal;text-align:left;font-weight:400}
 .op-tip:hover .op-tipbox,.op-tip.abierto .op-tipbox{display:block}
 .op-tip .op-tipbox div+div{margin-top:3px;padding-top:3px;border-top:1px solid rgba(255,255,255,.12)}
+.op-tip:hover .op-tipbox{z-index:10050}
+.op-tipbox .op-ec-tit{font-weight:700;margin-bottom:5px}
+.op-tipbox table.op-ec{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+.op-tipbox table.op-ec td{padding:2px 4px;border:none;color:#f9fafb;font-size:12px;white-space:nowrap}
+.op-tipbox table.op-ec td.op{width:14px;text-align:center;color:#fbbf24;font-weight:700}
+.op-tipbox table.op-ec td.num{text-align:right;padding-left:14px}
+.op-tipbox table.op-ec tr.ig td{border-top:1px solid rgba(255,255,255,.25);font-weight:700}
+.op-tipbox table.op-ec tr.sub td{color:#cbd5e1;font-style:italic;padding-top:5px}
+.op-tipbox .nota{color:#cbd5e1;font-weight:400;font-style:italic}
 </style>
 </head>
 <body>
@@ -1111,11 +1120,31 @@ async function _opCalcular(){
 //  muestra. Así lo que se lee al pasar el mouse es EXACTAMENTE lo que se
 //  calculó, y en la OP emitida queda guardado tal cual.
 function _opTip(lineas, texto){
-  const ls = Array.isArray(lineas) ? lineas.filter(Boolean) : [];
-  if (!ls.length) return esc(texto);
+  const todo = Array.isArray(lineas) ? lineas.filter(Boolean) : [];
+  const ls = todo.filter(l => typeof l === 'string');
+  // (v141, JP) la RPC manda como último elemento {ecuacion:[{op,rotulo,monto|pct,nota}]}: se dibuja como la tablita del Dragon
+  const ec = (todo.find(l => l && typeof l === 'object' && Array.isArray(l.ecuacion)) || {}).ecuacion || [];
+  if (!ls.length && !ec.length) return esc(texto);
+  const cuerpo = ec.length
+    ? `<div class="op-ec-tit">${esc(ls[0] || texto)}</div><table class="op-ec">${ec.map(f => `<tr class="${f.op === '=' ? 'ig' : ''}${f.op === '' ? ' sub' : ''}">
+        <td class="op">${esc(f.op)}</td><td>${esc(f.rotulo)}${f.nota ? ` <span class="nota">· ${esc(f.nota)}</span>` : ''}</td>
+        <td class="num">${f.pct != null ? Number(f.pct).toLocaleString('es-AR') + ' %' : f.monto != null ? plata(f.monto) : ''}</td></tr>`).join('')}</table>
+       ${ls.filter(l => /certificado|venció|propia del proveedor/i.test(l)).map(l => `<div class="nota">${esc(l)}</div>`).join('')}`
+    : ls.map(l => `<div>${esc(l)}</div>`).join('');
   // (22-sep, JP) sin title nativo: duplicaba el popover con el cartel chico del navegador
-  return `<span class="op-tip" onclick="this.classList.toggle('abierto');event.stopPropagation()">${esc(texto)}
-    <span class="op-tipbox">${ls.map(l => `<div>${esc(l)}</div>`).join('')}</span></span>`;
+  // (v141) el popover se ancla con position:fixed al abrirse, así no lo recorta el scroll del modal (OP cerrada)
+  return `<span class="op-tip" onclick="_opTipToggle(this);event.stopPropagation()">${esc(texto)}
+    <span class="op-tipbox">${cuerpo}</span></span>`;
+}
+function _opTipToggle(el){
+  const abierto = el.classList.toggle('abierto'), box = el.querySelector('.op-tipbox');
+  if (!box) return;
+  if (abierto){
+    const r = el.getBoundingClientRect();
+    box.style.position = 'fixed'; box.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 440)) + 'px';
+    box.style.top = Math.min(r.bottom + 4, window.innerHeight - 40) + 'px'; box.style.zIndex = '10050';
+    requestAnimationFrame(() => { const b = box.getBoundingClientRect(); if (b.bottom > window.innerHeight - 8) box.style.top = Math.max(8, r.top - b.height - 4) + 'px'; });
+  } else { box.style.position = ''; box.style.left = ''; box.style.top = ''; box.style.zIndex = ''; }
 }
 
 // ── Medios de pago: uno o varios ───────────────────────────────────────
@@ -5350,6 +5379,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=74"></script>
+<script src="manual.js?v=75"></script>
 </body>
 </html>
