@@ -58,6 +58,17 @@ function _pdfLetras(n){
 // ═══════════════════════════════════════════════════════════════════════
 const _PC = { or: [234,88,12], tx: [15,23,42], mut: [100,116,139], bd: [226,232,240], soft: [248,250,252], fila: [241,245,249],
               amb: [255,247,237], ambBd: [254,215,170], ambTx: [154,52,18], blanco: [255,255,255], gris: [148,163,184] };
+// (v143, JP) firma de JP para el certificado de retención (misma imagen que los recibos de RRHH)
+let _pdfFirma = null;
+async function _pdfCargarFirma(){
+  if (_pdfFirma) return _pdfFirma;
+  try {
+    const r = await fetch('./firma-jp.jpg'); if (!r.ok) throw new Error('HTTP ' + r.status);
+    const b = await r.blob();
+    _pdfFirma = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = no; fr.readAsDataURL(b); });
+  } catch (e) { console.warn('Firma no disponible', e); _pdfFirma = null; }
+  return _pdfFirma;
+}
 let _pdfLogo = null;
 async function _pdfCargarLogo(){
   if (_pdfLogo) return _pdfLogo;
@@ -217,6 +228,7 @@ async function descargarCertificadosPdf(opId){
   const doc = new jsPDF({unit: 'mm', format: 'a4'});
   const fnt = (await _opCargarFuente(doc)) ? 'AdornoTitulo' : 'helvetica';
   doc.setFont(fnt, 'normal'); await _pdfCargarLogo();
+  await _pdfCargarFirma();
   const IMP = {ganancias: 'Impuesto a las ganancias', iibb: 'Ingresos Brutos', iva: 'Impuesto al valor agregado', suss: 'SUSS'};
   const nroOP = `${o.letra || 'X'} ${String(o.punto_venta).padStart(4,'0')}-${String(o.numero).padStart(8,'0')}`;
   const montoComp = f.reduce((a, x) => a + Number(x.total || 0), 0);
@@ -261,7 +273,8 @@ async function descargarCertificadosPdf(opId){
     y = _pdfCardFin(doc, 14, y0, 182, y);
     if (y > 240) y = nuevaPagina();
     _pdfFranja(doc, y, 'Monto de la retención', `Son pesos ${_pdfLetras(r.importe).toLowerCase()}`, `$ ${_pdfN(r.importe)}`);
-    // firma de este certificado (en la página donde terminó)
+    // firma de este certificado (en la página donde terminó); la imagen va apoyada sobre la línea
+    if (_pdfFirma) doc.addImage(_pdfFirma, 'JPEG', 20, 239.5, 34, 34 * 258 / 382);
     doc.setDrawColor(..._PC.tx); doc.setLineWidth(0.3); doc.line(14, 262, 84, 262);
     _pt(doc, 'Firma del agente de retención', 14, 266, {size: 7});
     _pt(doc, `${emp.firmante} · ${emp.cargo}`, 14, 269.5, {size: 6.3, col: _PC.mut});
