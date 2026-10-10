@@ -100,6 +100,7 @@ function _manualSecciones() {
       icon: '✓', titulo: 'Controlar una factura',
       desc: 'Se abre con el botón "Controlar" y muestra todo lo que hace falta para decidir, sin ir a buscar nada.',
       pasos: [
+        'Cada renglón de mercadería se ve en tres líneas: arriba, chiquito, cómo lo describe el proveedor en su factura; en el medio nuestro SKU (grande) con nuestra descripción al lado; abajo las listas del Dragonfish a la fecha de la factura (lista = COMPRA, costo = COSTO con el descuento pactado).',
         'Arriba: neto, IVA y total leídos del PDF, más el nombre del archivo.',
         'Los botones de "conceptos que ya usó este proveedor" son el atajo: casi siempre es uno de esos dos o tres.',
         '🔄 La ETAPA manda: la etapa del comprobante (sin contabilizar → contabilizado sin controlar → controlado sin OP → con OP sin pagar → pagada) define a la vez dónde se ve en el módulo y en qué carpeta del OneDrive está el PDF. Si desde Facturas se retrocede la etapa, el comprobante VUELVE a la Bandeja y el motor muda el archivo a la carpeta anterior; al aprobarlo de nuevo en la Bandeja avanza a "controlado sin OP" y el PDF se muda otra vez.',

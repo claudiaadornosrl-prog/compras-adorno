@@ -395,6 +395,13 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 .fx-tbl td{padding:5px 6px;border-top:1px solid var(--bd);vertical-align:top;}
 .fx-tbl .fx-desc,.fx-tbl .fx-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px}
 .fx-tbl .fx-sub{line-height:1.6}
+/* (v144, JP) tres renglones por ítem: lo leído de la factura / SKU grande + nuestra descripción chica / listas */
+.fx-tbl .fx-desc{font-size:12px;color:var(--mut)}
+.fx-tbl .fx-sku{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px;line-height:1.7;display:flex;align-items:center;gap:6px}
+.fx-tbl .fx-sku code{font-size:13.5px;font-weight:700;color:var(--tx)}
+.fx-tbl .fx-nuestra{font-size:11.5px;color:#0f766e;overflow:hidden;text-overflow:ellipsis}
+.fx-tbl .fx-listas{white-space:nowrap;color:var(--mut)}
+.fx-tbl .fx-listas b{font-weight:600;color:var(--tx)}
 .fx-tbl tfoot td{border-top:2px solid var(--bd);}
 .fx-tbl .chip{font-size:11px;padding:2px 7px;white-space:nowrap;}
 .fx-pie{display:grid;grid-template-columns:1fr 280px;gap:16px;margin:10px 0 4px;padding-top:10px;border-top:2px solid var(--bd);}
@@ -2566,7 +2573,10 @@ function _facturaRenglones(d, reng, opts = {}){
       <tbody>${reng.map((r, i) => { const est = _rengEstado(r), pun = _rengPun(r);
         return `<tr>
         <td class="num">${ed ? inp(i, 'cantidad', r.cantidad, 54) : Number(r.cantidad||0).toLocaleString('es-AR')}</td>
-        <td style="max-width:300px"><div class="fx-desc" title="${esc(r.descripcion || '')}">${esc(r.descripcion || '')}</div><div class="mini fx-sub" title="${r.sku ? esc(r.sku) + (r.descripcion_nuestra ? ' · ' + esc(r.descripcion_nuestra) + ' (nuestra descripción en el Dragonfish)' : '') : ''}${r.lista_compra != null ? ' · lista ' + plata(r.lista_compra) : ''}${r.lista_costo != null ? ' · costo ' + plata(r.lista_costo) : ''}">${r.sku ? `<code>${esc(r.sku)}</code>${r.descripcion_nuestra ? ` <span style="color:#0f766e">${esc(r.descripcion_nuestra)}</span>` : ''}${Number(r.pack) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="El proveedor lo vende en pack de ${Number(r.pack)}: al stock entran ${_rengN(Number(r.cantidad||0) * Number(r.pack))} unidades">×${Number(r.pack)} = ${_rengN(Number(r.cantidad||0) * Number(r.pack))} u.</span>` : ''}` : (r.estado === 'desglosado' ? `<span style="color:#6d28d9">desglosado por color en el remito</span>` : `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>`)}${(!r.sku && !r.sin_stock && r.estado !== 'desglosado' && opts.desde) ? ` <button class="act op-ico" title="Asignar SKU: traducir el código del proveedor a un artículo nuestro. Se guarda como equivalencia y las próximas facturas de este proveedor lo reconocen solas." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${i})">${ico('link','s')}</button>` : ''}${r.lista_compra != null ? ` · lista ${plata(r.lista_compra)}` : ''}${r.lista_costo != null ? ` · costo ${plata(r.lista_costo)}` : ''}</div></td>
+        <td style="max-width:300px">
+          <div class="fx-desc" title="Como lo describe el proveedor en la factura${r.codigo_proveedor ? ' · su código ' + esc(r.codigo_proveedor) : ''}">${esc(r.descripcion || '')}</div>
+          <div class="fx-sku">${r.sku ? `<code>${esc(r.sku)}</code>${r.descripcion_nuestra ? ` <span class="fx-nuestra" title="Nuestra descripción en el Dragonfish">${esc(r.descripcion_nuestra)}</span>` : ''}${Number(r.pack) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="El proveedor lo vende en pack de ${Number(r.pack)}: al stock entran ${_rengN(Number(r.cantidad||0) * Number(r.pack))} unidades">×${Number(r.pack)} = ${_rengN(Number(r.cantidad||0) * Number(r.pack))} u.</span>` : ''}` : (r.estado === 'desglosado' ? `<span style="color:#6d28d9">desglosado por color en el remito</span>` : `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>`)}${(!r.sku && !r.sin_stock && r.estado !== 'desglosado' && opts.desde) ? ` <button class="act op-ico" title="Asignar SKU: traducir el código del proveedor a un artículo nuestro. Se guarda como equivalencia y las próximas facturas de este proveedor lo reconocen solas." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${i})">${ico('link','s')}</button>` : ''}</div>
+          ${(r.lista_compra != null || r.lista_costo != null) ? `<div class="mini fx-listas" title="Listas del Dragonfish vigentes a la fecha de la factura: COMPRA (precio de lista) y COSTO (con el descuento pactado por artículo)">${r.lista_compra != null ? `lista <b>${plata(r.lista_compra)}</b>` : ''}${r.lista_compra != null && r.lista_costo != null ? ' · ' : ''}${r.lista_costo != null ? `costo <b>${plata(r.lista_costo)}</b>` : ''}</div>` : ''}</td>
         <td class="num">${ed ? inp(i, 'precio_unitario', r.precio_unitario, 96) : (r.precio_unitario != null ? plata(r.precio_unitario) : '—')}</td>
         <td class="num">${ed ? inp(i, 'descuento_pct', r.descuento_pct, 46) + ' %' : (Number(r.descuento_pct) ? Number(r.descuento_pct).toLocaleString('es-AR') + ' %' : '—')}</td>
         <td class="num" id="fx-pun-${i}">${pun != null ? plata(pun) : '—'}</td>
@@ -5430,6 +5440,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=77"></script>
+<script src="manual.js?v=78"></script>
 </body>
 </html>
