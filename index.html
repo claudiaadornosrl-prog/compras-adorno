@@ -2612,7 +2612,7 @@ function _facturaRenglones(d, reng, opts = {}){
         <td class="num">${ed ? inp(i, 'descuento_pct', r.descuento_pct, 46) + ' %' : (Number(r.descuento_pct) ? Number(r.descuento_pct).toLocaleString('es-AR') + ' %' : '—')}</td>
         <td class="num" id="fx-pun-${i}">${pun != null ? plata(pun) : '—'}</td>
         <td class="num" id="fx-net-${i}"><b>${plata(_rengNeto(r))}</b></td>
-        <td id="fx-ctl-${i}">${_fxChip(est)}</td>
+        <td id="fx-ctl-${i}">${esMerc ? _fxChip(est) : '<span class="mini" title="No es mercadería: no se controla contra el stock ni las listas">—</span>'}</td>
         <td>${conc}</td>
       </tr>`; }).join('')}</tbody>
       <tfoot><tr><td colspan="5" style="text-align:right;color:var(--mut)">Suma de renglones</td><td class="num" id="fx-sub"><b>${plata(reng.reduce((a,r) => a + _rengNeto(r), 0))}</b></td><td colspan="2"></td></tr></tfoot>
@@ -2672,7 +2672,7 @@ function _rengEdit(i, campo, v){
   const set = (id, h) => { const el = document.getElementById(id); if (el) el.innerHTML = h; };
   set('fx-pun-' + i, pun != null ? plata(pun) : '—');
   set('fx-net-' + i, `<b>${plata(_rengNeto(r))}</b>`);
-  set('fx-ctl-' + i, _fxChip(_rengEstado(r)));
+  if ((document.getElementById('ctrl-tipo')?.value || (enControl||{}).tipo_gasto) === 'mercaderia') set('fx-ctl-' + i, _fxChip(_rengEstado(r)));
   set('fx-sub', `<b>${plata(d._renglones.reduce((a,x) => a + _rengNeto(x), 0))}</b>`);
   _refrescarDescMontos(); _repintarPie();
 }
@@ -5661,6 +5661,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=85"></script>
+<script src="manual.js?v=86"></script>
 </body>
 </html>
