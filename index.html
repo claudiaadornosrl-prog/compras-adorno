@@ -2596,6 +2596,8 @@ function _facturaRenglones(d, reng, opts = {}){
       : concs.length === 1 ? `<span class="chip fx-chip-conc">${esc(concs[0])}</span>`
       : `<span class="chip fx-chip-conc" title="${esc(concs.join(' · '))}">${concs.length} conceptos</span>`;
     const ed = !!opts.editable;
+    // (v150, JP) "sin SKU" y el botón de equivalencia solo tienen sentido en facturas de MERCADERÍA
+    const esMerc = (document.getElementById('ctrl-tipo')?.value || d.tipo_gasto) === 'mercaderia';
     const inp = (i, campo, v, w) => `<input type="text" inputmode="decimal" class="fx-in" style="width:${w}px" value="${v == null ? '' : String(v).replace('.', ',')}" oninput="_rengEdit(${i}, '${campo}', this.value)">`;
     return `<div style="overflow-x:auto"><table class="fx-tbl">
       <thead><tr><th class="num">Cant</th><th>Descripción · SKU</th><th class="num">P. unit</th><th class="num">Dto</th><th class="num">P. unit c/desc</th><th class="num">Neto</th><th>Control</th><th>Concepto</th></tr></thead>
@@ -2604,7 +2606,7 @@ function _facturaRenglones(d, reng, opts = {}){
         <td class="num">${ed ? inp(i, 'cantidad', r.cantidad, 54) : Number(r.cantidad||0).toLocaleString('es-AR')}</td>
         <td style="max-width:300px">
           <div class="fx-desc" title="Como lo describe el proveedor en la factura${r.codigo_proveedor ? ' · su código ' + esc(r.codigo_proveedor) : ''}">${esc(r.descripcion || '')}</div>
-          <div class="fx-sku">${r.sku ? `<code>${esc(r.sku)}</code>${r.descripcion_nuestra ? ` <span class="fx-nuestra" title="Nuestra descripción en el Dragonfish">${esc(r.descripcion_nuestra)}</span>` : ''}${Number(r.pack) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="El proveedor lo vende en pack de ${Number(r.pack)}: al stock entran ${_rengN(Number(r.cantidad||0) * Number(r.pack))} unidades">×${Number(r.pack)} = ${_rengN(Number(r.cantidad||0) * Number(r.pack))} u.</span>` : ''}` : (r.estado === 'desglosado' ? `<span style="color:#6d28d9">desglosado por color en el remito</span>` : `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>`)}${(!r.sku && !r.sin_stock && r.estado !== 'desglosado' && opts.desde) ? ` <button class="act op-ico" title="Asignar SKU: traducir el código del proveedor a un artículo nuestro. Se guarda como equivalencia y las próximas facturas de este proveedor lo reconocen solas." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${i})">${ico('link','s')}</button>` : ''}</div>
+          <div class="fx-sku">${r.sku ? `<code>${esc(r.sku)}</code>${r.descripcion_nuestra ? ` <span class="fx-nuestra" title="Nuestra descripción en el Dragonfish">${esc(r.descripcion_nuestra)}</span>` : ''}${Number(r.pack) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="El proveedor lo vende en pack de ${Number(r.pack)}: al stock entran ${_rengN(Number(r.cantidad||0) * Number(r.pack))} unidades">×${Number(r.pack)} = ${_rengN(Number(r.cantidad||0) * Number(r.pack))} u.</span>` : ''}` : (r.estado === 'desglosado' ? `<span style="color:#6d28d9">desglosado por color en el remito</span>` : esMerc ? `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>` : (r.codigo_proveedor ? `<span class="mini" title="Código del proveedor (no es mercadería: no se traduce a SKU)">${esc(r.codigo_proveedor)}</span>` : ''))}${(esMerc && !r.sku && !r.sin_stock && r.estado !== 'desglosado' && opts.desde) ? ` <button class="act op-ico" title="Asignar SKU: traducir el código del proveedor a un artículo nuestro. Se guarda como equivalencia y las próximas facturas de este proveedor lo reconocen solas." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${i})">${ico('link','s')}</button>` : ''}</div>
           ${(r.lista_compra != null || r.lista_costo != null) ? `<div class="mini fx-listas" title="Listas del Dragonfish vigentes a la fecha de la factura: COMPRA (precio de lista) y COSTO (con el descuento pactado por artículo)">${r.lista_compra != null ? `lista <b>${plata(r.lista_compra)}</b>` : ''}${r.lista_compra != null && r.lista_costo != null ? ' · ' : ''}${r.lista_costo != null ? `costo <b>${plata(r.lista_costo)}</b>` : ''}</div>` : ''}</td>
         <td class="num">${ed ? inp(i, 'precio_unitario', r.precio_unitario, 96) : (r.precio_unitario != null ? plata(r.precio_unitario) : '—')}</td>
         <td class="num">${ed ? inp(i, 'descuento_pct', r.descuento_pct, 46) + ' %' : (Number(r.descuento_pct) ? Number(r.descuento_pct).toLocaleString('es-AR') + ' %' : '—')}</td>
@@ -5634,6 +5636,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=83"></script>
+<script src="manual.js?v=84"></script>
 </body>
 </html>
