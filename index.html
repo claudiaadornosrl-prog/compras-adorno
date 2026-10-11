@@ -422,11 +422,12 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 .op-tip .op-tipbox div+div{margin-top:3px;padding-top:3px;border-top:1px solid rgba(255,255,255,.12)}
 .op-tip:hover .op-tipbox{z-index:10050}
 .op-tipbox .op-ec-tit{font-weight:700;margin-bottom:5px}
-.op-tipbox table.op-ec{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
-.op-tipbox table.op-ec td{padding:2px 4px;border:none;color:#f9fafb;font-size:12px;white-space:nowrap}
+.op-tipbox table.op-ec{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;background:transparent!important;margin:0}
+.op-tipbox table.op-ec tr,.op-tipbox table.op-ec tbody{background:transparent!important}
+.op-tipbox table.op-ec td{padding:2px 4px!important;border:none!important;background:transparent!important;color:#f9fafb!important;font-size:12px;white-space:nowrap;line-height:1.3}
 .op-tipbox table.op-ec td.op{width:14px;text-align:center;color:#fbbf24;font-weight:700}
 .op-tipbox table.op-ec td.num{text-align:right;padding-left:14px}
-.op-tipbox table.op-ec tr.ig td{border-top:1px solid rgba(255,255,255,.25);font-weight:700}
+.op-tipbox table.op-ec tr.ig td{border-top:1px solid rgba(255,255,255,.25)!important;font-weight:700}
 .op-tipbox table.op-ec tr.sub td{color:#cbd5e1;font-style:italic;padding-top:5px}
 .op-tipbox .nota{color:#cbd5e1;font-weight:400;font-style:italic}
 </style>
@@ -1156,18 +1157,21 @@ function _opTip(lineas, texto){
     : ls.map(l => `<div>${esc(l)}</div>`).join('');
   // (22-sep, JP) sin title nativo: duplicaba el popover con el cartel chico del navegador
   // (v141) el popover se ancla con position:fixed al abrirse, así no lo recorta el scroll del modal (OP cerrada)
-  return `<span class="op-tip" onclick="_opTipToggle(this);event.stopPropagation()">${esc(texto)}
+  return `<span class="op-tip" onclick="_opTipToggle(this);event.stopPropagation()" onmouseenter="_opTipPos(this)" onmouseleave="if(!this.classList.contains('abierto'))_opTipPos(this,true)">${esc(texto)}
     <span class="op-tipbox">${cuerpo}</span></span>`;
 }
+// (v149) posiciona el popover con position:fixed (hover o click): así no lo recorta ninguna sección ni el scroll del modal
+function _opTipPos(el, quitar){
+  const box = el.querySelector('.op-tipbox'); if (!box) return;
+  if (quitar){ box.style.position = ''; box.style.left = ''; box.style.top = ''; box.style.zIndex = ''; return; }
+  const r = el.getBoundingClientRect();
+  box.style.position = 'fixed'; box.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 440)) + 'px';
+  box.style.top = Math.min(r.bottom + 4, window.innerHeight - 40) + 'px'; box.style.zIndex = '10050';
+  requestAnimationFrame(() => { const b = box.getBoundingClientRect(); if (b.bottom > window.innerHeight - 8) box.style.top = Math.max(8, r.top - b.height - 4) + 'px'; });
+}
 function _opTipToggle(el){
-  const abierto = el.classList.toggle('abierto'), box = el.querySelector('.op-tipbox');
-  if (!box) return;
-  if (abierto){
-    const r = el.getBoundingClientRect();
-    box.style.position = 'fixed'; box.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 440)) + 'px';
-    box.style.top = Math.min(r.bottom + 4, window.innerHeight - 40) + 'px'; box.style.zIndex = '10050';
-    requestAnimationFrame(() => { const b = box.getBoundingClientRect(); if (b.bottom > window.innerHeight - 8) box.style.top = Math.max(8, r.top - b.height - 4) + 'px'; });
-  } else { box.style.position = ''; box.style.left = ''; box.style.top = ''; box.style.zIndex = ''; }
+  const abierto = el.classList.toggle('abierto');
+  _opTipPos(el, !abierto);
 }
 
 // ── Medios de pago: uno o varios ───────────────────────────────────────
@@ -1843,8 +1847,6 @@ async function fichaProveedor(i){
     if (m == null) _resP('arca', 'sin consultar', false, true);
     else if (m > 6) _resP('arca', _arcaResumen(p.arca) + ` · hace ${Math.floor(m)} meses, volver a consultar`, false, true);
     else _resP('arca', _arcaResumen(p.arca), p.arca.vigente === true, p.arca.vigente !== true); }
-  // 3) foto del formulario para avisar si se cierra con cambios sin guardar
-  _pfFoto = _pfEstado();
   document.getElementById('prov-modal').onclick = null;   // (v140, JP) click afuera no cierra
   document.getElementById('pf-ext').addEventListener('change', e => {
     document.getElementById('pf-pais-wrap').style.display = e.target.checked ? '' : 'none';
@@ -1855,6 +1857,9 @@ async function fichaProveedor(i){
     _fRet = error ? [] : (data || []);
     _renderRetenciones();
   }
+  // (v149) foto del formulario para avisar si se cierra con cambios sin guardar: recién ahora, con todo cargado
+  // (antes se sacaba antes de las retenciones y SIEMPRE pedía confirmación al cancelar)
+  _pfFoto = _pfEstado();
 }
 
 // (v135) todo lo editable de la ficha, serializado, para saber si hay cambios sin guardar
@@ -5629,6 +5634,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=82"></script>
+<script src="manual.js?v=83"></script>
 </body>
 </html>
