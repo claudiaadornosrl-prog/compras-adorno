@@ -2766,12 +2766,16 @@ function _facturaPie(d, reng, opts = {}){
   const checks = [];
   const okDif = Math.abs(dif) <= 1;
   checks.push([okDif, okDif ? 'Neto + IVA + percepciones = total' : `Neto + impuestos no llegan al total: faltan ${plata(dif)}`]);
-  if (reng && reng.length){
+  // (v151, JP) SKU y lista COSTO solo se controlan en MERCADERÍA; en gastos los renglones son informativos
+  const _esMercCtl = (document.getElementById('ctrl-tipo')?.value || d.tipo_gasto) === 'mercaderia';
+  if (reng && reng.length && _esMercCtl){
     const conSku = reng.filter(r => r.sku && !r.sin_stock), sinSku = reng.filter(r => !r.sku && !r.sin_stock && r.estado !== 'desglosado');
     const _e = r => _rengEstado(r).estado;
     const okL = conSku.filter(r => _e(r) === 'ok' || _e(r) === 'ok_precio').length, difL = conSku.filter(r => _e(r) === 'difiere').length, sinL = conSku.filter(r => _e(r) === 'sin_lista').length;
     checks.push([difL === 0, `Precio vs lista Dragonfish: ${okL} de ${conSku.length} coinciden${difL ? ` · ${difL} difieren` : ''}${sinL ? ` · ${sinL} sin lista` : ''}`]);
     if (sinSku.length) checks.push([false, `${sinSku.length} renglón(es) sin SKU (🔗 Equivalencias)`]);
+  }
+  if (reng && reng.length){
     const sub = reng.reduce((a,r) => a + _rengNeto(r), 0);
     const ex = _descExtras(d, sub), calc = sub - ex.reduce((a,x) => a + x.monto, 0);
     const okSub = Math.abs(calc - neto) <= 1;
@@ -2990,6 +2994,7 @@ function pintarControl(){
         <div id="ctrl-g-rep">${_gRepartoHTML()}</div>
         <div id="ctrl-g-aviso" class="mini" style="display:none;margin-top:6px;padding:6px 8px;border-radius:6px;background:#fef3c7;color:#92400e"></div>
       </div>
+      <div id="nota-doc-box-${d.id}" style="${d.nota ? '' : 'display:none;'}margin-top:12px">${_notaEditorHTML(d, 'control')}</div>
     </div>
 
     ${docCerrado(d) ? `<div class="aviso-amb" style="margin:0 17px 10px"><div>${ico('candado','s')} El mes ${esc(_mesDoc(d).split('-').reverse().join('/'))} ya se envió al estudio${SOY_ADMIN ? ': podés modificarlo porque sos el administrador, pero el listado que recibió el estudio ya no va a coincidir.' : ': este comprobante no se puede modificar. Si hace falta, pedíselo a JP.'}</div></div>` : ''}
@@ -5384,8 +5389,22 @@ function _notaDocHTML(doc){
          <button class="act gh mini-ico" title="Editar la nota" onclick="abrirNotaDoc(${doc.id}, 'resumen')">${ico('lapiz','s')}</button></div>`
     : `<button class="act gh ico-btn" style="font-size:12.5px" onclick="abrirNotaDoc(${doc.id}, 'resumen')" title="Agregar una nota a este comprobante">${ico('hoja','s')} Agregar nota</button>`;
 }
+// (v151, JP) la nota se edita en una casilla al final de la misma ventana, no en otra subventana
+function _notaEditorHTML(d, desde){
+  return `<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:9px;padding:10px 12px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b style="font-size:13px">${ico('hoja','s')} Nota del comprobante</b>
+      ${d.nota ? `<span class="mini">${esc(String(d.nota_por||'').split('@')[0])}${d.nota_at ? ' · ' + _fechaTs(d.nota_at) : ''}</span>` : ''}<span style="flex:1"></span>
+      ${d.nota ? `<button class="act gh mini-ico" title="Borrar la nota" style="color:var(--bad);border-color:var(--bad)" onclick="guardarNotaDoc(${d.id}, '${desde}', true)">${ico('basura','s')}</button>` : ''}
+      <button class="act gh mini-ico" title="Cerrar la casilla" onclick="const b=document.getElementById('nota-doc-box-${d.id}'); if(b) b.style.display='none'">${ico('anular','s')}</button></div>
+    <textarea id="nota-doc-txt-${d.id}" rows="3" style="width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:#fff" placeholder="Lo que haga falta recordar de este comprobante: un reclamo, una diferencia con el proveedor, por qué se contabilizó así…">${esc(d.nota || '')}</textarea>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px"><span id="nota-doc-ok-${d.id}" class="mini" style="color:#16a34a;font-weight:700;opacity:0;transition:opacity .3s;margin-right:auto">✓ guardada</span>
+      <button class="act" style="font-size:12.5px;padding:6px 11px" onclick="guardarNotaDoc(${d.id}, '${desde}')">${ico('guardar','s')} Guardar nota</button></div></div>`;
+}
 function abrirNotaDoc(docId, desde){
   const d = (desde === 'control' && enControl && enControl.id === docId) ? enControl : (DOCS.find(x => x.id === docId) || {id: docId});
+  let box = document.getElementById('nota-doc-box-' + docId);
+  if (!box && desde === 'resumen'){ const r = document.getElementById('res-nota-' + docId); if (r){ r.innerHTML = `<div id="nota-doc-box-${docId}"></div>`; box = r.firstElementChild; } }
+  if (box){ box.innerHTML = _notaEditorHTML(d, desde); box.style.display = ''; box.scrollIntoView({block: 'nearest', behavior: 'smooth'}); setTimeout(() => document.getElementById('nota-doc-txt-' + docId)?.focus(), 80); return; }
   let ov = document.getElementById('nota-overlay');
   if (!ov){ ov = document.createElement('div'); ov.id = 'nota-overlay';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:10040;display:flex;align-items:center;justify-content:center;padding:16px;';
@@ -5407,7 +5426,7 @@ function abrirNotaDoc(docId, desde){
   setTimeout(() => document.getElementById('nota-doc-txt')?.focus(), 50);
 }
 async function guardarNotaDoc(docId, desde, borrar){
-  const txt = borrar ? '' : (document.getElementById('nota-doc-txt')?.value || '').trim();
+  const txt = borrar ? '' : ((document.getElementById('nota-doc-txt-' + docId) || document.getElementById('nota-doc-txt'))?.value || '').trim();
   if (borrar && !confirm('¿Borrar la nota de este comprobante?')) return;
   const datos = txt ? {nota: txt, nota_por: session.email || null, nota_at: new Date().toISOString()} : {nota: null, nota_por: null, nota_at: null};
   const {error} = await sb.from('compras_documentos').update(datos).eq('id', docId);
@@ -5416,8 +5435,14 @@ async function guardarNotaDoc(docId, desde, borrar){
   document.getElementById('nota-overlay')?.remove();
   const b = document.getElementById('ctrl-nota-btn');
   if (b){ b.innerHTML = `${ico('hoja','s')} ${txt ? 'Nota' : 'Agregar nota'}`; b.title = txt || 'Agregar una nota a este comprobante'; b.style.cssText = txt ? 'background:#fef3c7;border-color:#d97706;color:#92400e' : ''; }
+  const dd = Object.assign({id: docId}, DOCS.find(x => x.id === docId) || {}, enControl && enControl.id === docId ? enControl : {}, datos);
+  const box = document.getElementById('nota-doc-box-' + docId);
+  if (box){
+    if (txt){ box.innerHTML = _notaEditorHTML(dd, desde); const ok = document.getElementById('nota-doc-ok-' + docId); if (ok){ ok.style.opacity = '1'; setTimeout(() => { ok.style.opacity = '0'; }, 1500); } }
+    else { box.style.display = 'none'; box.innerHTML = _notaEditorHTML(dd, desde); }
+  }
   const r = document.getElementById('res-nota-' + docId);
-  if (r) r.innerHTML = _notaDocHTML(Object.assign({id: docId}, DOCS.find(x => x.id === docId) || {}, datos));
+  if (r && !txt) r.innerHTML = _notaDocHTML(dd);
 }
 
 async function abrirResumenDoc(docId){
@@ -5636,6 +5661,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=84"></script>
+<script src="manual.js?v=85"></script>
 </body>
 </html>
