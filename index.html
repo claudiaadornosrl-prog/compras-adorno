@@ -4057,14 +4057,24 @@ let REGIMENES = [];
 async function vistaConfig(){
   const c = document.getElementById('cont');
   c.innerHTML = '<div class="vacio">Cargando parámetros…</div>';
-  const {data, error} = await sb.from('compras_regimenes').select('*').order('impuesto').order('codigo');
+  const [{data, error}, rg] = await Promise.all([sb.from('compras_regimenes').select('*').order('impuesto').order('codigo'), sb.rpc('compras_rg830_ultima')]);
   if (error){ c.innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return; }
   REGIMENES = data || [];
+  // (v154, JP) exclusiones RG 830: el archivo de ARCA se baja solo el día 1 de cada mes (rg830_exclusiones.py)
+  const u = (rg.data || [])[0], uDet = (u && u.detalle) || {};
+  const rgNom = k => (uDet[k] || []).map(x => esc(x.nombre || x.cuit)).join(', ');
+  const rg830HTML = `<div class="card" style="border-left:4px solid ${u ? (_mesesDesde(u.descargado_at) > 1.2 ? '#d97706' : '#166534') : '#d97706'};display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div style="flex:1;min-width:260px"><b>${ico('archivo','s')} Certificados de exclusión de Ganancias (RG 830)</b>
+        <div class="mini">${u ? `Archivo de ARCA del ${esc(u.periodo)} aplicado el ${_fechaTs(u.descargado_at)}: ${u.certificados.toLocaleString('es-AR')} certificados, <b>${u.proveedores}</b> proveedores nuestros excluidos${u.nuevos ? ` · ${u.nuevos} nuevos` : ''}${u.renovados ? ` · ${u.renovados} renovados` : ''}${u.dados_de_baja ? ` · ${u.dados_de_baja} bajas (${rgNom('bajas')})` : ''}.`
+          : 'Todavía no se aplicó ningún archivo de ARCA.'} Se baja solo el día 1 de cada mes a las 9:00 desde la PC de JP y avisa a Contreras y Rivera; también queda en CONTABILIZAR/RG830 para importarlo en el Dragonfish.</div></div>
+      ${u && u.proveedores ? ayuda('Excluidos vigentes (' + u.proveedores + '): ' + (uDet.nuevos || []).concat(uDet.renovados || []).map(x => x.nombre || x.cuit).join(' · ')) : ''}
+    </div>`;
   const tieneEscala = r => Array.isArray(r.escala) && r.escala.length > 0;
   const faltan = REGIMENES.filter(r => r.activo && r.alicuota == null && !tieneEscala(r)).length;
   const inactivos = REGIMENES.filter(r => !r.activo).length;
 
   c.innerHTML = `
+    ${rg830HTML}
     ${faltan ? `<div class="aviso-amb" style="margin-bottom:10px"><div>${ico('alerta','s')} Hay ${faltan} régimen(es) sin alícuota cargada. Hasta que los completes,
       el módulo no calcula esas retenciones solo: te las va a dejar en cero para que las pongas a mano.</div></div>` : ''}
     <div class="card">
@@ -5699,6 +5709,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=87"></script>
+<script src="manual.js?v=88"></script>
 </body>
 </html>
