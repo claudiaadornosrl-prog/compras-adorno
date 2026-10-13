@@ -4063,11 +4063,13 @@ async function vistaConfig(){
   // (v154, JP) exclusiones RG 830: el archivo de ARCA se baja solo el día 1 de cada mes (rg830_exclusiones.py)
   const u = (rg.data || [])[0], uDet = (u && u.detalle) || {};
   const rgNom = k => (uDet[k] || []).map(x => esc(x.nombre || x.cuit)).join(', ');
-  const rg830HTML = `<div class="card" style="border-left:4px solid ${u ? (_mesesDesde(u.descargado_at) > 1.2 ? '#d97706' : '#166534') : '#d97706'};display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-      <div style="flex:1;min-width:260px"><b>${ico('archivo','s')} Certificados de exclusión de Ganancias (RG 830)</b>
-        <div class="mini">${u ? `Archivo de ARCA del ${esc(u.periodo)} aplicado el ${_fechaTs(u.descargado_at)}: ${u.certificados.toLocaleString('es-AR')} certificados, <b>${u.proveedores}</b> proveedores nuestros excluidos${u.nuevos ? ` · ${u.nuevos} nuevos` : ''}${u.renovados ? ` · ${u.renovados} renovados` : ''}${u.dados_de_baja ? ` · ${u.dados_de_baja} bajas (${rgNom('bajas')})` : ''}.`
-          : 'Todavía no se aplicó ningún archivo de ARCA.'} Se baja solo el día 1 de cada mes a las 9:00 desde la PC de JP y avisa a Contreras y Rivera; también queda en CONTABILIZAR/RG830 para importarlo en el Dragonfish.</div></div>
-      ${u && u.proveedores ? ayuda('Excluidos vigentes (' + u.proveedores + '): ' + (uDet.nuevos || []).concat(uDet.renovados || []).map(x => x.nombre || x.cuit).join(' · ')) : ''}
+  const rgTip = (u ? `Archivo de ARCA del ${u.periodo} aplicado el ${_fechaTs(u.descargado_at)}: ${u.certificados.toLocaleString('es-AR')} certificados, ${u.proveedores} proveedores nuestros excluidos${u.nuevos ? ' · ' + u.nuevos + ' nuevos' : ''}${u.renovados ? ' · ' + u.renovados + ' renovados' : ''}${u.dados_de_baja ? ' · ' + u.dados_de_baja + ' bajas (' + (uDet.bajas || []).map(x => x.nombre || x.cuit).join(', ') + ')' : ''}. `
+                   : 'Todavía no se aplicó ningún archivo de ARCA. ')
+    + 'Se baja solo el día 1 de cada mes a las 9:00 desde la PC de JP y avisa a Contreras y Rivera; también queda en CONTABILIZAR/RG830 para importarlo en el Dragonfish.'
+    + (u && u.proveedores ? '\n\nExcluidos vigentes: ' + (uDet.nuevos || []).concat(uDet.renovados || []).map(x => x.nombre || x.cuit).join(' · ') : '');
+  const rg830HTML = `<div class="card" title="${esc(rgTip)}" style="cursor:help;border-left:4px solid ${u ? (_mesesDesde(u.descargado_at) > 1.2 ? '#d97706' : '#166534') : '#d97706'};display:flex;gap:10px;align-items:center;padding:9px 14px">
+      <b style="font-size:13.5px">${ico('archivo','s')} Exclusiones RG 830</b>
+      <span class="mini">${u ? `ARCA ${esc(u.periodo)} · aplicado el ${_fechaTs(u.descargado_at).slice(0,10)} · <b>${u.proveedores}</b> excluidos` : 'sin aplicar'}</span>
     </div>`;
   const tieneEscala = r => Array.isArray(r.escala) && r.escala.length > 0;
   const faltan = REGIMENES.filter(r => r.activo && r.alicuota == null && !tieneEscala(r)).length;
@@ -5709,6 +5711,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=88"></script>
+<script src="manual.js?v=89"></script>
 </body>
 </html>
