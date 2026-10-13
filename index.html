@@ -1147,7 +1147,8 @@ function _opTip(lineas, texto){
   const todo = Array.isArray(lineas) ? lineas.filter(Boolean) : [];
   const ls = todo.filter(l => typeof l === 'string');
   // (v141, JP) la RPC manda como último elemento {ecuacion:[{op,rotulo,monto|pct,nota}]}: se dibuja como la tablita del Dragon
-  const ec = (todo.find(l => l && typeof l === 'object' && Array.isArray(l.ecuacion)) || {}).ecuacion || [];
+  // (v153, JP) las OPs emitidas antes del 10-oct guardan solo texto: la tablita se arma leyendo esas líneas
+  const ec = (todo.find(l => l && typeof l === 'object' && Array.isArray(l.ecuacion)) || {}).ecuacion || _opEcuacionDesdeTexto(ls);
   if (!ls.length && !ec.length) return esc(texto);
   const cuerpo = ec.length
     ? `<div class="op-ec-tit">${esc(ls[0] || texto)}</div><table class="op-ec">${ec.map(f => `<tr class="${f.op === '=' ? 'ig' : ''}${f.op === '' ? ' sub' : ''}">
@@ -1168,6 +1169,43 @@ function _opTipPos(el, quitar){
   box.style.position = 'fixed'; box.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 440)) + 'px';
   box.style.top = Math.min(r.bottom + 4, window.innerHeight - 40) + 'px'; box.style.zIndex = '10050';
   requestAnimationFrame(() => { const b = box.getBoundingClientRect(); if (b.bottom > window.innerHeight - 8) box.style.top = Math.max(8, r.top - b.height - 4) + 'px'; });
+}
+// Reconstruye la ecuación desde las líneas en castellano del cálculo viejo (formatos fijos de compras_op_retencion).
+function _opEcuacionDesdeTexto(ls){
+  const num = t => { const m = String(t||'').match(/\$\s*(-?[\d.]+,\d{2})/); return m ? Number(m[1].replace(/\./g,'').replace(',','.')) : null; };
+  const nums = t => [...String(t||'').matchAll(/\$\s*(-?[\d.]+,\d{2})/g)].map(m => Number(m[1].replace(/\./g,'').replace(',','.')));
+  const pct = t => { const m = String(t||'').match(/(-?[\d.]+,?\d*)\s*%/); return m ? Number(m[1].replace(/\./g,'').replace(',','.')) : null; };
+  const L = k => ls.find(l => l.includes(k)) || '';
+  const base = num(L('Base de este pago')); if (base == null) return [];
+  const prev = L('Ya pagado a este proveedor'), prevN = prev ? nums(prev) : [];
+  const acum = prevN[0] || 0, retPrev = prevN[1] || 0;
+  const min = L('Menos mínimo no imponible'), minN = min ? nums(min) : [];
+  const minimo = minN[0] || 0, baseSuj = minN[1] != null ? minN[1] : Math.max(0, acum + base - minimo);
+  const ec = [{op:'+', rotulo:'Pagos ant. del mes', monto: acum}, {op:'+', rotulo:'Pago actual (neto)', monto: base},
+              {op:'=', rotulo:'Pagos acumulados', monto: acum + base}, {op:'-', rotulo:'Mínimo no imp.', monto: minimo},
+              {op:'=', rotulo:'Monto base', monto: baseSuj}];
+  if (L('No supera el mínimo')){ ec.push({op:'=', rotulo:'Monto retención', monto: 0, nota:'no supera el mínimo no imponible'}); return ec; }
+  const esc = L('Escala progresiva');
+  let retTotal = null;
+  if (esc){
+    const n = nums(esc), p = pct(esc.split('+')[1] || esc);
+    // "tramo de más de $A [hasta $H]: fijo $F + P % sobre el excedente $E = $T"
+    const A = n[0], fijo = n[n.length - 3], exc = n[n.length - 2]; retTotal = n[n.length - 1];
+    ec.push({op:'', rotulo:'Según escala'}, {op:'+', rotulo:'Excedente de ' + plata(A), monto: exc}, {op:'x', rotulo:'Porcentaje', pct: p},
+            {op:'=', rotulo:'Subtotal', monto: Math.round((retTotal - fijo) * 100) / 100}, {op:'+', rotulo:'Monto fijo', monto: fijo});
+  } else {
+    const mul = ls.find(l => / × .*% = /.test(l)) || '';
+    const n = nums(mul); retTotal = n[1] != null ? n[1] : null;
+    ec.push({op:'x', rotulo:'Porcentaje', pct: pct(mul)});
+  }
+  if (retTotal == null) return [];
+  ec.push({op:'=', rotulo:'Retención total', monto: retTotal}, {op:'-', rotulo:'Retenciones ant.', monto: retPrev});
+  const fin = L('Retención:'), bajo = L('por debajo del mínimo de retención');
+  const mano = L('Importe puesto a mano');
+  // si se puso a mano, el monto final es el primero de esa línea ("$0,00 en vez de $339.581,29")
+  const montoFinal = mano ? (nums(mano)[0] ?? 0) : bajo ? 0 : (num(fin) != null ? num(fin) : Math.max(0, retTotal - retPrev));
+  ec.push({op:'=', rotulo:'Monto retención', monto: montoFinal, nota: bajo ? 'por debajo del mínimo de retención' : (mano ? mano.replace(/^Importe puesto a mano por /, 'a mano: ') : undefined)});
+  return ec;
 }
 function _opTipToggle(el){
   const abierto = el.classList.toggle('abierto');
@@ -5661,6 +5699,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=86"></script>
+<script src="manual.js?v=87"></script>
 </body>
 </html>
