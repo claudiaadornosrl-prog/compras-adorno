@@ -313,7 +313,6 @@ function _pedEditor(){
   const provVal = e.proveedor_nombre ? `${e.proveedor_nombre}${e.proveedor_cuit ? ' · ' + e.proveedor_cuit : ''}${e.proveedor_codigo ? ' · [' + e.proveedor_codigo + ']' : ''}` : '';
   let ov = document.getElementById('ped-overlay');
   if (!ov){ ov = document.createElement('div'); ov.id = 'ped-overlay'; document.body.appendChild(ov); }
-  ov.onclick = ev => { if (ev.target === ov) pedCerrarModal(); };
   ov.innerHTML = `<div class="c-box">
     <div class="c-head"><div style="flex:1;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b style="font-size:16px">${e.id ? `Pedido Nº ${_pedNro(e.numero)}` : 'Nuevo pedido'}</b>
       ${e.id ? _pedChip(e.estado) : '<span class="mini" style="color:#fff;opacity:.85" title="Se guarda como borrador hasta que lo marques como enviado">borrador</span>'}</div>
@@ -587,7 +586,6 @@ function _pedDetalle(recibiendo){
   const abierto = ['enviado','parcial'].includes(p.estado);
   let ov = document.getElementById('ped-overlay');
   if (!ov){ ov = document.createElement('div'); ov.id = 'ped-overlay'; document.body.appendChild(ov); }
-  ov.onclick = ev => { if (ev.target === ov) pedCerrarModal(); };
   const venc = abierto && p.entrega_estimada && p.entrega_estimada < _hoyAR();
   ov.innerHTML = `<div class="c-box">
     <div class="c-head"><div style="flex:1">
