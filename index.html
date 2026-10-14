@@ -3038,6 +3038,7 @@ function pintarControl(){
     ${docCerrado(d) ? `<div class="aviso-amb" style="margin:0 17px 10px"><div>${ico('candado','s')} El mes ${esc(_mesDoc(d).split('-').reverse().join('/'))} ya se envió al estudio${SOY_ADMIN ? ': podés modificarlo porque sos el administrador, pero el listado que recibió el estudio ya no va a coincidir.' : ': este comprobante no se puede modificar. Si hace falta, pedíselo a JP.'}</div></div>` : ''}
     <div class="c-pie">
       <button class="act gh" onclick="rechazarDoc()" style="color:var(--bad);border-color:var(--bad)" ${docCerrado(d) && !SOY_ADMIN ? 'disabled style="opacity:.4"' : ''}>Rechazar</button>
+      <button class="act gh ico-btn" onclick="abrirAvisoMotor(${d.id})" title="El motor leyó mal este comprobante (renglones, importes, proveedor…): contá qué estuvo mal y JP ajusta el lector">${ico('robot','s')} Leyó mal</button>
       <button class="act gh ico-btn" id="ctrl-nota-btn" onclick="abrirNotaDoc(${d.id}, 'control')" title="${d.nota ? esc(d.nota) : 'Agregar una nota a este comprobante (queda guardada y se ve en el resumen)'}" style="${d.nota ? 'background:#fef3c7;border-color:#d97706;color:#92400e' : ''}">${ico('hoja','s')} ${d.nota ? 'Nota' : 'Agregar nota'}</button>
       <div style="flex:1"></div>
       <button class="act gh" onclick="cerrarControl()">Cancelar</button>
@@ -4075,8 +4076,10 @@ async function vistaConfig(){
   const faltan = REGIMENES.filter(r => r.activo && r.alicuota == null && !tieneEscala(r)).length;
   const inactivos = REGIMENES.filter(r => !r.activo).length;
 
+  const avisosHTML = await _avisosMotorHTML();
   c.innerHTML = `
     ${rg830HTML}
+    ${avisosHTML}
     ${faltan ? `<div class="aviso-amb" style="margin-bottom:10px"><div>${ico('alerta','s')} Hay ${faltan} régimen(es) sin alícuota cargada. Hasta que los completes,
       el módulo no calcula esas retenciones solo: te las va a dejar en cero para que las pongas a mano.</div></div>` : ''}
     <div class="card">
@@ -5475,6 +5478,65 @@ function abrirNotaDoc(docId, desde){
     </div></div>`;
   setTimeout(() => document.getElementById('nota-doc-txt')?.focus(), 50);
 }
+// (v156, JP) "El motor lo leyó mal": administración describe el error desde la Bandeja; queda en
+// compras_motor_feedback, le llega push a JP y se revisa con Claude (el lector se ajusta y se publica al OneDrive).
+function abrirAvisoMotor(docId){
+  const d = (enControl && enControl.id === docId) ? enControl : (BANDEJA.find(x => x.id === docId) || DOCS.find(x => x.id === docId) || {id: docId});
+  let ov = document.getElementById('nota-overlay');
+  if (!ov){ ov = document.createElement('div'); ov.id = 'nota-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:10040;display:flex;align-items:center;justify-content:center;padding:16px;';
+    document.body.appendChild(ov); }
+  ov.innerHTML = `<div class="c-box" style="max-width:540px">
+    <div class="c-head"><div style="flex:1"><div style="font-weight:700;font-size:15px">${ico('robot','s')} El motor lo leyó mal</div>
+      <div style="font-size:12.5px;opacity:.9">${esc(d.proveedor_nombre || '')}${d.archivo_path ? ' · ' + esc(String(d.archivo_path).split('/').pop()) : ''}</div></div>
+      <button class="m-x" onclick="document.getElementById('nota-overlay').remove()">✕</button></div>
+    <div class="c-body">
+      <p class="mini" style="margin:0 0 8px">Contá en una o dos líneas qué estuvo mal: no tomó los renglones, leyó el total con IVA, confundió el proveedor, no entendió el PDF, etc. Le llega a JP, que ajusta el lector para la próxima factura de este proveedor. <b>Esto no corrige el comprobante</b>: eso hacelo igual acá en el control.</p>
+      <textarea id="aviso-motor-txt" rows="4" style="width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;padding:9px 11px;border:1px solid var(--bd);border-radius:9px" placeholder="Ej: no separó los renglones, puso todo en uno · el total lo tomó sin el IVA · es una NC y la cargó como FC"></textarea>
+    </div>
+    <div class="c-pie">
+      <div style="flex:1"></div>
+      <button class="act gh" onclick="document.getElementById('nota-overlay').remove()">Cancelar</button>
+      <button class="act" onclick="guardarAvisoMotor(${docId})">${ico('robot','s')} Avisar a JP</button>
+    </div></div>`;
+  setTimeout(() => document.getElementById('aviso-motor-txt')?.focus(), 50);
+}
+async function guardarAvisoMotor(docId){
+  const txt = (document.getElementById('aviso-motor-txt')?.value || '').trim();
+  if (!txt){ alert('Contá qué estuvo mal, aunque sea en una línea.'); return; }
+  const d = (enControl && enControl.id === docId) ? enControl : (BANDEJA.find(x => x.id === docId) || DOCS.find(x => x.id === docId) || {});
+  const {error} = await sb.from('compras_motor_feedback').insert({documento_id: docId, archivo_path: d.archivo_path || null,
+    proveedor_cuit: d.cuit_emisor || d.proveedor_cuit || null, proveedor_nombre: d.proveedor_nombre || null, texto: txt, por: session.email || null});
+  if (error){ alert('No se pudo guardar el aviso: ' + error.message); return; }
+  document.getElementById('nota-overlay')?.remove();
+  alert('Aviso guardado: le llega a JP.');
+}
+async function _avisosMotorHTML(){
+  const {data} = await sb.from('compras_motor_feedback').select('*').order('estado').order('creado_at', {ascending: false}).limit(60);
+  const l = data || [], pend = l.filter(x => x.estado === 'pendiente');
+  const fila = x => `<tr style="${x.estado === 'resuelto' ? 'color:var(--mut)' : ''}">
+      <td style="white-space:nowrap">${_fechaTs(x.creado_at).slice(0,10)}</td>
+      <td><b>${esc(x.proveedor_nombre || '—')}</b>${x.archivo_path ? `<div class="mini"><a class="nro" href="${_pdfUrl(x.archivo_path)}" target="_blank" rel="noopener">${esc(String(x.archivo_path).split('/').pop())}</a></div>` : ''}</td>
+      <td>${esc(x.texto)}${x.resuelto_nota ? `<div class="mini" style="color:#166534">✓ ${esc(x.resuelto_nota)}</div>` : ''}</td>
+      <td class="mini">${esc(String(x.por || '').split('@')[0])}</td>
+      <td style="white-space:nowrap">${x.estado === 'pendiente'
+        ? (SOY_ADMIN ? `<button class="act gh" style="font-size:12px;padding:3px 9px" onclick="resolverAvisoMotor(${x.id})">✓ Resuelto</button>` : '<span class="chip" style="background:#fef3c7;color:#92400e">pendiente</span>')
+        : `<span class="chip" style="background:#dcfce7;color:#166534" title="${esc(_fechaTs(x.resuelto_at))}">resuelto</span>`}</td></tr>`;
+  return `<div class="card" style="border-left:4px solid ${pend.length ? '#d97706' : '#166534'}">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:${l.length ? 8 : 0}px">
+      <h3 style="font-size:15px;flex:1;display:flex;align-items:center;gap:8px">${ico('robot','s')} Avisos al motor
+        ${ayuda('Lo que administración marcó con "Leyó mal" en el control de un comprobante. JP lo revisa con Claude, ajusta el lector de ese proveedor y lo publica al OneDrive, de donde lo toman todas las PC. Las reglas de contabilización (concepto, renglones, equivalencias) NO van por acá: se cargan en la ficha del proveedor y en Equivalencias.')}</h3>
+      <span class="mini">${pend.length ? `<b style="color:#92400e">${pend.length}</b> pendiente${pend.length === 1 ? '' : 's'}` : 'sin pendientes'}</span></div>
+    ${l.length ? `<div style="overflow-x:auto"><table style="font-size:12.5px"><thead><tr><th>Fecha</th><th>Proveedor</th><th>Qué leyó mal</th><th>Avisó</th><th></th></tr></thead><tbody>${l.map(fila).join('')}</tbody></table></div>` : ''}
+  </div>`;
+}
+async function resolverAvisoMotor(id){
+  const nota = prompt('¿Qué se ajustó? (una línea, queda a la vista de quien avisó)');
+  if (nota === null) return;
+  const {error} = await sb.from('compras_motor_feedback').update({estado: 'resuelto', resuelto_at: new Date().toISOString(), resuelto_por: session.email || null, resuelto_nota: nota || null}).eq('id', id);
+  if (error){ alert(error.message); return; }
+  vistaConfig();
+}
 async function guardarNotaDoc(docId, desde, borrar){
   const txt = borrar ? '' : ((document.getElementById('nota-doc-txt-' + docId) || document.getElementById('nota-doc-txt'))?.value || '').trim();
   if (borrar && !confirm('¿Borrar la nota de este comprobante?')) return;
@@ -5711,6 +5773,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=89"></script>
+<script src="manual.js?v=90"></script>
 </body>
 </html>
