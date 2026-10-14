@@ -2286,7 +2286,10 @@ async function cargarBandeja(){
   BANDEJA = (b.data || []).filter(d => !!d.es_prueba === MODO_PRUEBA);
   if (c.data) CONCEPTOS = c.data;
   MOTOR = (m.data && m.data[0]) || null;
+  // (v157, JP) avisos "Leyó mal" pendientes → ícono con contador en la barra de la Bandeja (admin)
+  try { const f = await sb.from('compras_motor_feedback').select('id', {count: 'exact', head: true}).eq('estado', 'pendiente'); AVISOS_MOTOR_PEND = f.count || 0; } catch (e) { AVISOS_MOTOR_PEND = 0; }
 }
+let AVISOS_MOTOR_PEND = 0;
 
 let MOTOR_PEDIDO = null;   // {id, estado} del pedido en curso (botón 🤖)
 
@@ -2368,6 +2371,8 @@ function vistaBandeja(){
     <button class="act mini-ico" id="btn-motor" onclick="pedirMotor()" ${MOTOR_PEDIDO ? 'disabled' : ''}
             title="Leer la carpeta 1 - SIN CONTABILIZAR: trae los PDFs nuevos a esta bandeja con la propuesta de contabilización.${MODO_PRUEBA ? ' En prueba lo atiende Claude desde Cowork (cada ~15 min).' : ''}">${ico('robot')}</button>
     ${motorHtml}
+    ${SOY_ADMIN ? `<button class="act gh mini-ico" style="position:relative;${AVISOS_MOTOR_PEND ? 'border-color:#d97706;color:#92400e;background:#fef3c7' : ''}" onclick="abrirAvisosMotor()"
+            title="${AVISOS_MOTOR_PEND ? AVISOS_MOTOR_PEND + ' aviso(s) de administración: el motor leyó mal un comprobante. Tocá para verlos.' : 'Avisos de administración sobre lo que el motor leyó mal (no hay pendientes)'}">${ico('alerta','s')}${AVISOS_MOTOR_PEND ? `<span style="position:absolute;top:-6px;right:-6px;background:#d97706;color:#fff;border-radius:999px;font-size:10px;font-weight:700;padding:1px 5px;line-height:1.3">${AVISOS_MOTOR_PEND}</span>` : ''}</button>` : ''}
     <span class="sepv"></span>
     <button class="fchip ${bandejaVista==='todos'?'on':''}" onclick="bandejaFiltrar('todos')" title="Todos los comprobantes que esperan control"><b>${BANDEJA.length}</b> a controlar</button>
     ${autos.length ? `<button class="fchip ${bandejaVista==='auto'?'on':''}" onclick="bandejaFiltrar('auto')" title="El sistema ya los contabilizó solo: solo hay que confirmarlos"><span class="dot" style="background:var(--ok)"></span><b>${autos.length}</b> ya resueltos</button>` : ''}
@@ -5530,12 +5535,22 @@ async function _avisosMotorHTML(){
     ${l.length ? `<div style="overflow-x:auto"><table style="font-size:12.5px"><thead><tr><th>Fecha</th><th>Proveedor</th><th>Qué leyó mal</th><th>Avisó</th><th></th></tr></thead><tbody>${l.map(fila).join('')}</tbody></table></div>` : ''}
   </div>`;
 }
+async function abrirAvisosMotor(){
+  let ov = document.getElementById('nota-overlay');
+  if (!ov){ ov = document.createElement('div'); ov.id = 'nota-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:10040;display:flex;align-items:center;justify-content:center;padding:16px;';
+    document.body.appendChild(ov); }
+  ov.innerHTML = `<div class="c-box" style="max-width:860px;width:100%"><div class="c-head"><div style="flex:1;font-weight:700;font-size:15px">${ico('robot','s')} Avisos: el motor leyó mal</div><button class="m-x" onclick="document.getElementById('nota-overlay').remove()">✕</button></div><div class="c-body" id="avisos-motor-cuerpo">Cargando…</div></div>`;
+  document.getElementById('avisos-motor-cuerpo').innerHTML = await _avisosMotorHTML();
+}
 async function resolverAvisoMotor(id){
   const nota = prompt('¿Qué se ajustó? (una línea, queda a la vista de quien avisó)');
   if (nota === null) return;
   const {error} = await sb.from('compras_motor_feedback').update({estado: 'resuelto', resuelto_at: new Date().toISOString(), resuelto_por: session.email || null, resuelto_nota: nota || null}).eq('id', id);
   if (error){ alert(error.message); return; }
-  vistaConfig();
+  const cuerpo = document.getElementById('avisos-motor-cuerpo');
+  if (cuerpo){ cuerpo.innerHTML = await _avisosMotorHTML(); AVISOS_MOTOR_PEND = Math.max(0, AVISOS_MOTOR_PEND - 1); }
+  else vistaConfig();
 }
 async function guardarNotaDoc(docId, desde, borrar){
   const txt = borrar ? '' : ((document.getElementById('nota-doc-txt-' + docId) || document.getElementById('nota-doc-txt'))?.value || '').trim();
@@ -5773,6 +5788,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=13"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=90"></script>
+<script src="manual.js?v=91"></script>
 </body>
 </html>

@@ -80,7 +80,7 @@ function _manualSecciones() {
       icon: '🤖', titulo: 'Qué hace el sistema solo',
       desc: 'El motor busca facturas nuevas, las lee y las deja listas para que las controles.',
       pasos: [
-        '🤖 LEYÓ MAL: si el motor leyó mal un comprobante (no separó los renglones, tomó el total sin IVA, confundió el proveedor), en el control del comprobante tocá "Leyó mal" y contá qué pasó. Le llega a JP, que ajusta el lector y lo publica para todas las PC. Igual corregí el comprobante a mano en el control: el aviso es para la PRÓXIMA factura de ese proveedor. Lo pendiente se ve en Configuración › Avisos al motor.',
+        '🤖 LEYÓ MAL: si el motor leyó mal un comprobante (no separó los renglones, tomó el total sin IVA, confundió el proveedor), en el control del comprobante tocá "Leyó mal" y contá qué pasó. Le llega a JP, que ajusta el lector y lo publica para todas las PC. Igual corregí el comprobante a mano en el control: el aviso es para la PRÓXIMA factura de ese proveedor. JP los ve en la Bandeja (ícono ⚠ con contador, al lado del robot) y también en Configuración.',
         'Lee el PDF y saca proveedor, CUIT, número, fecha, total y el desglose de IVA.',
         'Verifica que las cuentas cierren: netos + IVA + percepciones tiene que dar el total.',
         'Si algo no le cierra, NO inventa: lo deja marcado para revisión. Nunca vas a ver un número inventado.',
