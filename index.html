@@ -357,11 +357,11 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 .fx-eq-btn{font-size:11.5px!important;padding:2px 8px!important;margin-left:4px;vertical-align:middle}
 #ctrl-overlay,#map-overlay,#res-overlay,#merc-overlay,#sf-overlay,#rem-overlay,#suc-overlay,#rdet-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9998;display:flex;
   align-items:flex-start;justify-content:center;padding:18px 12px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
-#ctrl-overlay .c-box,#map-overlay .c-box,#res-overlay .c-box,#merc-overlay .c-box,#sf-overlay .c-box,#rem-overlay,#suc-overlay .c-box,#rdet-overlay .c-box{background:#fff;border-radius:14px;max-width:720px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);}
-#ctrl-overlay .c-head,#map-overlay .c-head,#res-overlay .c-head,#merc-overlay .c-head,#sf-overlay .c-head,#rem-overlay,#suc-overlay .c-head,#rdet-overlay .c-head{position:sticky;top:0;background:var(--primary);color:#fff;padding:13px 17px;
+#nota-overlay .c-box,#ctrl-overlay .c-box,#map-overlay .c-box,#res-overlay .c-box,#merc-overlay .c-box,#sf-overlay .c-box,#rem-overlay,#suc-overlay .c-box,#rdet-overlay .c-box{background:#fff;border-radius:14px;max-width:720px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+#nota-overlay .c-head,#ctrl-overlay .c-head,#map-overlay .c-head,#res-overlay .c-head,#merc-overlay .c-head,#sf-overlay .c-head,#rem-overlay,#suc-overlay .c-head,#rdet-overlay .c-head{position:sticky;top:0;background:var(--primary);color:#fff;padding:13px 17px;
   border-radius:14px 14px 0 0;display:flex;align-items:flex-start;gap:10px;z-index:1;}
-#ctrl-overlay .m-x,#map-overlay .m-x,#res-overlay .m-x,#merc-overlay .m-x,#sf-overlay .m-x,#rem-overlay,#suc-overlay .m-x,#rdet-overlay .m-x{background:rgba(255,255,255,.18);border:none;color:#fff;font-size:15px;border-radius:8px;padding:5px 10px;cursor:pointer;}
-#ctrl-overlay .c-body,#map-overlay .c-body,#res-overlay .c-body,#merc-overlay .c-body,#sf-overlay .c-body,#rem-overlay,#suc-overlay .c-body,#rdet-overlay .c-body{padding:15px 17px;}
+#nota-overlay .m-x,#ctrl-overlay .m-x,#map-overlay .m-x,#res-overlay .m-x,#merc-overlay .m-x,#sf-overlay .m-x,#rem-overlay,#suc-overlay .m-x,#rdet-overlay .m-x{background:rgba(255,255,255,.18);border:none;color:#fff;font-size:15px;border-radius:8px;padding:5px 10px;cursor:pointer;}
+#nota-overlay .c-body,#ctrl-overlay .c-body,#map-overlay .c-body,#res-overlay .c-body,#merc-overlay .c-body,#sf-overlay .c-body,#rem-overlay,#suc-overlay .c-body,#rdet-overlay .c-body{padding:15px 17px;}
 #ctrl-overlay .c-nums,#map-overlay .c-nums,#res-overlay .c-nums,#merc-overlay .c-nums{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:9px;padding-bottom:10px;border-bottom:1px solid var(--bd);}
 #ctrl-overlay .c-nums .lbl,#map-overlay .c-nums .lbl,#res-overlay .c-nums .lbl,#merc-overlay .c-nums .lbl{display:block;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px;}
 #ctrl-overlay .c-nums .v,#map-overlay .c-nums .v,#res-overlay .c-nums .v,#merc-overlay .c-nums .v{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;}
@@ -412,7 +412,7 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 .fx-tot td{padding:2px 4px;}
 .fx-tot .fx-total td{border-top:2px solid var(--bd);font-weight:700;font-size:15px;padding-top:6px;color:var(--primary);}
 @media (max-width:640px){.fx-cab{grid-template-columns:1fr}.fx-cab>div:last-child{text-align:left}.fx-pie{grid-template-columns:1fr}}
-#ctrl-overlay .c-pie,#map-overlay .c-pie,#res-overlay .c-pie,#merc-overlay .c-pie,#sf-overlay .c-pie{display:flex;gap:8px;align-items:center;padding:12px 17px;border-top:1px solid var(--bd);
+#nota-overlay .c-pie,#ctrl-overlay .c-pie,#map-overlay .c-pie,#res-overlay .c-pie,#merc-overlay .c-pie,#sf-overlay .c-pie{display:flex;gap:8px;align-items:center;padding:12px 17px;border-top:1px solid var(--bd);
   background:#f8fafc;border-radius:0 0 14px 14px;position:sticky;bottom:0;}
 [id$="-overlay"] .c-head{cursor:move}
 .op-tip{position:relative;cursor:help;border-bottom:1px dotted currentColor}
@@ -5788,6 +5788,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=14"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=92"></script>
+<script src="manual.js?v=93"></script>
 </body>
 </html>
