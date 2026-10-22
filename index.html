@@ -271,6 +271,12 @@ label.c-tog .eico{width:38px;height:38px;color:#cbd5e1;border:1px solid var(--bd
 label.c-tog input:checked + .eico{color:#fff;background:var(--primary);border-color:var(--primary)}
 .aviso-amb{background:#fef3c7;color:#92400e;border-left:4px solid #d97706;border-radius:8px;padding:8px 11px;font-size:13px}.aviso-amb div{display:flex;gap:6px;align-items:flex-start;margin:2px 0}
 button.act.mini-ico{padding:5px 7px;border-radius:8px;display:inline-flex}
+/* (22-oct, JP) tónica de todos los módulos: los botones de ícono van sin recuadro, solo el ícono, fondo suave al pasar el mouse */
+button.act.mini-ico,button.act.gh.mini-ico{background:transparent;border:none;color:var(--primary);box-shadow:none;padding:6px 8px}
+button.act.mini-ico:hover,button.act.gh.mini-ico:hover{background:var(--primary-bg,#fff7ed)}
+button.act.mini-ico svg{width:18px;height:18px}
+/* reloj de arena animado mientras algo trabaja */
+@keyframes reloj-gira{0%,70%{transform:rotate(0)}85%,100%{transform:rotate(180deg)}}.reloj{display:inline-block;animation:reloj-gira 1.6s ease-in-out infinite}@keyframes girar{to{transform:rotate(360deg)}}.girar{display:inline-block;animation:girar 1.2s linear infinite}
 details.plegable summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;font-size:13.5px}
 details.plegable summary::-webkit-details-marker{display:none}
 details.plegable summary .chev{transition:transform .2s}
@@ -2049,7 +2055,7 @@ async function validarArca(cuit, contId, forzar){
   const cont = document.getElementById(contId); if (!cont) return null;
   const limpio = String(cuit||'').replace(/\D/g,'');
   if (limpio.length !== 11){ cont.innerHTML = '<div class="hint" style="color:#b91c1c;">El CUIT tiene que tener 11 dígitos.</div>'; return null; }
-  cont.innerHTML = '<div class="hint">⏳ Consultando ARCA…</div>';
+  cont.innerHTML = '<div class="hint"><span class="reloj">⏳</span> Consultando ARCA…</div>';
   const { data, error } = await sb.rpc('compras_arca_pedir', { p_cuit: limpio, p_forzar: !!forzar });
   if (error || !data?.ok){ cont.innerHTML = `<div class="hint" style="color:#b91c1c;">${_mEscP(error?.message || data?.motivo || 'No se pudo pedir la consulta')}</div>`; return null; }
   let c = data.consulta;
@@ -2059,7 +2065,7 @@ async function validarArca(cuit, contId, forzar){
       const { data: e } = await sb.rpc('compras_arca_estado', { p_cola_id: data.cola_id });
       if (e?.estado === 'listo' && e.consulta) c = e.consulta;
       if (e?.estado === 'error'){ cont.innerHTML = '<div class="hint" style="color:#b91c1c;">El consultor de ARCA no respondió. ¿Está corriendo arca_padron.py en la PC de JP?</div>'; return null; }
-      if (i === 5) cont.innerHTML = '<div class="hint">⏳ ARCA está tardando… (sigo esperando)</div>';
+      if (i === 5) cont.innerHTML = '<div class="hint"><span class="reloj">⏳</span> ARCA está tardando… (sigo esperando)</div>';
     }
     if (!c){ cont.innerHTML = '<div class="hint" style="color:#b91c1c;">ARCA no respondió en 90 segundos. Probá de nuevo en un rato.</div>'; return null; }
   }
@@ -2296,7 +2302,7 @@ let MOTOR_PEDIDO = null;   // {id, estado} del pedido en curso (botón 🤖)
 
 async function pedirMotor(){
   const btn = document.getElementById('btn-motor');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Pidiendo…'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="reloj">⏳</span> Pidiendo…'; }
   const {data, error} = await sb.rpc('compras_pedir_motor');
   if (error){ alert('No pude pedir la lectura: ' + error.message); if (btn){ btn.disabled=false; btn.textContent='🤖 Leer 1 - SIN CONTABILIZAR'; } return; }
   MOTOR_PEDIDO = {id: data.id, estado: 'pendiente', desde: Date.now()};
@@ -2310,8 +2316,8 @@ function pintarEstadoMotor(){
   const seg = Math.round((Date.now() - p.desde)/1000);
   if (p.estado === 'pendiente') el.innerHTML = MODO_PRUEBA
     ? `📥 Pedido #${p.id} registrado. En la etapa de prueba lo atiende Claude (Cowork) en su próxima pasada — sin consumir saldo de la API. Podés cerrar y volver más tarde: la Bandeja se actualiza sola. (${Math.floor(seg/60)} min)`
-    : `⏳ Pedido #${p.id} en cola — el servidor lo toma en menos de 1 minuto (${seg}s)`;
-  else if (p.estado === 'corriendo') el.innerHTML = `🔄 Leyendo la carpeta… (${seg}s)`;
+    : `<span class="reloj">⏳</span> Pedido #${p.id} en cola — el servidor lo toma en menos de 1 minuto (${seg}s)`;
+  else if (p.estado === 'corriendo') el.innerHTML = `<span class="girar">🔄</span> Leyendo la carpeta… (${seg}s)`;
   else if (p.estado === 'listo') el.innerHTML = `✅ Listo: ${p.resumen || 'lectura terminada'}`;
   else if (p.estado === 'error') el.innerHTML = `<span style="color:#dc2626">✗ El motor falló: ${esc(p.error || '')}</span>`;
 }
@@ -2622,7 +2628,7 @@ function _facturaCabecera(d, opts = {}){
       ? `<span class="chip fx-chip-ok" title="Consultado en ARCA el ${_fechaTs(a.consultado_at)}">ARCA ✓ vigente${a.cond_iva ? ' · ' + esc(a.cond_iva) : ''}</span>`
       : `<span class="chip fx-chip-bad" title="${esc(a.estado_clave || '')}">ARCA ⚠ ${esc(a.estado_clave || 'no vigente')}</span>`)
     : (d.es_exterior ? '' : (d._arcaBuscando
-        ? '<span class="chip fx-chip-off">⏳ consultando ARCA…</span>'
+        ? '<span class="chip fx-chip-off"><span class="reloj">⏳</span> consultando ARCA…</span>'
         : `<span class="chip fx-chip-off" style="cursor:pointer" title="Este CUIT nunca se validó contra ARCA. Tocá para consultarlo ahora (tarda unos segundos: lo resuelve arca_padron.py en la PC de JP)" onclick="_arcaConsultarDoc('${esc(d.cuit_emisor)}')">ARCA sin consultar · 🔍 consultar</span>`));
   return `<div class="fx-cab ${opts.enHead ? 'fx-head' : ''}">
     <div>
