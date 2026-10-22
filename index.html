@@ -892,7 +892,7 @@ function pintarOrdenes(){
         <button class="act gh mini-ico" onclick="opExportar('pend','xlsx')" title="Bajar este listado en Excel">${ico('excel','s')}</button>
         <button class="act gh mini-ico" onclick="opExportar('pend','pdf')" title="Bajar este listado en PDF">${ico('pdf','s')}</button>
       </div>
-      ${OP_PROVS.length ? `<div style="overflow-x:auto"><table class="tb-band">
+      ${OP_PROVS.length ? `<div style="overflow-x:auto"><table class="tb-band op-lista">
         <thead><tr><th>Proveedor</th><th class="num">Comprob.</th>
           <th class="num" title="Sin IVA ni percepciones">Neto</th><th class="num">Total</th><th>Más vieja</th><th></th></tr></thead>
         <tbody>${OP_PROVS.map(p => `<tr onclick="abrirOP('${esc(p.cuit)}')" title="Armar la orden de pago de ${esc(p.proveedor||'')}">
@@ -915,7 +915,7 @@ function pintarOrdenes(){
         <button class="act gh mini-ico" onclick="opExportar('emit','xlsx')" title="Bajar este listado en Excel">${ico('excel','s')}</button>
         <button class="act gh mini-ico" onclick="opExportar('emit','pdf')" title="Bajar este listado en PDF">${ico('pdf','s')}</button>
       </div>
-      ${_opListaFiltrada().length ? `<div style="overflow-x:auto"><table class="tb-band">
+      ${_opListaFiltrada().length ? `<div style="overflow-x:auto"><table class="tb-band op-lista">
         <thead><tr><th>Orden</th><th>Fecha</th><th>Proveedor</th><th class="num">Comp.</th>
           <th class="num">Subtotal</th><th class="num">Retenc.</th><th class="num">A pagar</th>
           <th class="ctr">Estado</th><th></th></tr></thead>
@@ -5826,6 +5826,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=14"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=94"></script>
+<script src="manual.js?v=95"></script>
 </body>
 </html>
