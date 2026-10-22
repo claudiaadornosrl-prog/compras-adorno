@@ -264,7 +264,7 @@ button.act.op-ico svg{width:11px;height:11px}
 .op-blq{border:1px solid #fde7d2;border-radius:12px;margin-bottom:12px;overflow:hidden;background:#fff}
 .op-blq>h4{margin:0;padding:8px 12px;background:#fff7ed;border-bottom:1px solid #fde7d2;font-size:11.5px;color:#9a3412;text-transform:uppercase;letter-spacing:.05em}
 .op-blq>.cont{padding:10px 12px}.op-blq table{margin:0;width:100%}.op-blq tbody tr:nth-child(even) td{background:#fafafa}
-#op-calc>table{border:1px solid #fde7d2;border-radius:12px;margin-bottom:12px;overflow:hidden}
+#op-calc .op-blq tr.tot td,#op-calc .op-blq td#op-neto{background:#fff7ed;color:#9a3412}#op-calc .op-blq td#op-neto{font-weight:700;border-top:2px solid var(--primary)}
 #prov-modal #op-calc .op-neto{border:1px solid #fed7aa;border-top:3px solid var(--primary)}
 .op-lista thead th{background:#fff7ed;color:#9a3412}.op-lista tbody tr:nth-child(even) td{background:#fafafa}.op-lista tbody tr:hover td{background:#fff7ed}
 .op-sec>h4{margin:0;padding:7px 11px;background:#fff7ed;border-bottom:1px solid #fde7d2;color:#9a3412;font-size:11.5px;display:flex;gap:7px;align-items:center;color:var(--mut);text-transform:uppercase;letter-spacing:.4px}
@@ -1142,12 +1142,13 @@ async function _opCalcular(){
        ${pp.map(m => `· ${_fecha(m.fecha)} · ${esc(m.cuenta||'')} · ${plata(Math.abs(m.importe))} · ${esc((m.descripcion||'').slice(0,50))} <span class="mini">(${esc(m.evidencia)})</span>`).join('<br>')}
        <br><span class="mini">Si emitís igual, Tesorería lo vincula sola en vez de duplicar el pago.</span></div>` : ''}
     ${av.length ? `<div class="aviso-amb" style="margin-bottom:10px">${av.map(a => `<div>${ico('alerta','s')} ${esc(a)}</div>`).join('')}</div>` : ''}
+    <div class="op-blq"><h4>Retenciones y neto a pagar</h4><div class="cont" style="padding:0 12px 8px">
     <table style="font-size:13px"><tbody>
       <tr><td>Comprobantes (${data.comprobantes}) <span class="mini">(neto)</span></td>
           <td class="num" title="Total con impuestos; entre paréntesis el neto sin IVA ni percepciones, base de las retenciones"><b>${plata(data.subtotal)}</b> <span class="mini">(${plata(data.neto)})</span></td></tr>
     </tbody></table>
-    <div id="op-rets"></div>
-    <div id="op-pagos" style="margin-top:12px"></div>`;
+    <div id="op-rets"></div></div></div>
+    <div class="op-blq"><h4>Medio de pago</h4><div class="cont"><div id="op-pagos"></div></div></div>`;
   const np = document.getElementById('op-nro-prox');
   if (np) np.innerHTML = `Se emite como <b>OP X ${String(data.punto_venta).padStart(4,'0')}-${String(data.proximo_numero).padStart(8,'0')}</b>`;
   _opPintarRets();
