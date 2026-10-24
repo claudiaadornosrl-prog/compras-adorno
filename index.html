@@ -2256,6 +2256,8 @@ function _gRepartoHTML(){
   return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:2px 0 6px">
       <b style="font-size:13px">Planilla de gastos</b>${ayuda('Sugerido por las reglas, corregilo si no corresponde. Si el gasto va a más de un local o a más de un mes, agregá un renglón por cada parte con el + y poné el importe de cada una.' + (gs.motivo ? ' Motivo: ' + gs.motivo : ''))}
       <span class="mini">· Total</span><input type="text" inputmode="decimal" id="g-base" class="fx-in" style="width:130px" value="${nmShow(base)}" oninput="_gBaseSet(this.value)">
+      <button class="act gh mini-ico" type="button" title="Repartir entre los locales según un Excel del proveedor (Cabify: reporte de viajes con el mail del pasajero; OCA: anexo con el centro de costo). El total se reparte en proporción a los importes del Excel, IVA incluido en la misma proporción." onclick="document.getElementById('g-excel').click()">${ico('excel','s')}</button>
+      <input type="file" id="g-excel" accept=".xls,.xlsx,.csv" style="display:none" onchange="_gImportarExcel(this.files[0]); this.value=''">
     </div>
     <div style="overflow-x:auto"><table class="fx-tbl">
       <thead><tr><th>Período (mes de consumo)</th><th>Unidad</th><th>Categoría</th><th class="num">Importe</th><th></th></tr></thead>
@@ -2291,6 +2293,62 @@ function _gPartAgregar(){
   const resto = d._gBase != null ? _r2g(Number(d._gBase) - P.reduce((a,x) => a + (Number(x.importe)||0), 0)) : 0;
   P.push({periodo: ult.periodo, unidad: '', categoria: ult.categoria, pct: null, importe: resto > 0 ? resto : 0});
   _gRepintar();
+}
+// (24-oct, JP) Reparto por Excel del proveedor (Cabify / OCA): cada fila trae un importe y algo que dice a qué local
+// corresponde. El "Total a la planilla" se reparte en proporción a lo que suma cada local en el Excel (el IVA y las
+// percepciones quedan prorrateados igual). Lo que no se puede asignar va a Oficina y se avisa.
+function _gUnidadDeTexto(t){
+  const u = String(t || '').toLowerCase();
+  if (/unicenter|cente\b|martinez|martínez/.test(u)) return 'unicenter';
+  if (/alcorta|salguero|palermo|alco\b/.test(u)) return 'alcorta';
+  if (/oficina|admin|administracion|administración|marisa|analia|analía|torcuato|deposito|depósito|web|online/.test(u)) return 'oficina';
+  return null;
+}
+async function _gImportarExcel(file){
+  if (!file || !enControl || !enControl._reparto) return;
+  if (!window.XLSX) await _cargarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, {type: 'array'}), ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, {header: 1, raw: true, defval: ''});
+  const hdrIx = rows.findIndex(r => r.some(c => /importe|i m p o r t e|precio total/i.test(String(c))));
+  if (hdrIx < 0){ alert('No encontré una columna de importes en la primera hoja del Excel.'); return; }
+  const hdr = rows[hdrIx].map(c => String(c || '').toLowerCase().replace(/\s+/g, ' ').trim());
+  const col = re => hdr.findIndex(h => re.test(h));
+  // Cabify: "Importe" + "Solicitado por" / "Pasajero" / "Email del pasajero" · OCA: "I m p o r t e" + "CtrCosto" / "Des"
+  const cImp = col(/^(importe|i m p o r t e)$/) >= 0 ? col(/^(importe|i m p o r t e)$/) : col(/precio total/);
+  // (JP) PRIMERO el centro de costo: un local puede pedir el viaje pero el costo es del otro. Después, quién lo pidió.
+  const cCC = [col(/^centro de cost[eo]$/), col(/centro de cost[eo] variable/), col(/ctrcosto|centro de cost|^unidad$|^local$|sucursal/)].filter(i => i >= 0);
+  const cTxt = [col(/email del pasajero/), col(/solicitado por/), col(/^pasajero$/), col(/^des$|destino/)].filter(i => i >= 0);
+  const porU = {alcorta: 0, unicenter: 0, oficina: 0}, sinAsignar = [];
+  let n = 0;
+  const num = v => typeof v === 'number' ? v : (Number(String(v).replace(/\./g, '').replace(',', '.')) || Number(v) || 0);
+  for (const r of rows.slice(hdrIx + 1)){
+    const imp = num(r[cImp]);
+    if (!imp) continue;
+    const cc = cCC.map(i => r[i]).filter(Boolean).join(' '), txt = cTxt.map(i => r[i]).filter(Boolean).join(' ');
+    // Cabify: la fila sin centro de costo, pasajero ni solicitante es la percepción / ajuste: no es un viaje
+    if (!cc.trim() && !txt.trim()){ sinAsignar.push(imp); continue; }
+    const u = _gUnidadDeTexto(cc) || _gUnidadDeTexto(txt);
+    if (!u){ sinAsignar.push(imp); continue; }
+    porU[u] += imp; n++;
+  }
+  const sumaU = Object.values(porU).reduce((a, b) => a + b, 0);
+  if (!n || sumaU <= 0){ alert('No pude asignar ningún renglón del Excel a un local. Columnas leídas: ' + hdr.filter(Boolean).slice(0, 8).join(' · ')); return; }
+  const d = enControl, base = Number(d._gBase || 0);
+  if (!(base > 0)){ alert('Primero cargá el "Total" a la planilla.'); return; }
+  const ref = d._reparto[0] || {};
+  const unidades = ['alcorta', 'unicenter', 'oficina'].filter(u => porU[u] > 0);
+  const partes = [];
+  let acum = 0;
+  unidades.forEach((u, i) => {
+    const imp = i === unidades.length - 1 ? _r2g(base - acum) : _r2g(base * porU[u] / sumaU);
+    acum = _r2g(acum + imp);
+    partes.push({periodo: ref.periodo, unidad: u, categoria: ref.categoria || 'varios', pct: null, importe: imp});
+  });
+  d._reparto = partes;
+  _gRepintar();
+  const det = unidades.map(u => `${u}: ${plata(porU[u])} del Excel (${(porU[u] / sumaU * 100).toFixed(1)} %) → ${plata(partes.find(p => p.unidad === u).importe)}`).join('\n');
+  alert(`Reparto desde ${file.name}: ${n} renglones asignados.\n${det}` + (sinAsignar.length ? `\n\n${sinAsignar.length} renglón(es) sin local (percepciones, ajustes o sin nombre) por ${plata(sinAsignar.reduce((a, b) => a + b, 0))}: no entran en la proporción.` : ''));
 }
 function _gPartQuitar(i){
   const d = enControl; d._reparto.splice(i, 1);
@@ -6085,6 +6143,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=103"></script>
+<script src="manual.js?v=104"></script>
 </body>
 </html>
