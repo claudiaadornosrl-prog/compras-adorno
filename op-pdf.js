@@ -150,6 +150,8 @@ function _pdfPie(doc, izq, firma, prueba){
   }
   doc.setPage(n);
   if (firma){
+    // (24-oct, JP) la firma de JP arriba de la línea, como en el certificado de retención
+    if (firma.img && _pdfFirma){ const fw = 30, fh = fw * 258 / 382; doc.addImage(_pdfFirma, 'JPEG', firma.x + firma.w / 2 - fw / 2, 266 - fh - 0.5, fw, fh); }
     doc.setDrawColor(..._PC.tx); doc.setLineWidth(0.3); doc.line(firma.x, 266, firma.x + firma.w, 266);
     _pt(doc, firma.t1, firma.x + firma.w / 2, 270, {size: 7, col: _PC.tx, align: 'center'});
     if (firma.t2) _pt(doc, firma.t2, firma.x + firma.w / 2, 273.5, {size: 6.3, col: _PC.mut, align: 'center'});
@@ -212,7 +214,8 @@ async function descargarOpPdf(opId){
     const lin = doc.splitTextToSize(String(o.observaciones), 174);
     _pt(doc, lin, 18, yc + 5.5, {size: 8}); y = _pdfCardFin(doc, 14, y0, 182, yc + 3 + lin.length * 4.2);
   }
-  _pdfPie(doc, `Orden de pago ${o.letra || 'X'} ${nro} · emitida el ${_pdfF(o.fecha)} por ${o.emitida_por || ''}`, {x: 136, w: 60, t1: `Por ${emp.nombre}`}, o.es_prueba);
+  await _pdfCargarFirma();
+  _pdfPie(doc, `Orden de pago ${o.letra || 'X'} ${nro} · emitida el ${_pdfF(o.fecha)} por ${o.emitida_por || ''}`, {x: 136, w: 60, t1: `Por ${emp.nombre}`, t2: 'Juan Pablo Simonelli', img: true}, o.es_prueba);
   doc.save(`OP ${nro} ${(pv.nombre || '').replace(/[\\/:*?"<>|]/g,'')}.pdf`);
 }
 

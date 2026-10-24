@@ -1066,7 +1066,8 @@ function _pintarModalOP(cands){
       <div style="flex:1;min-width:180px"><label>Observaciones</label><input id="op-obs" placeholder="opcional"></div>
     </div></div>
     <datalist id="dl-medios"><option>Transferencia</option><option>Cheque</option>
-      <option>Echeq</option><option>Efectivo</option><option>Mercado Pago</option><option>Débito automático</option></datalist>
+      <option>Echeq</option><option>Efectivo</option><option>Mercado Pago</option><option>Mercado Pago - Tarjeta Master Card</option>
+      <option>Tarjeta Visa Business</option><option>Débito automático</option></datalist>
 
     <div id="op-calc"><div class="vacio">Calculando retenciones…</div></div>
 
@@ -1262,6 +1263,7 @@ function _opCuentasPara(medio){
   const todas = OP_CUENTAS || [], m = String(medio||'').toLowerCase();
   let tipos = null;
   if (/efect/.test(m)) tipos = ['caja'];
+  else if (/tarjeta|visa|master/.test(m)) tipos = ['banco_cc', 'mp'];   // (24-oct) la tarjeta se paga desde la cuenta del banco (o MP)
   else if (/mercado|^mp\b/.test(m)) tipos = ['mp'];
   else if (/cheq/.test(m)) tipos = ['banco_cc'];
   else if (/transf|d[eé]bito/.test(m)) tipos = ['banco_cc', 'mp'];
@@ -1840,6 +1842,10 @@ async function fichaProveedor(i){
       <label>Moneda habitual<select id="pf-moneda">${['ARS','USD','EUR'].map(m => `<option ${(p.moneda_habitual||'ARS')===m?'selected':''}>${m}</option>`).join('')}</select></label>
       <label>Domicilio<input id="pf-dom" value="${_mEscP(p.domicilio||'')}"></label>
       <label>Le compramos mercadería
+        <select id="pf-lista" onchange="(async(sel)=>{const r=await sb.rpc('compras_proveedor_factura_lista',{p_codigo:'${_mEscP(p.codigo)}',p_lista:sel.value});if(r.error)alert(r.error.message);else _resP('datos','Lista de la factura: '+sel.value,true);})(this)" title="Qué precio trae la factura: COMPRA (lista del proveedor, el descuento se aplica aparte) o COSTO (ya viene con el descuento, como Los Naranjos). Se guarda al cambiarlo.">
+          <option value="compra">Factura a lista COMPRA (con descuento aparte)</option>
+          <option value="costo">Factura a lista COSTO (ya descontada)</option>
+        </select>${(setTimeout(async () => { try { const r = await sb.from('compras_proveedor_datos').select('factura_lista').eq('codigo', p.codigo).maybeSingle(); const el = document.getElementById('pf-lista'); if (el && r.data && r.data.factura_lista) el.value = r.data.factura_lista; } catch (e) {} }, 0), '')}
         <select id="pf-merc">
           <option value="" ${p.compra_mercaderia == null ? 'selected' : ''}>Automático (${p.mercaderia_auto ? 'sí' : 'no'})</option>
           <option value="si" ${p.compra_mercaderia === true ? 'selected' : ''}>Sí</option>
@@ -2450,18 +2456,19 @@ function vistaBandeja(){
 // (22-oct, JP) corregir punto de venta / número desde el control (el motor a veces lo lee mal)
 async function editarNumeroDoc(id){
   const d = enControl && enControl.id === id ? enControl : null; if (!d) return;
-  const actual = `${String(d.punto_venta ?? '').padStart(4,'0')}-${String(d.numero ?? '').padStart(8,'0')}`;
-  const v = prompt('Punto de venta y número del comprobante, como figura en el papel (PPPP-NNNNNNNN):', actual);
+  const actual = `${d.tipo || 'FC'} ${d.letra || 'A'} ${String(d.punto_venta ?? '').padStart(4,'0')}-${String(d.numero ?? '').padStart(8,'0')}`;
+  // (24-oct, JP) también el TIPO (FC / NC / ND) y la LETRA se corrigen acá
+  const v = prompt('Tipo, letra, punto de venta y número, como figura en el papel.\nFormato: TIPO LETRA PPPP-NNNNNNNN (tipo FC, NC o ND · letra A, B, C, M, E o X). Ejemplo: NC A 0014-22110163', actual);
   if (v === null) return;
-  const m = String(v).trim().match(/^0*(\d{1,5})\s*-\s*0*(\d{1,8})$/);
-  if (!m) { alert('Formato: punto de venta, guion, número. Ejemplo 0014-22110163'); return; }
-  const pv = Number(m[1]), num = Number(m[2]);
-  if (pv === Number(d.punto_venta) && num === Number(d.numero)) return;
-  const {error} = await sb.from('compras_documentos').update({punto_venta: pv, numero: num, corregida: true}).eq('id', id);
+  const m = String(v).trim().toUpperCase().match(/^(?:(FC|NC|ND)\s+)?(?:([ABCMEX])\s+)?0*(\d{1,5})\s*-\s*0*(\d{1,8})$/);
+  if (!m) { alert('Formato: TIPO LETRA punto de venta-número. Ejemplo: FC A 0014-22110163'); return; }
+  const tipo = m[1] || d.tipo || 'FC', letra = m[2] || d.letra || 'A', pv = Number(m[3]), num = Number(m[4]);
+  if (pv === Number(d.punto_venta) && num === Number(d.numero) && tipo === d.tipo && letra === d.letra) return;
+  const {error} = await sb.from('compras_documentos').update({tipo, letra, punto_venta: pv, numero: num, corregida: true}).eq('id', id);
   if (error) { alert(error.message.includes('duplicate') || error.message.includes('unique') ? 'Ya existe un comprobante de este proveedor con ese número.' : 'No se pudo guardar: ' + error.message); return; }
   await sb.from('compras_eventos').insert({documento_id: id, usuario: (session && session.email) || null, accion: 'numero_corregido', detalle: {antes: actual, despues: `${String(pv).padStart(4,'0')}-${String(num).padStart(8,'0')}`}});
-  d.punto_venta = pv; d.numero = num;
-  const n = document.querySelector('.fx-cab .fx-num a, .fx-cab .fx-num span.fx-numtxt'); if (n) n.textContent = `${esc(d.tipo || 'FC')} ${esc(d.letra || '')} ${String(pv).padStart(4,'0')}-${String(num).padStart(8,'0')}`;
+  d.punto_venta = pv; d.numero = num; d.tipo = tipo; d.letra = letra;
+  const n = document.querySelector('.fx-cab .fx-num a, .fx-cab .fx-num span.fx-numtxt'); if (n) n.textContent = `${esc(tipo)} ${esc(letra)} ${String(pv).padStart(4,'0')}-${String(num).padStart(8,'0')}`;
   if (typeof toast === 'function') toast('✓ Número corregido');
 }
 async function abrirControl(id){
@@ -3071,7 +3078,7 @@ function pintarControl(){
 
       <div class="c-fila" style="gap:12px">
         <label>CAE <input id="ctrl-cae" value="${esc(d.cae || d.extraido_json?.cae || '')}" placeholder="14 dígitos" inputmode="numeric" maxlength="20" style="width:150px"></label>
-        <label>Vto. CAE <input id="ctrl-cae-vto" type="date" value="${esc(d.cae_vto || d.extraido_json?.cae_vto || '')}"></label>
+        <label>Vto. CAE <input id="ctrl-cae-vto" type="date" value="${esc(d.cae_vto || d.extraido_json?.cae_vto || d.fecha_emision || '')}" title="Si la factura no trae vencimiento de CAE se toma la fecha de emisión"></label>
         <label>Tipo de gasto
           <select id="ctrl-tipo" onchange="_tipoGastoCambio(this.value)">
             <option value="">— sin clasificar —</option>
@@ -6038,10 +6045,10 @@ async function editarContabilizacion(docId){
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="op-pdf.js?v=4"></script>
+<script src="op-pdf.js?v=5"></script>
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=101"></script>
+<script src="manual.js?v=102"></script>
 </body>
 </html>
