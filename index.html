@@ -706,7 +706,7 @@ async function cargarTodo(){
   let todos = [], desde = 0;
   while (true){
     let q = sb.from('compras_documentos')
-      .select('id,tipo,letra,punto_venta,numero,cuit_emisor,proveedor_nombre,fecha_emision,total,estado,estado_pago,tipo_gasto,archivo_path,archivo_alerta,confianza,origen,moneda,cotizacion,importe_moneda,cotizacion_fuente,es_prueba,computa_gestion,gestion_periodo,gestion_unidad,gestion_categoria,gestion_importe,numero_interno,fecha_ingreso,nota,nota_por,nota_at')
+      .select('id,tipo,letra,punto_venta,numero,cuit_emisor,proveedor_nombre,fecha_emision,total,estado,estado_pago,tipo_gasto,archivo_path,archivo_alerta,confianza,origen,moneda,cotizacion,importe_moneda,cotizacion_fuente,es_prueba,computa_gestion,gestion_periodo,gestion_unidad,gestion_categoria,gestion_importe,numero_interno,fecha_ingreso,nota,nota_por,nota_at,doc_clase,numeros_extra')
       .eq('es_prueba', MODO_PRUEBA)
       // (2-sep, regla JP) Facturas = SOLO lo contabilizado (aprobada). Lo que
       // espera control vive en la Bandeja y recién pasa acá al darle el OK.
@@ -2456,6 +2456,22 @@ function vistaBandeja(){
 // (22-oct, JP) corregir punto de venta / número desde el control (el motor a veces lo lee mal)
 async function editarNumeroDoc(id){
   const d = enControl && enControl.id === id ? enControl : null; if (!d) return;
+  if (_docClase(d) === 'poliza'){
+    const ne = Object.assign({}, _docNE(d) || {});
+    const v = prompt('Póliza, endoso y operación, como figuran en el papel.\nFormato: POLIZA ENDOSO OPERACION (ejemplo: 243675 0 238142). La clave fiscal queda: punto de venta = póliza+endoso, número = operación.', `${ne.poliza || ''} ${ne.endoso ?? 0} ${ne.operacion || ''}`);
+    if (v === null) return;
+    const m = String(v).trim().match(/^0*(\d{1,10})\s+0*(\d{1,3})\s+(?:[A-Z]{0,4}\s*)?0*(\d{1,10})$/i);
+    if (!m){ alert('Formato: póliza, endoso y operación separados por espacio. Ejemplo: 243675 0 238142'); return; }
+    ne.poliza = m[1]; ne.endoso = Number(m[2]); ne.operacion = m[3];
+    const pv = Number(m[1] + String(Number(m[2]))), num = Number(m[3]);
+    const {error} = await sb.from('compras_documentos').update({punto_venta: pv, numero: num, numeros_extra: ne, corregida: true}).eq('id', id);
+    if (error){ alert(error.message.includes('duplicate') || error.message.includes('unique') ? 'Ya existe un comprobante de este proveedor con esa póliza/endoso/operación.' : 'No se pudo guardar: ' + error.message); return; }
+    await sb.from('compras_eventos').insert({documento_id: id, usuario: (session && session.email) || null, accion: 'numero_corregido', detalle: {poliza: ne, punto_venta: pv, numero: num}});
+    d.punto_venta = pv; d.numero = num; d.numeros_extra = ne;
+    if (typeof toast === 'function') toast('✓ Números de la póliza corregidos');
+    pintarControl();
+    return;
+  }
   const actual = `${d.tipo || 'FC'} ${d.letra || 'A'} ${String(d.punto_venta ?? '').padStart(4,'0')}-${String(d.numero ?? '').padStart(8,'0')}`;
   // (24-oct, JP) también el TIPO (FC / NC / ND) y la LETRA se corrigen acá
   const v = prompt('Tipo, letra, punto de venta y número, como figura en el papel.\nFormato: TIPO LETRA PPPP-NNNNNNNN (tipo FC, NC o ND · letra A, B, C, M, E o X). Ejemplo: NC A 0014-22110163', actual);
@@ -2663,6 +2679,7 @@ function _facturaCabecera(d, opts = {}){
       <div style="margin-top:4px">${arca}${ej.tercero ? `<span class="chip fx-chip-bad" title="La factura está a nombre de otra razón social (CUIT ${esc(ej.tercero.cuit || '')}). No va al Libro IVA; si se paga a medias, cargar la mitad en la planilla de gastos.">👤 A nombre de ${esc(ej.tercero.nombre || ej.tercero.cuit || 'otro')}</span>` : ''}${opts.chips || ''}</div>
     </div>
     <div style="text-align:right">
+      ${_docClase(d) !== 'factura' ? `<div class="mini" style="color:#0e7490;font-weight:600">${esc(_claseTxt[_docClase(d)] || _docClase(d))}${(() => { const ne = _docNE(d) || {}; return _docClase(d) === 'poliza' ? ` · póliza <b>${esc(ne.poliza || '?')}</b> · endoso <b>${esc(String(ne.endoso ?? '?'))}</b> · operación <b>${esc(ne.operacion || '?')}</b>${ne.vigencia_desde ? ` · vigencia ${fechaCorta(ne.vigencia_desde)} → ${fechaCorta(ne.vigencia_hasta)}` : ''}` : ''; })()}</div>` : ''}
       <div class="fx-num">${opts.editable ? `<button class="fx-edit-num" onclick="editarNumeroDoc(${d.id})" title="Corregir el punto de venta y el número del comprobante (si el motor lo leyó mal)">✏️</button>` : ''}${d.archivo_path ? `<a href="${_pdfUrl(d.archivo_path)}" target="_blank" rel="noopener" title="Abrir el PDF de la factura en OneDrive, en otra pestaña" style="color:inherit;text-decoration:none;border-bottom:1px dotted currentColor">${num}</a>` : num}</div>
       <div class="mini">Emisión <b>${fechaCorta(d.fecha_emision)}</b> · Vto ${opts.editable
         ? `<input type="date" id="ctrl-vto" class="fx-vto-in" value="${esc(vto || '')}" min="${esc(d.fecha_emision || '')}" title="Vencimiento de la factura. Si el papel no lo trae, cargalo acá: es la fecha de pago que después toma la orden de pago y el pendiente de Tesorería.">${vto ? '' : '<span class="fx-vto-falta">falta · cargalo</span>'}`
@@ -2867,7 +2884,11 @@ function _facturaPie(d, reng, opts = {}){
     checks.push([difL === 0, `Precio vs lista Dragonfish: ${okL} de ${conSku.length} coinciden${difL ? ` · ${difL} difieren` : ''}${sinL ? ` · ${sinL} sin lista` : ''}`]);
     if (sinSku.length) checks.push([false, `${sinSku.length} renglón(es) sin SKU (🔗 Equivalencias)`]);
   }
-  if (reng && reng.length){
+  if (reng && reng.length && _docClase(d) === 'poliza'){
+    const sub = reng.reduce((a,r) => a + _rengNeto(r), 0), tot = Number(d.total || 0);
+    const okQ = Math.abs(sub - tot) <= 1.5;
+    checks.push([okQ, okQ ? `Las ${reng.length} cuotas suman el total de la póliza` : `Las cuotas suman ${plata(sub)} y el total es ${plata(tot)} (dif ${plata(sub - tot)})`]);
+  } else if (reng && reng.length){
     const sub = reng.reduce((a,r) => a + _rengNeto(r), 0);
     const ex = _descExtras(d, sub), calc = sub - ex.reduce((a,x) => a + x.monto, 0);
     const okSub = Math.abs(calc - neto) <= 1;
@@ -2875,7 +2896,8 @@ function _facturaPie(d, reng, opts = {}){
       : `Renglones${ex.length ? ' − descuentos' : ''} dan ${plata(calc)} y el neto de la factura dice ${plata(neto)} (dif ${plata(calc - neto)})`]);
   }
   if (opts.lineasOk != null) checks.push([opts.lineasOk, opts.lineasTxt]);
-  checks.push([!!cargado && !!caeVto, cargado ? (caeVto ? 'CAE y vencimiento leídos' : 'CAE leído · falta el vencimiento') : 'Falta el CAE']);
+  if (_docClase(d) === 'factura') checks.push([!!cargado && !!caeVto, cargado ? (caeVto ? 'CAE y vencimiento leídos' : 'CAE leído · falta el vencimiento') : 'Falta el CAE']);
+  else checks.push([true, `${_claseTxt[_docClase(d)] || 'Documento'}: no lleva CAE`]);
   if (opts.vtoCheck !== false) checks.push([!!(d.fecha_vto || (d.extraido_json||{}).fecha_vto), (d.fecha_vto || (d.extraido_json||{}).fecha_vto) ? 'Vencimiento cargado (define la fecha de pago)' : 'Sin vencimiento: cargalo arriba, es la fecha de pago de la OP']);
   return `<div class="fx-pie">
     <div>
@@ -3261,6 +3283,14 @@ async function contabilizar(){
     p_gestion: gestionPayload,
   });
   if (error){ alert('No se pudo contabilizar: ' + error.message); return; }
+  // (24-oct, JP) póliza → un pago pendiente en Tesorería por cada cuota (en 🧪 no se crean)
+  if (_docClase(enControl) === 'poliza'){
+    try { const r = await sb.rpc('compras_poliza_pendientes', {p_doc_id: enControl.id});
+      if (r.error) alert('La póliza quedó contabilizada, pero no pude crear los pagos por cuota en Tesorería: ' + r.error.message);
+      else if (r.data && r.data.ok) { if (typeof toast === 'function') toast(`✓ ${r.data.creadas} cuota(s) cargadas como pagos pendientes en Tesorería`); }
+      else if (r.data && !MODO_PRUEBA) console.warn('poliza pendientes:', r.data.motivo);
+    } catch (e) { console.warn(e); }
+  }
   cerrarControl();
   await cargarTodo();
 }
@@ -3975,8 +4005,14 @@ const _csvTxt = v => (v === null || v === undefined) ? '' : String(v).replace(/[
 
 // El Dragonfish nombra los comprobantes de compra FDC (factura), NCC (nota de
 // crédito) y NDC (nota de débito). El módulo guarda FC/NC/ND.
+// (24-oct, JP) Pólizas: punto de venta = póliza+endoso (2436750) y número = operación. ARCA acepta 5 dígitos de
+// punto de venta, así que en los listados y el Libro IVA se cortan los primeros (decisión JP).
+const _pvArca = x => String(x.punto_venta ?? 0).replace(/\D/g, '').slice(-5).padStart(5, '0');
+const _docNE = d => (d && (d.numeros_extra || (d.extraido_json || {}).numeros_extra)) || null;
+const _docClase = d => (d && (d.doc_clase || (d.extraido_json || {}).doc_clase)) || 'factura';
+const _claseTxt = {poliza: 'Póliza', despacho: 'Despacho de importación', resumen_tarjeta: 'Resumen de tarjeta'};
 const _compEstudio = x => ({FC:'FDC', NC:'NCC', ND:'NDC'}[x.tipo] || x.tipo) + ' ' +
-  (x.letra || '') + ' ' + String(x.punto_venta ?? 0).padStart(5,'0') + '-' +
+  (x.letra || '') + ' ' + _pvArca(x) + '-' +
   String(x.numero ?? 0).padStart(8,'0');
 
 function _bajarFormatoEstudio(){
@@ -4135,7 +4171,7 @@ function _libroCompras(){
     if (cuit.length !== 11) avisos.push(`${ref}: CUIT del proveedor incompleto`);
     if ((x.moneda || 'ARS') !== 'ARS') avisos.push(`${ref}: está en ${x.moneda} — se informa en pesos con cotización 1, revisarlo`);
     if (Math.abs(Number(x.iva_otros) || 0) > 0.005) avisos.push(`${ref}: tiene IVA de ajuste (${plata(x.iva_otros)}) que no entra en ninguna alícuota`);
-    const clave = tipo + String(x.punto_venta || 0).padStart(5, '0') + String(x.numero || 0).padStart(20, '0');
+    const clave = tipo + _pvArca(x) + String(x.numero || 0).padStart(20, '0');
     const prov = '80' + cuit.padStart(20, '0');
     const noGrav = Math.abs(Number(x.no_gravado) || 0), exento = Math.abs(Number(x.exento) || 0);
     // alícuotas: una línea por tasa con importe. Los comprobantes C no llevan.
@@ -6049,6 +6085,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=102"></script>
+<script src="manual.js?v=103"></script>
 </body>
 </html>
