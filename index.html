@@ -2262,6 +2262,18 @@ function _gRepartoInit(d, gs){
     d._gBase = imp;
     d._reparto = [{periodo: gs.periodo || d.gestion_periodo || _gMesMas(_hoyAR().slice(0,7) + '-01', 0),
                    unidad: gs.unidad || '', categoria: gs.categoria || 'varios', pct: 100, importe: imp}];
+    // (24-oct, JP) el motor encontró el Excel del proveedor (Cabify/Calog/OCA): se propone el reparto por local
+    const rx = (d.extraido_json || {}).reparto_excel;
+    if (rx && rx.por_unidad && imp > 0){
+      const ref = d._reparto[0], tot = Object.values(rx.por_unidad).reduce((a, b) => a + Number(b || 0), 0);
+      const us = ['alcorta', 'unicenter', 'oficina'].filter(u => Number(rx.por_unidad[u]) > 0);
+      if (tot > 0 && us.length){
+        let acum = 0;
+        d._reparto = us.map((u, i) => { const v = i === us.length - 1 ? _r2g(imp - acum) : _r2g(imp * Number(rx.por_unidad[u]) / tot); acum = _r2g(acum + v);
+          return {periodo: ref.periodo, unidad: u, categoria: ref.categoria, pct: null, importe: v}; });
+        d._repartoExcel = rx;
+      }
+    }
   }
 }
 function _gRepartoHTML(){
@@ -2281,6 +2293,7 @@ function _gRepartoHTML(){
   return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:2px 0 6px">
       <b style="font-size:13px">Planilla de gastos</b>${ayuda('Sugerido por las reglas, corregilo si no corresponde. Si el gasto va a más de un local o a más de un mes, agregá un renglón por cada parte con el + y poné el importe de cada una.' + (gs.motivo ? ' Motivo: ' + gs.motivo : ''))}
       <span class="mini">· Total</span><input type="text" inputmode="decimal" id="g-base" class="fx-in" style="width:130px" value="${nmShow(base)}" oninput="_gBaseSet(this.value)">
+      ${d._repartoExcel ? `<span class="chip" style="background:#dcfce7;color:#166534;cursor:help" title="${esc('El motor leyó ' + (d._repartoExcel.archivo || '').split('/').pop() + ': ' + Object.entries(d._repartoExcel.por_unidad).map(([k, v]) => k + ' ' + plata(v)).join(' · ') + (d._repartoExcel.sin_asignar && d._repartoExcel.sin_asignar.length ? ' · ' + d._repartoExcel.sin_asignar.length + ' fila(s) sin local (no cuentan)' : '') + '. El total se repartió en esa proporción; podés retocarlo.')}">${ico('excel','s')} reparto propuesto desde el Excel</span>` : ''}
       <button class="act gh mini-ico" type="button" title="Repartir entre los locales según un Excel del proveedor (Cabify: reporte de viajes con el mail del pasajero; OCA: anexo con el centro de costo). El total se reparte en proporción a los importes del Excel, IVA incluido en la misma proporción." onclick="document.getElementById('g-excel').click()">${ico('excel','s')}</button>
       <input type="file" id="g-excel" accept=".xls,.xlsx,.csv" style="display:none" onchange="_gImportarExcel(this.files[0]); this.value=''">
     </div>
@@ -2350,10 +2363,11 @@ async function _gImportarExcel(file){
   for (const r of rows.slice(hdrIx + 1)){
     const imp = num(r[cImp]);
     if (!imp) continue;
-    const cc = cCC.map(i => r[i]).filter(Boolean).join(' '), txt = cTxt.map(i => r[i]).filter(Boolean).join(' ');
+    const vals = cCC.concat(cTxt).map(i => r[i]).filter(v => v !== '' && v != null).map(String);
     // Cabify: la fila sin centro de costo, pasajero ni solicitante es la percepción / ajuste: no es un viaje
-    if (!cc.trim() && !txt.trim()){ sinAsignar.push(imp); continue; }
-    const u = _gUnidadDeTexto(cc) || _gUnidadDeTexto(txt);
+    if (!vals.length){ sinAsignar.push(imp); continue; }
+    // columna por columna en orden de prioridad: "Centro de coste" > variable > del pasajero > mail / solicitante
+    const u = vals.map(_gUnidadDeTexto).find(Boolean) || null;
     if (!u){ sinAsignar.push(imp); continue; }
     porU[u] += imp; n++;
   }
@@ -6184,6 +6198,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=105"></script>
+<script src="manual.js?v=106"></script>
 </body>
 </html>
