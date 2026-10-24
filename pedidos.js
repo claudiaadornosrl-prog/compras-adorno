@@ -123,6 +123,15 @@ function pedCondRefrescar(){
     const tot = document.getElementById('ped-tot'); if (tot) tot.innerHTML = _pedTotHtml();
   }, 350);
 }
+// (24-oct, JP) Un SKU puede tener varias presentaciones en el proveedor (blíster ×3 / caja ×12): el catálogo las trae en
+// `presentaciones` y el pedido elige cuál (código, descripción del proveedor y pack del renglón).
+const _pedPres = a => Array.isArray(a && a.presentaciones) ? a.presentaciones : [];
+function _pedPresTxt(pr){ return `${pr.codigo || pr.descripcion || '—'} · ×${Number(pr.pack) > 1 ? Number(pr.pack) : 1}`; }
+function _pedPresSel(id, lista, actualCod, onchange){
+  const ix = Math.max(0, lista.findIndex(pr => (pr.codigo || pr.descripcion || '') === (actualCod || '')));
+  return `<select class="ped-in" id="${id}" style="width:auto;max-width:210px;padding:3px 4px" title="Este artículo tiene ${lista.length} presentaciones en el proveedor: elegí con qué código y pack se pide" onchange="${onchange}">${lista.map((pr, j) => `<option value="${j}" ${j === ix ? 'selected' : ''}>${esc(_pedPresTxt(pr))}</option>`).join('')}</select>`;
+}
+function _pedCatDe(sku){ const k = String(sku||'').toUpperCase(); return pedCat.find(a => String(a.sku).toUpperCase() === k) || null; }
 function _pedPacksTxt(u, pk){ const n = Number(u||0) / pk; return `${_pedN(n)} pack${n === 1 ? '' : 's'} ×${pk}`; }
 const _pedChip = e => `<span class="chip ped-e-${esc(e)}">${PED_ESTADOS[e] || esc(e)}</span>`;
 const PED_EST_ICO = {borrador:'lapiz', enviado:'avion', parcial:'reloj', completo:'ok', cerrado:'candado', anulado:'anular'};
@@ -398,10 +407,19 @@ function _pedDeltaEditor(sku){
   return pedEd.lineas.filter(l => (l.sku||'').toUpperCase() === k)
     .reduce((t, l) => t + Number(l.cantidad||0) - Number(l.cant_guardada||0), 0);
 }
+// (24-oct, JP) Si una PIEZA está bajo mínimo y se compra como parte de un JUEGO (receta confirmada), el juego
+// trae `falta_por_piezas` = juegos necesarios para cubrirla: la falta del juego es el mayor de los dos.
 function _pedFalta(a){
-  if (a.falta_minimo == null) return null;
-  const n = Number(a.falta_minimo) - _pedDeltaEditor(a.sku);
+  const propia = a.falta_minimo == null ? null : Number(a.falta_minimo);
+  const porPz = a.falta_por_piezas == null ? null : Number(a.falta_por_piezas);
+  if (propia == null && porPz == null) return null;
+  const n = Math.max(propia || 0, porPz || 0) - _pedDeltaEditor(a.sku);
   return n > 0 ? n : 0;
+}
+function _pedPiezasTip(a){
+  const L = Array.isArray(a.piezas_falta) ? a.piezas_falta : [];
+  if (!L.length) return '';
+  return 'Piezas de este juego por debajo de su mínimo: ' + L.map(x => `${x.pieza} falta ${_pedN(x.falta)} (${_pedN(x.por_juego)} por juego → ${_pedN(x.juegos)} juegos)`).join(' · ');
 }
 function _pedYaPedido(a){ return Math.max(Number(a.pendiente_pedidos||0) + _pedDeltaEditor(a.sku), 0); }
 function _pedStk(stock, min){
@@ -432,13 +450,13 @@ function _pedCatHtml(){
       <th class="num" title="Precio de la lista COMPRA">$ compra</th><th class="num" title="Ya pedido y todavía no entregado (otros pedidos abiertos)">Pedido</th>
       <th class="num" style="width:44px">Cant.</th><th></th></tr></thead>
     <tbody>${filas.map(({a, i}) => { const f = _pedFalta(a); return `<tr>
-      <td title="${a.codigo_proveedor ? 'Código del proveedor: ' + esc(a.codigo_proveedor) : ''}"><b>${esc(a.sku)}</b></td>
+      <td title="${a.codigo_proveedor ? 'Código del proveedor: ' + esc(a.codigo_proveedor) : ''}"><b>${esc(a.sku)}</b>${_pedPres(a).length > 1 ? `<div>${_pedPresSel('ped-cp-' + i, _pedPres(a), a.codigo_proveedor || a.descripcion_proveedor, `pedPresCat(${i}, this.value)`)}</div>` : ''}</td>
       <td>${_pedPackChip(_pedPk(a))}<span class="desc" title="${esc(a.descripcion||'')}">${esc(a.descripcion||'')}</span></td>
       <td class="num">${_pedStk(a.stock_alcorta, a.min_alcorta)} · ${_pedStk(a.stock_unicenter, a.min_unicenter)} · ${_pedStk(a.stock_oficina, a.min_oficina)}</td>
       <td class="num"><b>${_pedN(a.stock_total)}</b></td>
       <td class="num">${a.vendido == null ? '<span class="mini" title="Sin ventas en ese período">—</span>' : _pedN(a.vendido)}</td>
       <td class="num">${_pedMin(a.min_alcorta)} · ${_pedMin(a.min_unicenter)} · ${_pedMin(a.min_oficina)}</td>
-      <td class="num">${f == null ? '<span class="mini">sin mín.</span>' : (f > 0 ? `<b style="color:var(--bad)">${_pedN(f)}</b>${_pedPk(a) > 1 ? ` <span class="mini">= ${_pedN(Math.ceil(f/_pedPk(a)))} pk</span>` : ''}` : '<span class="mini ped-ok">OK</span>')}</td>
+      <td class="num">${f == null ? '<span class="mini">sin mín.</span>' : (f > 0 ? `<b style="color:var(--bad)">${_pedN(f)}</b>${_pedPk(a) > 1 ? ` <span class="mini">= ${_pedN(Math.ceil(f/_pedPk(a)))} pk</span>` : ''}` : '<span class="mini ped-ok">OK</span>')}${Number(a.falta_por_piezas) > 0 ? ` <span class="eico" style="width:22px;height:22px;background:#0e74901a;color:#0e7490;vertical-align:middle;cursor:help" title="${esc(_pedPiezasTip(a))}">${ico('puzzle','s')}</span>` : ''}</td>
       <td class="num">${a.precio_compra ? plata(a.precio_compra) : '—'}</td>
       <td class="num">${_pedYaPedido(a) ? `<b style="color:var(--warn)">${_pedN(_pedYaPedido(a))}</b>` : '—'}</td>
       <td class="num"><input class="ped-in" style="width:40px" id="ped-cq-${i}" inputmode="decimal" value="${f > 0 ? Math.ceil(f / _pedPk(a)) : 1}" onkeydown="if(event.key==='Enter')pedAgregarCat(${i})"
@@ -458,6 +476,12 @@ function pedAgregarBajoMinimo(){
                        pack: pk, descripcion_proveedor: a.descripcion_proveedor || ''}); }
   _pedPintarLin();
   document.getElementById('ped-cat').innerHTML = _pedCatHtml();
+}
+// cambiar la presentación en el catálogo: el artículo pasa a mostrarse con ese código y pack
+function pedPresCat(i, j){
+  const a = pedCat[i], pr = _pedPres(a)[Number(j)]; if (!a || !pr) return;
+  a.codigo_proveedor = pr.codigo || null; a.descripcion_proveedor = pr.descripcion || null; a.pack = Number(pr.pack) > 1 ? Number(pr.pack) : 1;
+  const cat = document.getElementById('ped-cat'); if (cat) cat.innerHTML = _pedCatHtml();
 }
 function pedAgregarCat(i){
   const a = pedCat[i]; if (!a) return;
@@ -495,6 +519,12 @@ function pedCampo(i, k, v){
     const u = document.getElementById('ped-u-' + i); if (u) u.textContent = `= ${_pedN(l.cantidad)} u.`;
   }
   else if (k === 'cantidad' || k === 'precio_unitario'){ const n = nmParse(v); l[k] = (k === 'precio_unitario' && !String(v).trim()) ? null : n; }
+  else if (k === 'pres'){
+    const pr = _pedPres(_pedCatDe(l.sku))[Number(v)]; if (!pr) return;
+    l.codigo_proveedor = pr.codigo || ''; l.descripcion_proveedor = pr.descripcion || ''; l.pack = Number(pr.pack) > 1 ? Number(pr.pack) : 1;
+    const pk = _pedPk(l); l.cantidad = Math.max(1, Math.ceil(Number(l.cantidad||0) / pk)) * pk;   // mantiene packs enteros
+    _pedPintarLin(); pedCondRefrescar(); return;
+  }
   else l[k] = v;
   const tot = document.getElementById('ped-tot'); if (tot) tot.innerHTML = _pedTotHtml();
   if (['cantidad','packs','precio_unitario'].includes(k)) pedCondRefrescar();
@@ -518,7 +548,9 @@ function _pedLineasHtml(){
     <tbody>${L.map((l, i) => `<tr>
       <td>${i+1}</td>
       <td>${l.id || l.sku ? `<b>${esc(l.sku||'—')}</b>` : `<input class="ped-in w" style="width:90px" placeholder="(opcional)" value="${esc(l.sku)}" onchange="pedCampo(${i},'sku',this.value.toUpperCase())">`}</td>
-      <td><input class="ped-in w" style="width:110px" value="${esc(l.codigo_proveedor||'')}" onchange="pedCampo(${i},'codigo_proveedor',this.value)"></td>
+      <td>${(l.recibido > 0 || _pedPres(_pedCatDe(l.sku)).length < 2)
+        ? `<input class="ped-in w" style="width:110px" value="${esc(l.codigo_proveedor||'')}" onchange="pedCampo(${i},'codigo_proveedor',this.value)">`
+        : _pedPresSel('ped-lp-' + i, _pedPres(_pedCatDe(l.sku)), l.codigo_proveedor || l.descripcion_proveedor, `pedCampo(${i},'pres',this.value)`)}</td>
       <td><input class="ped-in w" style="min-width:200px" value="${esc(l.descripcion||'')}" onchange="pedCampo(${i},'descripcion',this.value)" title="${l.descripcion_proveedor ? 'El proveedor lo llama: ' + esc(l.descripcion_proveedor) : ''}">${_pedPackChip(_pedPk(l))}</td>
       <td class="num">${_pedPk(l) > 1
         ? `<input class="ped-in" id="ped-pq-${i}" inputmode="decimal" value="${_pedN(l.cantidad / _pedPk(l))}" onchange="pedCampo(${i},'packs',this.value)"
