@@ -3588,9 +3588,11 @@ function _pintarEstudio(){
       <div style="flex:1;min-width:240px"><b>${ico(cerrado ? 'candado' : 'avion','s')} ${cerrado ? 'Mes enviado al estudio' : 'Mes todavía abierto'}</b>
         <div class="mini">${cerrado ? `Cerrado el ${_fechaTs(cerrado.cerrado_at)} por ${esc(String(cerrado.cerrado_por||'').split('@')[0])}${cerrado.nota ? ' · ' + esc(cerrado.nota) : ''}. Los comprobantes de ${esc(mesTxt)} ya no se modifican (solo el administrador).`
           : `Cuando le mandes los listados de ${esc(mesTxt)} al estudio, marcalo acá: desde ese momento los comprobantes del mes quedan bloqueados y solo el administrador puede tocarlos.`}</div></div>
+      <button class="act" onclick="abrirEnvioEstudio('${mesKey}')" title="Armar el mail para el estudio con los listados de ${esc(mesTxt)} (Subdiario, IVA completo, percepciones, retenciones y Libro IVA Digital). Sale desde claudiaadornosrl@gmail.com, desde la PC de JP, en unos 5 minutos.">${ico('mail','s')} Enviar al estudio</button>
       ${SOY_ADMIN ? (cerrado ? `<button class="act gh" onclick="reabrirMes('${mesKey}')" title="Volver a permitir cambios en este mes">${ico('candado','s')} Reabrir el mes</button>`
                              : `<button class="act" onclick="cerrarMes('${mesKey}')" title="Marcar que los listados de este mes ya se enviaron al estudio">${ico('avion','s')} Enviado al estudio · cerrar ${esc(mesTxt)}</button>`)
                  : `<span class="mini">${cerrado ? '' : 'Lo cierra JP.'}</span>`}
+      <div id="envios-estudio" style="flex-basis:100%"></div>${(setTimeout(() => _pintarEnviosEstudio(mesKey), 0), '')}
     </div>`;
   const fila = listPer[_listFila()];
 
@@ -3758,6 +3760,110 @@ function _pintarEstudio(){
     </div>`;
 }
 
+// ── Envío al estudio (24-oct, JP) ─────────────────────────────────────────────────────────────
+// El navegador arma los archivos (los mismos que se bajan a mano), los sube al bucket privado
+// `compras-estudio` y deja el pedido en compras_envios_estudio; enviar_estudio.py (PC de JP, cada 5 min)
+// lo manda por Gmail y marca el resultado. Destinatarios y textos: compras_config 'estudio_envio'.
+let ENVIO_CFG = null;
+async function _envioCfg(){
+  if (ENVIO_CFG) return ENVIO_CFG;
+  const r = await sb.from('compras_config').select('valor').eq('clave', 'estudio_envio').maybeSingle();
+  ENVIO_CFG = (r.data && r.data.valor) || {para: [], cc: [], asunto: 'Claudia Adorno SRL · listados de compras {periodo}', cuerpo: ''};
+  return ENVIO_CFG;
+}
+function _envioMesTxt(mesKey){ const [y, m] = mesKey.split('-'); return `${MESES[+m-1]} ${y}`; }
+async function _pintarEnviosEstudio(mesKey){
+  const el = document.getElementById('envios-estudio'); if (!el || !mesKey) return;
+  const r = await sb.from('compras_envios_estudio').select('id,estado,para,cc,archivos,pedido_por,pedido_at,enviado_at,error_msg,intentos')
+    .eq('periodo', mesKey + '-01').eq('es_prueba', MODO_PRUEBA).order('id', {ascending: false}).limit(5);
+  const L = (r.data || []);
+  if (!L.length){ el.innerHTML = ''; return; }
+  const chip = e => e.estado === 'enviado' ? `<span class="chip" style="background:#dcfce7;color:#166534">enviado ${_fechaTs(e.enviado_at)}</span>`
+    : e.estado === 'error' ? `<span class="chip" style="background:#fee2e2;color:#991b1b" title="${esc(e.error_msg || '')}">no salió (${e.intentos} intentos)</span>`
+    : `<span class="chip" style="background:#fef3c7;color:#92400e" title="Lo manda la PC de JP en los próximos 5 minutos${e.error_msg ? ' · último intento: ' + esc(e.error_msg) : ''}">pendiente de envío</span>`;
+  el.innerHTML = `<div class="mini" style="margin-top:6px">${L.map(e => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:3px 0">
+      ${chip(e)} <span>a ${esc((e.para || []).join(', '))}${e.cc && e.cc.length ? ' · cc ' + esc(e.cc.join(', ')) : ''}</span>
+      <span style="opacity:.75">· ${(e.archivos || []).length} adjuntos · pedido ${_fechaTs(e.pedido_at)} por ${esc(String(e.pedido_por || '').split('@')[0])}</span></div>`).join('')}</div>`;
+}
+async function abrirEnvioEstudio(mesKey){
+  if (!LIST_IVA || !LIST_IVA.length){ alert('No hay comprobantes en el mes: no hay nada para mandar.'); return; }
+  const cfg = await _envioCfg(), per = mesKey, mesTxt = _envioMesTxt(mesKey);
+  const v = await sb.from('libros_iva_archivos').select('archivo').eq('periodo', per);
+  const ventas = (v.data || []).map(x => x.archivo).filter(a => /^VENTAS_/.test(a));
+  const rep = t => String(t || '').replace(/\{periodo\}/g, mesTxt);
+  let ov = document.getElementById('nota-overlay');
+  if (!ov){ ov = document.createElement('div'); ov.id = 'nota-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:10040;display:flex;align-items:center;justify-content:center;padding:16px;';
+    document.body.appendChild(ov); }
+  const chk = (id, txt, on, extra) => `<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:3px 0"><input type="checkbox" id="${id}" ${on ? 'checked' : ''} ${extra || ''}> ${txt}</label>`;
+  const hayP = !!(LIST_PDET && LIST_PDET.length), hayR = !!(LIST_RET && LIST_RET.length);
+  ov.innerHTML = `<div class="c-box" style="max-width:640px;width:100%">
+    <div class="c-head"><div style="flex:1"><div style="font-weight:700;font-size:15px">${ico('mail','s')} Enviar al estudio · ${esc(mesTxt)}${MODO_PRUEBA ? ' · 🧪 PRUEBA' : ''}</div>
+      <div style="font-size:12.5px;opacity:.9">Sale desde claudiaadornosrl@gmail.com, desde la PC de JP, en unos 5 minutos.</div></div>
+      <button class="m-x" onclick="document.getElementById('nota-overlay').remove()">✕</button></div>
+    <div class="c-body" style="display:grid;gap:8px">
+      <label class="mini">Para (separados por coma)<input id="env-para" style="width:100%;box-sizing:border-box" value="${esc((cfg.para || []).join(', '))}" placeholder="mail del estudio"></label>
+      <label class="mini">Con copia<input id="env-cc" style="width:100%;box-sizing:border-box" value="${esc((cfg.cc || []).join(', '))}"></label>
+      <label class="mini">Asunto<input id="env-asunto" style="width:100%;box-sizing:border-box" value="${esc(rep(cfg.asunto))}"></label>
+      <label class="mini">Mensaje<textarea id="env-cuerpo" rows="6" style="width:100%;box-sizing:border-box;font:inherit;font-size:13px">${esc(rep(cfg.cuerpo))}</textarea></label>
+      <div class="mini" style="font-weight:600;margin-top:4px">Adjuntos</div>
+      ${chk('env-a-estudio', 'Subdiario IVA Compras · formato estudio (CSV, las 13 columnas de siempre)', true)}
+      ${chk('env-a-iva', 'IVA Compras completo (CSV, una columna por alícuota, descuadre y alertas)', true)}
+      ${chk('env-a-perc', 'Detalle de percepciones (CSV)' + (hayP ? '' : ' — no hay en el mes'), hayP, hayP ? '' : 'disabled')}
+      ${chk('env-a-ret', 'Retenciones por quincena (CSV)' + (hayR ? '' : ' — no hay en el mes'), hayR, hayR ? '' : 'disabled')}
+      ${chk('env-a-libro', 'Libro IVA Digital · COMPRAS (TXT CBTE + ALICUOTAS, formato ARCA)', true)}
+      ${chk('env-a-ventas', 'Libro IVA Digital · VENTAS (' + (ventas.length ? esc(ventas.join(' + ')) : 'todavía no publicado para este mes') + ')', ventas.length > 0, ventas.length ? '' : 'disabled')}
+      <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-top:6px"><input type="checkbox" id="env-guardar" checked> Recordar destinatarios y textos para la próxima vez</label>
+    </div>
+    <div class="c-pie"><div style="flex:1" id="env-estado" class="mini"></div>
+      <button class="act gh" onclick="document.getElementById('nota-overlay').remove()">Cancelar</button>
+      <button class="act" id="env-btn" onclick="enviarEstudio('${per}')">${ico('avion','s')} Encolar el envío</button></div></div>`;
+  ov._ventas = ventas;
+}
+async function enviarEstudio(per){
+  const ventas = (document.getElementById('nota-overlay') || {})._ventas || [];
+  const lista = t => String(document.getElementById(t)?.value || '').split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
+  const para = lista('env-para'), cc = lista('env-cc');
+  const asunto = (document.getElementById('env-asunto')?.value || '').trim(), cuerpo = (document.getElementById('env-cuerpo')?.value || '').trim();
+  const malos = para.concat(cc).filter(m => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m));
+  if (!para.length){ alert('Falta el mail del estudio (Para).'); return; }
+  if (malos.length){ alert('Estos mails no parecen válidos: ' + malos.join(', ')); return; }
+  if (!asunto){ alert('Falta el asunto.'); return; }
+  const on = id => !!document.getElementById(id)?.checked;
+  const btn = document.getElementById('env-btn'), est = document.getElementById('env-estado');
+  btn.disabled = true; est.textContent = 'Armando los archivos…';
+  _CAPTURA = [];
+  try {
+    if (on('env-a-estudio')) _bajarFormatoEstudio();
+    if (on('env-a-iva')) _bajarIvaCompras();
+    if (on('env-a-perc')) _bajarPercepciones();
+    if (on('env-a-ret')) _bajarRetenciones();
+    if (on('env-a-libro')){ _libBajarCompras('cb'); _libBajarCompras('al'); }
+    if (on('env-a-ventas')) for (const a of ventas) await _libBajarVentas(per, a);
+  } catch (e){ _CAPTURA = null; btn.disabled = false; est.textContent = ''; alert('No pude armar los archivos: ' + e.message); return; }
+  const archivos = _CAPTURA; _CAPTURA = null;
+  if (!archivos.length){ btn.disabled = false; est.textContent = ''; alert('No quedó ningún adjunto para mandar.'); return; }
+  const carpeta = `${MODO_PRUEBA ? 'prueba/' : ''}${per}/${Date.now()}`, subidos = [];
+  for (const a of archivos){
+    est.textContent = `Subiendo ${a.nombre}…`;
+    const path = `${carpeta}/${a.nombre}`;
+    const r = await sb.storage.from('compras-estudio').upload(path, a.blob, {upsert: true, contentType: a.blob.type || 'application/octet-stream'});
+    if (r.error){ btn.disabled = false; est.textContent = ''; alert(`No se pudo subir ${a.nombre}: ` + r.error.message); return; }
+    subidos.push({path, nombre: a.nombre, bytes: a.blob.size});
+  }
+  const ins = await sb.from('compras_envios_estudio').insert({periodo: per + '-01', es_prueba: MODO_PRUEBA, para, cc, asunto, cuerpo, archivos: subidos, pedido_por: session.email || null});
+  if (ins.error){ btn.disabled = false; est.textContent = ''; alert('No se pudo encolar el envío: ' + ins.error.message); return; }
+  if (on('env-guardar')){
+    const cfg = await _envioCfg();
+    const mesTxt = _envioMesTxt(per), des = t => String(t || '').split(mesTxt).join('{periodo}');
+    const valor = {...cfg, para, cc, asunto: des(asunto), cuerpo: des(cuerpo)};
+    const up = await sb.from('compras_config').upsert({clave: 'estudio_envio', valor, actualizado_por: session.email || null, actualizado_at: new Date().toISOString()});
+    if (!up.error) ENVIO_CFG = valor;
+  }
+  document.getElementById('nota-overlay')?.remove();
+  alert(`Envío encolado: ${subidos.length} adjuntos a ${para.join(', ')}. Sale desde la PC de JP en unos 5 minutos; en la tarjeta del mes vas a ver cuando salió.`);
+  _pintarEnviosEstudio(per);
+}
 async function cerrarMes(mesKey){
   const [y, m] = mesKey.split('-');
   const nota = prompt(`Marcar ${MESES[+m-1]} ${y} como ENVIADO AL ESTUDIO.\n\nDesde ahora los comprobantes de ese mes no se pueden modificar (solo vos). Podés dejar una nota (opcional):`, '');
@@ -3783,8 +3889,12 @@ const _fecha = f => f ? f.split('-').reverse().join('/') : '';
 //    de alícuota variable, para que el estudio no tenga que cambiar nada.
 //  · "IVA Compras completo" = una columna por alícuota + descuadre + alertas.
 //    Es el que sirve para controlar, no para presentar.
+// (24-oct, JP) Envío al estudio: con _CAPTURA activa, los "bajar" no descargan: dejan el archivo en la lista para subirlo.
+let _CAPTURA = null;
+const _capturar = (nombre, blob) => { if (_CAPTURA){ _CAPTURA.push({nombre, blob}); return true; } return false; };
 function _csvBajar(nombre, filas){
   const blob = new Blob(['﻿' + filas.join('\r\n')], {type:'text/csv;charset=utf-8;'});
+  if (_capturar(nombre, blob)) return;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = nombre;
@@ -3935,6 +4045,7 @@ const _libC = (v, n = 15) => String(Math.abs(Math.round((Number(v) || 0) * 100))
 const _libAscii = t => String(t || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7E]/g, '?');
 function _libBajar(nombre, lineas){
   const blob = new Blob([lineas.join('\r\n') + '\r\n'], {type: 'text/plain;charset=us-ascii'});
+  if (_capturar(nombre, blob)) return;
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nombre; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
@@ -4034,6 +4145,7 @@ async function _libBajarVentas(per, archivo){
   const r = await sb.from('libros_iva_archivos').select('contenido').eq('periodo', per).eq('archivo', archivo).single();
   if (r.error){ alert('No se pudo bajar: ' + r.error.message); return; }
   const blob = new Blob([r.data.contenido], {type: 'text/plain;charset=us-ascii'});
+  if (_capturar(`LIBRO_IVA_DIGITAL_${archivo}_${LIBRO_CUIT}_${per.replace('-', '')}.txt`, blob)) return;
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = `LIBRO_IVA_DIGITAL_${archivo}_${LIBRO_CUIT}_${per.replace('-', '')}.txt`; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
@@ -5867,6 +5979,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=99"></script>
+<script src="manual.js?v=100"></script>
 </body>
 </html>
