@@ -63,8 +63,30 @@ window.ADORNO_MILES = (function () {
     return (!v.includes(',') && /^\s*-?\d+\.\d{1,2}\s*$/.test(v)) ? v.trim().replace('.', ',') : v;
   }
 
+  // (24-oct-2026, JP) FÓRMULAS: si la casilla empieza con "=" se deja escribir como en Excel (=10+10, =1500*1,21,
+  // =(100-5%)*3) y al salir del campo se reemplaza por el resultado. Números en formato argentino (coma decimal).
+  function evalFormula(v) {
+    let e = String(v == null ? '' : v).trim();
+    if (!e.startsWith('=')) return null;
+    e = e.slice(1).replace(/\s+/g, '');
+    if (!e || !/^[\d+\-*/().,%]+$/.test(e)) return null;
+    e = e.replace(/(\d)\.(?=\d{3}(?!\d))/g, '$1').replace(/,/g, '.').replace(/%/g, '/100');
+    if (/[+\-*/]{2,}|\.\./.test(e.replace(/\(-/g, '('))) return null;
+    try { const r = Function('"use strict";return (' + e + ')')(); return Number.isFinite(r) ? Math.round(r * 100) / 100 : null; } catch (_) { return null; }
+  }
+  function resolverFormula(el) {
+    const v = nget(el);
+    if (!/^\s*=/.test(v)) return false;
+    const r = evalFormula(v);
+    if (r == null) return false;
+    nset(el, el._miles === 'num' ? deNum(r) : fmtTexto(deNum(r)));
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  }
+
   function reformatear(el, ev) {
     let v = nget(el);
+    if (/^\s*=/.test(v)) return;                           // fórmula en curso: no se toca hasta salir del campo
     let pos = el.selectionStart == null ? v.length : el.selectionStart;
     const tipo = (ev && ev.inputType) || '';
     const data = (ev && typeof ev.data === 'string') ? ev.data : '';
@@ -136,6 +158,8 @@ window.ADORNO_MILES = (function () {
 
   // En captura sobre el documento: corre ANTES que el oninput del propio campo.
   document.addEventListener('input', ev => { const el = ev.target; if (el && el._miles) reformatear(el, ev); }, true);
+  document.addEventListener('focusout', ev => { const el = ev.target; if (el && el._miles) resolverFormula(el); }, true);
+  document.addEventListener('keydown', ev => { const el = ev.target; if (ev.key === 'Enter' && el && el._miles && /^\s*=/.test(nget(el))) { resolverFormula(el); } }, true);
   document.addEventListener('focusin', ev => revisar(ev.target), true);
   try {
     new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) revisar(n); })
@@ -144,7 +168,7 @@ window.ADORNO_MILES = (function () {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => revisar(document.body));
   else revisar(document.body);
 
-  return { wire, subirNumero, revisar, fmtTexto, aNumStr, deNum };
+  return { wire, subirNumero, revisar, fmtTexto, aNumStr, deNum, evalFormula };
 })();
 /* ADORNO_MILES:FIN */
 window.ADORNO_SSO = (function () {
@@ -552,6 +576,7 @@ const platac = n => '$' + (Number(n)||0).toLocaleString('es-AR',{maximumFraction
 const nmParse = v => {
   v = String(v ?? '').trim().replace(/\$|\s/g, '');
   if (!v || v === '-') return 0;
+  if (v.startsWith('=')){ const r = window.ADORNO_MILES && ADORNO_MILES.evalFormula(v); return r == null ? 0 : r; }   // (24-oct) =10+10
   if (!v.includes(',')) {
     const m = v.match(/^(-?\d+)\.(\d{1,2})$/);
     if (m) return Number(v) || 0;
@@ -2438,6 +2463,22 @@ async function seguirPedido(){
 //    el motivo en tooltip, y la fila entera abre el control (botón chico a la derecha).
 let bandejaVista = 'todos';
 function bandejaFiltrar(v){ bandejaVista = bandejaVista === v ? 'todos' : v; render(); }
+// (24-oct, JP) la Bandeja se ordena tocando los títulos (misma columna otra vez = invierte)
+let BAND_ORDEN = {k: 'fecha_emision', dir: -1};
+function bandejaOrdenar(k){ BAND_ORDEN = BAND_ORDEN.k === k ? {k, dir: -BAND_ORDEN.dir} : {k, dir: k === 'fecha_emision' || k === 'total' ? -1 : 1}; render(); }
+function _bandTh(k, txt, extra){
+  const on = BAND_ORDEN.k === k;
+  return `<th ${extra || ''} style="cursor:pointer;white-space:nowrap" title="Ordenar por ${txt.toLowerCase()}" onclick="bandejaOrdenar('${k}')">${txt}${on ? (BAND_ORDEN.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
+}
+function _bandSort(lista){
+  const k = BAND_ORDEN.k, dir = BAND_ORDEN.dir;
+  const val = d => k === 'total' ? Number(d.total) || 0
+    : k === 'comprobante' ? `${d.tipo || ''} ${d.letra || ''} ${String(d.punto_venta || 0).padStart(5,'0')}-${String(d.numero || 0).padStart(8,'0')}`
+    : k === 'concepto' ? (d.sug_concepto || '~')
+    : k === 'proveedor_nombre' ? (d.proveedor_nombre || d.cuit_emisor || '~').toLowerCase()
+    : (d[k] || '');
+  return lista.slice().sort((a, b) => { const x = val(a), y = val(b); return (x < y ? -1 : x > y ? 1 : 0) * dir; });
+}
 function vistaBandeja(){
   const conAlerta = BANDEJA.filter(d => d.archivo_alerta);
   const autos     = BANDEJA.filter(d => d.estado === 'auto');
@@ -2490,9 +2531,9 @@ function vistaBandeja(){
     <div class="filtros"><input type="search" data-busca="texto" placeholder="Buscar proveedor, número, CUIT…"
       value="${esc(filtro.texto)}" oninput="buscarTexto(this.value)" onkeydown="if(event.key==='Enter')buscarTexto(this.value,true)"></div>
     <div style="overflow-x:auto"><table class="tb-band">
-      <thead><tr><th>Fecha</th><th>Proveedor</th><th class="oculta-mov">Comprobante</th>
-        <th class="num">Total</th><th>Concepto</th><th></th></tr></thead>
-      <tbody>${lista.map(d => {
+      <thead><tr>${_bandTh('fecha_emision','Fecha')}${_bandTh('proveedor_nombre','Proveedor')}<th class="oculta-mov" style="cursor:pointer" title="Ordenar por comprobante" onclick="bandejaOrdenar('comprobante')">Comprobante${BAND_ORDEN.k==='comprobante' ? (BAND_ORDEN.dir>0?' ▲':' ▼') : ''}</th>
+        <th class="num" style="cursor:pointer" title="Ordenar por total" onclick="bandejaOrdenar('total')">Total${BAND_ORDEN.k==='total' ? (BAND_ORDEN.dir>0?' ▲':' ▼') : ''}</th>${_bandTh('concepto','Concepto')}<th></th></tr></thead>
+      <tbody>${_bandSort(lista).map(d => {
         const cf = CONF[d.sug_confianza] || CONF.baja;
         const nro = `${esc(d.tipo)} ${esc(d.letra)} ${String(d.punto_venta).padStart(4,'0')}-${String(d.numero).padStart(8,'0')}`;
         return `<tr onclick="abrirControl(${d.id})">
@@ -6143,6 +6184,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=104"></script>
+<script src="manual.js?v=105"></script>
 </body>
 </html>
