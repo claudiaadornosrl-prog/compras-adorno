@@ -113,8 +113,10 @@ function _eqiFilasDatos(){
   const {fact, sku} = EQI.cols;
   return EQI.filas.slice(EQI.hdr + 1).map(r => {
     const v = fact >= 0 ? String(r[fact] || '').trim() : '';
-    return {codigo: EQI.modo === 'codigo' ? v : '', descripcion: EQI.modo === 'descripcion' ? v : '',
-            sku: sku >= 0 ? String(r[sku] || '').trim() : ''};
+    // (24-oct) descripción que empieza con el código ("21109/074 POLYWOOD…"): se separa sola, la factura trae el código aparte
+    const pg = EQI.modo === 'descripcion' && typeof _eqCodigoPegado === 'function' ? _eqCodigoPegado(v, '') : null;
+    return {codigo: EQI.modo === 'codigo' ? v : (pg ? pg.codigo : ''), descripcion: EQI.modo === 'descripcion' ? (pg ? pg.descripcion : v) : '',
+            sku: sku >= 0 ? String(r[sku] || '').trim() : '', separado: !!pg};
   }).filter(x => x.codigo || x.descripcion);
 }
 
@@ -262,8 +264,9 @@ function _eqiPintar(cargando){
           <select onchange="EQI.cols.sku=Number(this.value); _eqiPintar()">${_eqiColOpts(EQI.cols.sku, true)}</select></label>
       </div>
       <div class="mini" style="margin:10px 0 5px">Así se leen las primeras filas:</div>
+      ${(() => { const n = _eqiFilasDatos().filter(x => x.separado).length; return n ? `<div class="mini" style="margin:0 0 6px;color:#92400e">${ico('alerta','s')} En ${n} fila${n === 1 ? '' : 's'} la descripción empieza con el código del proveedor: se guarda el código aparte (la factura lo trae separado). Si esa columna en realidad es el código, elegí "código de artículo" arriba.</div>` : ''; })()}
       <div style="overflow-x:auto"><table><thead><tr><th>Cómo lo factura el proveedor (${EQI.modo === 'codigo' ? 'código' : 'descripción'})</th><th>Nuestro SKU</th></tr></thead>
-        <tbody>${_eqiFilasDatos().slice(0, 5).map(x => `<tr><td><code>${esc(x.codigo || x.descripcion)}</code></td>
+        <tbody>${_eqiFilasDatos().slice(0, 5).map(x => `<tr><td>${x.separado ? `<code>${esc(x.codigo)}</code> · ${esc(x.descripcion)}` : `<code>${esc(x.codigo || x.descripcion)}</code>`}</td>
           <td>${esc(x.sku) || '<span class="mini">— (lo propone el sistema)</span>'}</td></tr>`).join('')}</tbody></table></div>
       <div style="margin-top:12px"><button class="act" onclick="_eqiBuscar()" ${prov ? '' : 'disabled title="Elegí el proveedor"'}>
         🔎 Buscar equivalencias de las ${nDatos} filas</button></div>` : ''}`;
