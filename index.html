@@ -3394,7 +3394,7 @@ document.addEventListener('focusout', e => {
 }, true);
 
 function vistaListados(){
-  const subs = [['gestion','barras','Gestión','Cuánto se compró: por tipo de gasto, mes a mes y por proveedor'],['estudio','factura','Para el estudio','Libro IVA compras, percepciones, retenciones y Libro IVA Digital'],['cc','pago','Cuenta corriente','Qué le debemos a cada proveedor: facturas contabilizadas menos pagos']];
+  const subs = [['gestion','barras','Gestión','Cuánto se compró: por tipo de gasto, mes a mes y por proveedor'],['estudio','factura','Para el estudio','Libro IVA compras, percepciones, retenciones y Libro IVA Digital'],['cc','pago','Cuenta corriente','Proveedores: qué les debemos (facturas contabilizadas menos pagos). Clientes: qué nos deben, según la cuenta corriente del Dragonfish']];
   setTimeout(() => { if (listSub === 'estudio') cargarListadosEstudio(); if (listSub === 'cc') cargarCuentaCorriente(); }, 0);
   return `<div class="abar">${subs.map(([k,i,t,tip]) =>
         `<button class="fchip ${listSub===k?'on':''}" title="${tip}" onclick="listSub='${k}'; render()">${ico(i,'s')} ${t}</button>`).join('')}</div>
@@ -3410,17 +3410,80 @@ function vistaListados(){
 let LIST_CC = null, CC_BUSCA = '', CC_SOLO_SALDO = true;
 async function cargarCuentaCorriente(){
   const c = document.getElementById('list-cc'); if (!c) return;
-  const {data, error} = await sb.rpc('compras_cuenta_corriente', {p_prueba: MODO_PRUEBA});
-  if (error){ c.innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return; }
-  LIST_CC = data || []; _pintarCuentaCorriente();
+  const [p, k] = await Promise.all([sb.rpc('compras_cuenta_corriente', {p_prueba: MODO_PRUEBA}), sb.rpc('compras_cc_clientes')]);
+  if (p.error){ c.innerHTML = `<div class="alerta">${esc(p.error.message)}</div>`; return; }
+  LIST_CC = p.data || []; LIST_CCC = k.error ? [] : (k.data || []); if (k.error) console.warn('cc clientes:', k.error.message);
+  _pintarCuentaCorriente();
+}
+// (24-oct, JP) Cuenta corriente de CLIENTES: viene de ZooLogic.CTACTE del Dragon (réplica, 1 día de atraso),
+// que ya trae por comprobante lo que queda sin imputar. El módulo solo la muestra; se cobra y se imputa allá.
+let LIST_CCC = null, CC_VISTA = 'proveedores';
+function _ccVistaChips(){
+  const n = (LIST_CCC || []).filter(x => Math.abs(Number(x.saldo)) >= 0.5).length;
+  return `<span style="display:inline-flex;gap:4px;margin-right:6px">
+    <button class="fchip ${CC_VISTA === 'proveedores' ? 'on' : ''}" type="button" onclick="CC_VISTA='proveedores';_pintarCuentaCorriente()" title="Lo que le debemos a los proveedores">${ico('edificio','s')} Proveedores</button>
+    <button class="fchip ${CC_VISTA === 'clientes' ? 'on' : ''}" type="button" onclick="CC_VISTA='clientes';_pintarCuentaCorriente()" title="Lo que nos deben los clientes (cuenta corriente del Dragonfish)">${ico('cliente','s')} Clientes${n ? ` <b>${n}</b>` : ''}</button></span>`;
+}
+function _pintarCCClientes(c){
+  const q = CC_BUSCA.trim().toLowerCase();
+  const L = (LIST_CCC || []).filter(x => (!CC_SOLO_SALDO || Math.abs(Number(x.saldo)) >= 0.5) && (!q || [x.nombre, x.cuit, x.cliente_codigo].join(' ').toLowerCase().includes(q)));
+  const tot = L.reduce((a, x) => a + (Number(x.saldo) || 0), 0);
+  const sync = (LIST_CCC || []).reduce((a, x) => x.sync_at > a ? x.sync_at : a, '');
+  c.innerHTML = `<div class="card">
+    <div class="abar" style="margin-bottom:10px">
+      ${_ccVistaChips()}
+      <span class="fchip" style="cursor:default"><b>${L.length}</b> cliente${L.length === 1 ? '' : 's'} <span class="mini">· nos deben <b style="color:#991b1b">${plata(tot)}</b></span></span>
+      <button class="fchip ${CC_SOLO_SALDO ? 'on' : ''}" type="button" onclick="CC_SOLO_SALDO=!CC_SOLO_SALDO;_pintarCuentaCorriente()" title="Ocultar los clientes con saldo cero">${ico('ojo','s')} ${CC_SOLO_SALDO ? 'Solo con saldo' : 'Todos'}</button>
+      <input type="search" value="${esc(CC_BUSCA)}" placeholder="Buscar cliente, CUIT o código…" style="flex:1;min-width:200px;padding:8px 11px;border:1px solid var(--bd);border-radius:999px;font-size:13.5px;font-family:inherit"
+             oninput="CC_BUSCA=this.value;clearTimeout(window._ccT);window._ccT=setTimeout(()=>{const p=this.selectionStart;_pintarCuentaCorriente();const i=document.querySelector('#list-cc input[type=search]');if(i){i.focus();try{i.setSelectionRange(p,p)}catch(e){}}},600)">
+      ${ayuda('Es la cuenta corriente de clientes del Dragonfish (facturas a cuenta corriente menos recibos), tal como la imputa administración allá. Saldo positivo = nos deben; negativo = pagaron de más o anticiparon. Se actualiza una vez por día desde la base de Oficina (puede tener un día de atraso). Acá solo se consulta: los cobros y las imputaciones se cargan en el Dragonfish.')}
+      ${sync ? `<span class="mini" title="Última lectura del Dragonfish">${ico('refrescar','s')} ${_fechaTs(sync)}</span>` : ''}
+    </div>
+    ${!L.length ? `<div class="vacio">${LIST_CCC && LIST_CCC.length ? 'Ningún cliente con saldo.' : 'Todavía no se leyó la cuenta corriente del Dragonfish (corre con el sync diario de mercadería).'}</div>` : `<div style="overflow-x:auto"><table class="tb-band">
+      <thead><tr><th>Cliente</th><th>CUIT</th><th class="num" title="Facturas con saldo sin imputar">Fact. abiertas</th><th class="num">Saldo</th><th>Última factura</th><th>Último recibo</th><th class="num" title="Facturado a cuenta corriente en los últimos 12 meses">Fact. 12 m</th><th></th></tr></thead>
+      <tbody>${L.map(x => `<tr onclick="abrirCCCliente('${esc(x.cliente_codigo)}')" title="Ver los movimientos">
+        <td class="prov"><span class="prov-nom"><strong>${esc(x.nombre || x.cliente_codigo)}</strong></span> <code class="mini" style="background:#f1f5f9;padding:1px 5px;border-radius:5px">${esc(x.cliente_codigo)}</code></td>
+        <td class="mini" style="white-space:nowrap">${_cuitFmt(x.cuit)}</td>
+        <td class="num">${x.facturas_abiertas}</td>
+        <td class="num"><b style="color:${Number(x.saldo) > 0 ? '#991b1b' : '#166534'}">${plata(x.saldo)}</b></td>
+        <td class="mini">${x.ultima_factura ? _fecha(x.ultima_factura) : '—'}</td>
+        <td class="mini">${x.ultimo_recibo ? _fecha(x.ultimo_recibo) : '—'}</td>
+        <td class="num">${Number(x.facturado_12m) ? plata(x.facturado_12m) : '—'}</td>
+        <td class="num"><button class="act gh mini-ico" title="Ver movimientos" onclick="event.stopPropagation();abrirCCCliente('${esc(x.cliente_codigo)}')">${ico('lista','s')}</button></td>
+      </tr>`).join('')}</tbody>
+      <tfoot><tr style="font-weight:700;background:#f8fafc"><td colspan="3">Total</td><td class="num">${plata(tot)}</td><td colspan="4"></td></tr></tfoot>
+    </table></div>`}
+  </div>`;
+}
+async function abrirCCCliente(codigo){
+  const x = (LIST_CCC || []).find(y => y.cliente_codigo === codigo) || {cliente_codigo: codigo};
+  const {data, error} = await sb.rpc('compras_cc_cliente_movs', {p_cliente: codigo});
+  if (error){ alert(error.message); return; }
+  const M = data || [];
+  openModalP(`
+    <h3 style="margin:0 0 4px;">${ico('cliente','s')} ${esc(x.nombre || codigo)}</h3>
+    <div class="hint" style="margin-bottom:10px;">${x.cuit ? 'CUIT ' + _cuitFmt(x.cuit) + ' · ' : ''}código ${esc(codigo)} · saldo <b style="color:${Number(x.saldo) > 0 ? '#991b1b' : '#166534'}">${plata(x.saldo || 0)}</b> · ${M.length} movimiento${M.length === 1 ? '' : 's'} en el Dragonfish</div>
+    ${!M.length ? '<div class="vacio">Sin movimientos.</div>' : `<div style="overflow:auto;max-height:60vh"><table class="tb-band" style="font-size:12.5px">
+      <thead><tr><th>Fecha</th><th>Comprobante</th><th class="num">Debe</th><th class="num">Haber</th><th class="num" title="Lo que queda sin imputar de este comprobante">Pendiente</th><th>Nota</th></tr></thead>
+      <tbody>${M.map(m => `<tr${Math.abs(Number(m.saldo)) >= 0.005 ? ' style="background:#fff7ed"' : ''}>
+        <td class="mini" style="white-space:nowrap">${_fecha(m.fecha)}${m.vto && m.vto !== m.fecha ? `<div style="opacity:.7">vto ${_fecha(m.vto)}</div>` : ''}</td>
+        <td>${esc(m.comprobante || '')}</td>
+        <td class="num">${m.signo > 0 ? plata(m.total) : ''}</td>
+        <td class="num">${m.signo < 0 ? plata(m.total) : ''}</td>
+        <td class="num">${Math.abs(Number(m.saldo)) >= 0.005 ? `<b style="color:#92400e">${plata(m.saldo)}</b>` : '<span class="mini">—</span>'}</td>
+        <td class="mini">${esc(m.obs || '')}</td></tr>`).join('')}</tbody></table></div>`}
+    <div class="mini" style="margin-top:10px">Los cobros y las imputaciones se cargan en el Dragonfish; esto se actualiza una vez por día.</div>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="act gh" onclick="cerrarModalP()">Cerrar</button></div>`);
 }
 function _pintarCuentaCorriente(){
   const c = document.getElementById('list-cc'); if (!c || !LIST_CC) return;
+  if (CC_VISTA === 'clientes') return _pintarCCClientes(c);
   const q = CC_BUSCA.trim().toLowerCase();
   const L = LIST_CC.filter(x => (!CC_SOLO_SALDO || Math.abs(Number(x.saldo)) >= 0.5) && (!q || [x.nombre, x.cuit, x.sku].join(' ').toLowerCase().includes(q)));
   const tot = L.reduce((a, x) => a + (Number(x.saldo) || 0), 0);
   c.innerHTML = `<div class="card">
     <div class="abar" style="margin-bottom:10px">
+      ${_ccVistaChips()}
       <span class="fchip" style="cursor:default"><b>${L.length}</b> proveedor${L.length === 1 ? '' : 'es'} <span class="mini">· debemos <b style="color:#991b1b">${plata(tot)}</b></span></span>
       <button class="fchip ${CC_SOLO_SALDO ? 'on' : ''}" type="button" onclick="CC_SOLO_SALDO=!CC_SOLO_SALDO;_pintarCuentaCorriente()" title="Ocultar los proveedores con saldo cero">${ico('ojo','s')} ${CC_SOLO_SALDO ? 'Solo con saldo' : 'Todos'}</button>
       <input type="search" value="${esc(CC_BUSCA)}" placeholder="Buscar proveedor, CUIT o SKU…" style="flex:1;min-width:200px;padding:8px 11px;border:1px solid var(--bd);border-radius:999px;font-size:13.5px;font-family:inherit"
@@ -5979,6 +6042,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=100"></script>
+<script src="manual.js?v=101"></script>
 </body>
 </html>
