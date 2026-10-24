@@ -761,7 +761,9 @@ async function cargarRemitosImportados(){
 const remImportado = r => REM_IMP[_remKey(r)] || null;
 function remImpTip(x){
   return `Ya está en el Dragonfish: remito de ${x.importado_tipo === 'venta' ? 'venta ADMIN → ' + (x.importado_cliente || 'local') : 'compra'}`
-       + (x.importado_fecha ? ' del ' + fechaCorta(x.importado_fecha) : '') + (x.importado_por ? ' · cargado por ' + x.importado_por.split('@')[0] : '');
+       + (x.importado_ref ? ' ' + x.importado_ref : '')
+       + (x.importado_fecha ? ' del ' + fechaCorta(x.importado_fecha) : '') + (x.importado_por ? ' · cargado por ' + x.importado_por.split('@')[0] : '')
+       + (x.importado_manual ? ' · cargado A MANO (el remito del Dragon menciona este número en sus observaciones, no entró por TXT)' : '');
 }
 function celdaRemitos(d){
   const rs = REMITOS_DOC[d.id] || [];
@@ -3154,7 +3156,18 @@ function cambioCotiz(v){
   enControl.cotizacion = c;
   enControl.total = nuevoTotal;
   enControl.neto_no_gravado = nuevoTotal;
+  // (24-oct) la imputación se re-escala con la cotización: una línea = el total; varias = misma proporción
   if (lineasControl.length === 1) lineasControl[0].monto = nuevoTotal;
+  else if (lineasControl.length > 1){
+    const suma = lineasControl.reduce((a, l) => a + (Number(l.monto) || 0), 0);
+    if (suma > 0){
+      let acum = 0;
+      lineasControl.forEach((l, i) => {
+        if (i === lineasControl.length - 1) l.monto = Math.round((nuevoTotal - acum) * 100) / 100;
+        else { l.monto = Math.round((Number(l.monto) || 0) / suma * nuevoTotal * 100) / 100; acum += l.monto; }
+      });
+    }
+  }
   pintarControl();
 }
 function agregarLinea(){ lineasControl.push({concepto:'', monto:0}); pintarControl(); }
@@ -5571,7 +5584,7 @@ async function _avisosMotorHTML(){
       <td>${esc(x.texto)}${x.resuelto_nota ? `<div class="mini" style="color:#166534">✓ ${esc(x.resuelto_nota)}</div>` : ''}</td>
       <td class="mini">${esc(String(x.por || '').split('@')[0])}</td>
       <td style="white-space:nowrap">${x.estado === 'pendiente'
-        ? (SOY_ADMIN ? `<button class="act gh" style="font-size:12px;padding:3px 9px" onclick="resolverAvisoMotor(${x.id})">✓ Resuelto</button>` : '<span class="chip" style="background:#fef3c7;color:#92400e">pendiente</span>')
+        ? (SOY_ADMIN ? `<button class="act mini-ico" title="Marcar como resuelto (te pide una línea con qué se ajustó)" onclick="resolverAvisoMotor(${x.id})">${ico('ok','s')}</button>` : '<span class="chip" style="background:#fef3c7;color:#92400e">pendiente</span>')
         : `<span class="chip" style="background:#dcfce7;color:#166534" title="${esc(_fechaTs(x.resuelto_at))}">resuelto</span>`}</td></tr>`;
   return `<div class="card" style="border-left:4px solid ${pend.length ? '#d97706' : '#166534'}">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:${l.length ? 8 : 0}px">
@@ -5834,6 +5847,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=14"></script>
 <script src="equiv-import.js?v=5"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=95"></script>
+<script src="manual.js?v=96"></script>
 </body>
 </html>
