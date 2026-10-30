@@ -2119,6 +2119,21 @@ function _estilarModalP(){
   m.querySelectorAll('label').forEach(l => { if (!l.dataset.st){ l.dataset.st='1'; l.style.cssText += 'display:block;font-size:12px;color:var(--mut);font-weight:600;'; } });
 }
 
+// (30-oct, JP) doble clic en el proveedor de la cabecera del control → su ficha (se abre encima; al cerrarla seguís en el control)
+async function abrirFichaProveedorDesdeDoc(cuit, nombre){
+  const busca = (cuit && cuit.replace(/\D/g, '').length >= 3) ? cuit : (nombre || '');
+  if (!busca){ alert('Este comprobante no tiene CUIT ni proveedor para buscar.'); return; }
+  const {data, error} = await sb.rpc('compras_proveedores_listar', {p_busca: busca, p_limite: 20, p_prueba: MODO_PRUEBA});
+  if (error){ alert('No pude buscar el proveedor: ' + error.message); return; }
+  const L = data || [];
+  if (!L.length){ alert('No encontré la ficha de este proveedor (' + busca + ') en el listado de Proveedores.'); return; }
+  const cu = String(cuit || '').replace(/\D/g, '');
+  let ix = L.findIndex(p => String(p.cuit || '').replace(/\D/g, '') === cu && p.activo !== false && p.tiene_ficha);
+  if (ix < 0) ix = L.findIndex(p => String(p.cuit || '').replace(/\D/g, '') === cu && p.activo !== false);
+  if (ix < 0) ix = 0;
+  _provCache = L;
+  fichaProveedor(ix);
+}
 async function fichaProveedor(i){
   const p = _provCache[i];
   const cp = ['', 'contado', '7 días', '15 días', '30 días', '30/60', '30/60/90', '60 días'];
@@ -2159,6 +2174,7 @@ async function fichaProveedor(i){
         <select id="pf-lista" onchange="(async(sel)=>{const r=await sb.rpc('compras_proveedor_factura_lista',{p_codigo:'${_mEscP(p.codigo)}',p_lista:sel.value});if(r.error)alert(r.error.message);else _resP('datos','Lista de la factura: '+sel.value,true);})(this)" title="Qué precio trae la factura: COMPRA (lista del proveedor, el descuento se aplica aparte) o COSTO (ya viene con el descuento, como Los Naranjos). Se guarda al cambiarlo.">
           <option value="compra">Factura a lista COMPRA (con descuento aparte)</option>
           <option value="costo">Factura a lista COSTO (ya descontada)</option>
+          <option value="costo_pct">Lista COSTO y el % del renglón es lo FACTURADO del pedido (ej. factura el 30 %)</option>
         </select>${(setTimeout(async () => { try { const r = await sb.from('compras_proveedor_datos').select('factura_lista').eq('codigo', p.codigo).maybeSingle(); const el = document.getElementById('pf-lista'); if (el && r.data && r.data.factura_lista) el.value = r.data.factura_lista; } catch (e) {} }, 0), '')}
         <select id="pf-merc">
           <option value="" ${p.compra_mercaderia == null ? 'selected' : ''}>Automático (${p.mercaderia_auto ? 'sí' : 'no'})</option>
@@ -3020,14 +3036,19 @@ function _rengEstado(r){
   const pu = r.precio_unitario != null ? Number(r.precio_unitario) / pk : null, pun0 = _rengPun(r), pun = pun0 != null ? pun0 / pk : null;
   const dp = lc > 0 && pu != null ? Math.round((pu / lc - 1) * 10000) / 100 : null;
   const dk = lk > 0 && pun != null ? Math.round((pun / lk - 1) * 10000) / 100 : null;
+  // (24/30-oct, JP) factura_lista: 'compra' = precio de lista + descuento · 'costo' = el precio ya es la lista COSTO ·
+  // 'costo_pct' = lista COSTO y el "%" del renglón es el porcentaje FACTURADO del pedido (Los Naranjos: facturan el 30 %),
+  // no un descuento. En costo / costo_pct se compara el precio unitario SIN el % contra COSTO.
+  const modo = r.factura_lista || 'compra';
   let e;
   if (r.sin_stock) e = 'sin_stock';
   else if (!r.sku) e = r.estado === 'desglosado' ? 'desglosado' : 'sin_sku';
   else if (lc == null && lk == null) e = 'sin_lista';
-  else if (lk > 0 && pun != null && Math.abs(pun / lk - 1) <= 0.005) e = 'ok';
-  else if (lc > 0 && pu != null && Math.abs(pu / lc - 1) <= 0.005) e = 'ok_precio';
+  else if (modo !== 'compra' && lk > 0 && pu != null && Math.abs(pu / lk - 1) <= 0.005) e = 'ok';
+  else if (modo === 'compra' && lk > 0 && pun != null && Math.abs(pun / lk - 1) <= 0.005) e = 'ok';
+  else if (modo === 'compra' && lc > 0 && pu != null && Math.abs(pu / lc - 1) <= 0.005) e = 'ok_precio';
   else e = 'difiere';
-  return {estado: e, dif_precio_pct: dp, dif_costo_pct: dk};
+  return {estado: e, dif_precio_pct: modo !== 'compra' ? (lk > 0 && pu != null ? Math.round((pu / lk - 1) * 10000) / 100 : null) : dp, dif_costo_pct: dk};
 }
 // Descuentos generales (no por producto: pago contado, bonificación, etc.). Con % se calcula sobre la suma de renglones.
 function _descExtras(d, sub){
@@ -3086,7 +3107,7 @@ function _facturaCabecera(d, opts = {}){
         ? '<span class="chip fx-chip-off"><span class="reloj">⏳</span> consultando ARCA…</span>'
         : `<span class="chip fx-chip-off" style="cursor:pointer" title="Este CUIT nunca se validó contra ARCA. Tocá para consultarlo ahora (tarda unos segundos: lo resuelve arca_padron.py en la PC de JP)" onclick="_arcaConsultarDoc('${esc(d.cuit_emisor)}')">ARCA sin consultar · 🔍 consultar</span>`));
   return `<div class="fx-cab ${opts.enHead ? 'fx-head' : ''}">
-    <div>
+    <div ondblclick="abrirFichaProveedorDesdeDoc('${esc(d.cuit_emisor || '')}', '${esc(d.proveedor_nombre || '')}')" title="Doble clic: abrir la ficha del proveedor para corregir razón social, condición de pago, CBU, etc. sin salir de acá" style="cursor:pointer">
       <div class="fx-prov">${esc(d.proveedor_nombre || d.cuit_emisor)}</div>
       <div class="mini">CUIT ${esc(d.cuit_emisor)}${d.cond_iva ? ' · ' + esc(d.cond_iva) : ''}${d.es_exterior ? ' · exterior' : ''}</div>
       <div class="mini">Cond. venta: ${cond ? esc(cond) : falta}</div>
@@ -3123,7 +3144,7 @@ function _facturaRenglones(d, reng, opts = {}){
     const esMerc = (document.getElementById('ctrl-tipo')?.value || d.tipo_gasto) === 'mercaderia';
     const inp = (i, campo, v, w) => `<input type="text" inputmode="decimal" class="fx-in" style="width:${w}px" value="${v == null ? '' : String(v).replace('.', ',')}" oninput="_rengEdit(${i}, '${campo}', this.value)">`;
     return `<div style="overflow-x:auto"><table class="fx-tbl">
-      <thead><tr><th class="num">Cant</th><th>Descripción · SKU</th><th class="num">P. unit</th><th class="num">Dto</th><th class="num">P. unit c/desc</th><th class="num">Neto</th><th>Control</th><th>Concepto</th></tr></thead>
+      <thead><tr><th class="num">Cant</th><th>Descripción · SKU</th><th class="num">P. unit</th>${(reng[0] && reng[0].factura_lista === 'costo_pct') ? '<th class="num" title="Este proveedor factura un PORCENTAJE del pedido (no es un descuento): el neto del renglón es cantidad × precio × %">% fact.</th><th class="num" title="Lo facturado por unidad en esta factura (precio × %)">Facturado/u</th>' : '<th class="num">Dto</th><th class="num">P. unit c/desc</th>'}<th class="num">Neto</th><th>Control</th><th>Concepto</th></tr></thead>
       <tbody>${reng.map((r, i) => { const est = _rengEstado(r), pun = _rengPun(r);
         return `<tr>
         <td class="num">${ed ? inp(i, 'cantidad', r.cantidad, 54) : Number(r.cantidad||0).toLocaleString('es-AR')}</td>
@@ -6545,6 +6566,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=109"></script>
+<script src="manual.js?v=111"></script>
 </body>
 </html>
