@@ -596,6 +596,9 @@ label.c-tog .eico{width:38px;height:38px;color:#cbd5e1;border:1px solid var(--bd
 label.c-tog input:checked + .eico{color:#fff;background:var(--primary);border-color:var(--primary)}
 .aviso-amb{background:#fef3c7;color:#92400e;border-left:4px solid #d97706;border-radius:8px;padding:8px 11px;font-size:13px}.aviso-amb div{display:flex;gap:6px;align-items:flex-start;margin:2px 0}
 button.act.mini-ico{padding:5px 7px;border-radius:8px;display:inline-flex}
+.sku-sug{position:absolute;left:0;right:0;top:100%;z-index:20;background:#fff;border:1px solid var(--bd);border-radius:9px;box-shadow:0 8px 24px rgba(15,23,42,.14);max-height:260px;overflow:auto;margin-top:3px}
+.sku-sug-it{padding:6px 10px;cursor:pointer;font-size:13px;display:flex;gap:8px;align-items:baseline;border-bottom:1px solid #f1f5f9}
+.sku-sug-it:hover,.sku-sug-it.on{background:#fff7ed}
 /* (22-oct, JP) tónica de todos los módulos: los botones de ícono van sin recuadro, solo el ícono, fondo suave al pasar el mouse */
 button.act.mini-ico,button.act.gh.mini-ico{background:transparent;border:none;color:var(--primary);box-shadow:none;padding:6px 8px}
 button.act.mini-ico:hover,button.act.gh.mini-ico:hover{background:var(--primary-bg,#fff7ed)}
@@ -5196,8 +5199,12 @@ function pintarMapeo(cargando){
           <span style="width:90px;text-align:right">Unid. por pack</span>
           ${partesMapeo.length > 1 ? '<span style="width:100px;text-align:right">Parte del costo</span>' : ''}<span style="width:34px"></span></div>
         ${partesMapeo.map((p,i) => `<div class="c-linea">
-          <input list="dl-skus" value="${esc(p.sku)}" placeholder="SKU nuestro" style="flex:1;min-width:140px"
-                 oninput="partesMapeo[${i}].sku=this.value.split(' ')[0].trim()">
+          <div style="flex:1;min-width:140px;position:relative">
+            <input value="${esc(p.sku)}" placeholder="SKU nuestro (escribí y elegí)" style="width:100%;box-sizing:border-box;text-transform:uppercase" autocomplete="off" spellcheck="false"
+                   oninput="this.value=this.value.toUpperCase(); partesMapeo[${i}].sku=this.value.split(' ')[0].trim(); _skuSugerir(${i}, this)"
+                   onkeydown="if(event.key==='Escape'){_skuSugCerrar();event.stopPropagation()}">
+            <div class="sku-sug" id="map-sug-${i}" style="display:none"></div>
+          </div>
           <input type="number" step="1" min="1" value="${Number(p.cantidad)||1}" style="width:90px;text-align:right"
                  title="Cuántas unidades de ESTE SKU trae 1 unidad del proveedor (pack de 2 = 2)"
                  oninput="partesMapeo[${i}].cantidad=Number(this.value)||1">
@@ -5251,7 +5258,6 @@ function pintarMapeo(cargando){
       <button class="act gh" onclick="cerrarMapeo()">Cancelar</button>
       <button class="act" onclick="guardarMapeo()">✓ Guardar equivalencia</button>
     </div>
-    <datalist id="dl-skus"></datalist>
   </div>`;
 
   let ov = document.getElementById('map-overlay');
@@ -5281,6 +5287,42 @@ function elegirSku(sku){
   else partesMapeo.push({sku, cantidad:1, proporcion:0});
   pintarMapeo();
 }
+// (30-oct, JP) "SKU nuestro": a medida que escribís aparecen los artículos del catálogo que empiezan así (o que lo tienen
+// en la descripción); mayúsculas y minúsculas dan lo mismo. Si no hay ninguno, lo dice: así se sabe que ese SKU no existe.
+let CAT_SKUS = null, _catSkusCargando = null, _skuSugT = null;
+async function _catSkusCargar(){
+  if (CAT_SKUS) return CAT_SKUS;
+  if (_catSkusCargando) return _catSkusCargando;
+  _catSkusCargando = (async () => {
+    const out = new Map();
+    const r = await sb.from('productos_catalogo').select('sku,descripcion').limit(10000);
+    (r.data || []).forEach(x => { const k = String(x.sku || '').trim().toUpperCase(); if (k) out.set(k, String(x.descripcion || '').trim()); });
+    const r2 = await sb.from('stock_articulos').select('sku,descripcion,discontinuado').limit(20000);
+    (r2.data || []).forEach(x => { const k = String(x.sku || '').trim().toUpperCase(); if (k && !out.has(k) && !x.discontinuado) out.set(k, String(x.descripcion || '').trim()); });
+    CAT_SKUS = [...out.entries()].map(([sku, descripcion]) => ({sku, descripcion, d: descripcion.toUpperCase()})).sort((a, b) => a.sku < b.sku ? -1 : 1);
+    return CAT_SKUS;
+  })();
+  return _catSkusCargando;
+}
+function _skuSugCerrar(){ document.querySelectorAll('.sku-sug').forEach(e => { e.style.display = 'none'; }); }
+function _skuSugerir(i, inp){
+  clearTimeout(_skuSugT);
+  _skuSugT = setTimeout(async () => {
+    const q = String(inp.value || '').trim().toUpperCase(), box = document.getElementById('map-sug-' + i);
+    if (!box) return;
+    if (!q){ box.style.display = 'none'; return; }
+    const cat = await _catSkusCargar();
+    const exacto = cat.find(x => x.sku === q);
+    const porSku = cat.filter(x => x.sku.startsWith(q) && x.sku !== q).slice(0, 10);
+    const porDesc = q.length >= 3 ? cat.filter(x => !x.sku.startsWith(q) && x.d.includes(q)).slice(0, Math.max(0, 10 - porSku.length)) : [];
+    const lista = (exacto ? [exacto] : []).concat(porSku, porDesc);
+    box.innerHTML = lista.length
+      ? lista.map(x => `<div class="sku-sug-it${x.sku === q ? ' on' : ''}" onmousedown="event.preventDefault(); partesMapeo[${i}].sku='${esc(x.sku)}'; const inp=this.closest('div[style]').querySelector('input'); if(inp) inp.value='${esc(x.sku)}'; _skuSugCerrar();"><b>${esc(x.sku)}</b> <span class="mini">${esc(x.descripcion)}</span></div>`).join('')
+      : `<div class="sku-sug-it mini" style="color:#991b1b;cursor:default">Ningún SKU del catálogo empieza con "${esc(q)}"${q.length >= 3 ? ' ni lo tiene en la descripción' : ''}: ese artículo no existe en el Dragonfish.</div>`;
+    box.style.display = 'block';
+  }, 250);
+}
+document.addEventListener('mousedown', e => { if (!e.target.closest('.sku-sug') && !e.target.closest('input')) _skuSugCerrar(); });
 
 // (29-sep) "PX2", "PACK X 3", "PACK X3" en la descripción del proveedor → pack sugerido (solo como aviso, no se aplica solo).
 // (24-oct, JP) "21109/074 POLYWOOD…" o "63851 - BALANZA…" cargados como DESCRIPCIÓN sin código: la factura trae el código
@@ -6484,6 +6526,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=106"></script>
+<script src="manual.js?v=108"></script>
 </body>
 </html>
