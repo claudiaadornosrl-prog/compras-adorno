@@ -2551,6 +2551,17 @@ function _gRepartoInit(d, gs){
     d._gBase = imp;
     d._reparto = [{periodo: gs.periodo || d.gestion_periodo || _gMesMas(_hoyAR().slice(0,7) + '-01', 0),
                    unidad: gs.unidad || '', categoria: gs.categoria || 'varios', pct: 100, importe: imp}];
+    // (30-oct, JP) póliza: un renglón por CUOTA, en el mes que vence cada una, proporcional al total de la planilla
+    const cuotas = _docClase(d) === 'poliza' ? ((_docNE(d) || {}).cuotas || []) : [];
+    if (cuotas.length > 1 && imp > 0){
+      const ref = d._reparto[0], tot = cuotas.reduce((a, q) => a + Math.abs(Number(q.importe) || 0), 0);
+      if (tot > 0){
+        let acum = 0;
+        d._reparto = cuotas.map((q, i) => { const v = i === cuotas.length - 1 ? _r2g(imp - acum) : _r2g(imp * Math.abs(Number(q.importe) || 0) / tot); acum = _r2g(acum + v);
+          return {periodo: String(q.vence || ref.periodo).slice(0, 7) + '-01', unidad: ref.unidad, categoria: ref.categoria, pct: null, importe: v}; });
+        d._repartoCuotas = cuotas.length;
+      }
+    }
     // (24-oct, JP) el motor encontró el Excel del proveedor (Cabify/Calog/OCA): se propone el reparto por local
     const rx = (d.extraido_json || {}).reparto_excel;
     if (rx && rx.por_unidad && imp > 0){
@@ -2582,6 +2593,7 @@ function _gRepartoHTML(){
   return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:2px 0 6px">
       <b style="font-size:13px">Planilla de gastos</b>${ayuda('Sugerido por las reglas, corregilo si no corresponde. Si el gasto va a más de un local o a más de un mes, agregá un renglón por cada parte con el + y poné el importe de cada una.' + (gs.motivo ? ' Motivo: ' + gs.motivo : ''))}
       <span class="mini">· Total</span><input type="text" inputmode="decimal" id="g-base" class="fx-in" style="width:130px" value="${nmShow(base)}" oninput="_gBaseSet(this.value)">
+      ${d._repartoCuotas ? `<span class="chip" style="background:#dcfce7;color:#166534;cursor:help" title="Póliza: el total a la planilla se repartió en ${d._repartoCuotas} renglones, uno por cuota, en el mes de vencimiento de cada una y en proporción a su importe. Podés retocarlos.">${ico('reloj','s')} por cuota · ${d._repartoCuotas} meses</span>` : ''}
       ${d._repartoExcel ? `<a class="chip" href="${_pdfUrl(d._repartoExcel.archivo || '')}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="background:#dcfce7;color:#166534;text-decoration:none;cursor:pointer" title="${esc('El motor leyó ' + (d._repartoExcel.archivo || '').split('/').pop() + ': ' + Object.entries(d._repartoExcel.por_unidad).map(([k, v]) => k + ' ' + plata(v)).join(' · ') + (d._repartoExcel.sin_asignar && d._repartoExcel.sin_asignar.length ? ' · ' + d._repartoExcel.sin_asignar.length + ' fila(s) sin local (no cuentan)' : '') + '. El total se repartió en esa proporción; podés retocarlo. Click: abrir el Excel en OneDrive.')}">${ico('excel','s')} reparto propuesto desde el Excel ↗</a>` : ''}
       <button class="act gh mini-ico" type="button" title="Repartir entre los locales según un Excel del proveedor (Cabify: reporte de viajes con el mail del pasajero; OCA: anexo con el centro de costo). El total se reparte en proporción a los importes del Excel, IVA incluido en la misma proporción." onclick="document.getElementById('g-excel').click()">${ico('excel','s')}</button>
       <input type="file" id="g-excel" accept=".xls,.xlsx,.csv" style="display:none" onchange="_gImportarExcel(this.files[0]); this.value=''">
@@ -3239,7 +3251,14 @@ function _facturaPieFilas(d, reng){
   const grav = n(d.neto_gravado), nograv = n(d.neto_no_gravado), ex = n(d.exento);
   const neto = grav + nograv + ex;
   const filas = [];
-  if (reng && reng.length){
+  // (30-oct, JP) póliza: los renglones son las CUOTAS, con impuestos adentro. Se comparan contra el total, no contra el
+  // neto (si no aparecía un "descuento sin explicar" del tamaño del IVA y las percepciones).
+  if (reng && reng.length && _docClase(d) === 'poliza'){
+    const sub = reng.reduce((a,r) => a + _rengNeto(r), 0), dif = Math.round((sub - n(d.total)) * 100) / 100;
+    filas.push([`Suma de las ${reng.length} cuotas (con impuestos)`, sub, {tip: 'Las cuotas del plan de pago incluyen IVA, percepciones e impuestos internos: tienen que sumar el total de la póliza, no el neto.'}]);
+    if (Math.abs(dif) > 1.5) filas.push([dif > 0 ? 'Cuotas de más que el total' : 'Cuotas de menos que el total', -dif, {raro: true, tip: 'Las cuotas no suman el total de la póliza: revisá el plan de pago en el PDF.'}]);
+    filas.push(['Prima + recargo financiero = base IVA', grav, {b: true}]);
+  } else if (reng && reng.length){
     const sub = reng.reduce((a,r) => a + _rengNeto(r), 0);
     const ex = _descExtras(d, sub);
     const calc = sub - ex.reduce((a,x) => a + x.monto, 0);
@@ -3250,7 +3269,7 @@ function _facturaPieFilas(d, reng){
       if (Math.abs(resid) > 0.02) filas.push([resid > 0 ? 'Descuento sin explicar' : 'Ajuste sin explicar', -resid, {raro: true, tip: 'La suma de renglones menos los descuentos no llega al neto de la factura: revisá precios, descuentos por renglón o agregá un descuento general.'}]);
     }
   }
-  filas.push(['Neto gravado', grav, {b: true}]);
+  if (_docClase(d) !== 'poliza') filas.push(['Neto gravado', grav, {b: true}]);
   if (nograv) filas.push(['No gravado', nograv]);
   if (ex) filas.push(['Exento', ex]);
   const pct = (imp, base) => base > 0 ? imp / base * 100 : null;
@@ -6526,6 +6545,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=108"></script>
+<script src="manual.js?v=109"></script>
 </body>
 </html>

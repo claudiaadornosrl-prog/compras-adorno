@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v192-sku-autocompletar';
+const CACHE_VERSION = 'compras-v193-pie-poliza';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './firma-jp.jpg', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
