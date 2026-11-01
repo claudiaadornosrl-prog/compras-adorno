@@ -2170,6 +2170,12 @@ async function fichaProveedor(i){
       <label>Alias<input id="pf-alias" value="${_mEscP(p.alias_cbu||'')}"></label>
       <label>Moneda habitual<select id="pf-moneda">${['ARS','USD','EUR'].map(m => `<option ${(p.moneda_habitual||'ARS')===m?'selected':''}>${m}</option>`).join('')}</select></label>
       <label>Domicilio<input id="pf-dom" value="${_mEscP(p.domicilio||'')}"></label>
+      <label>Equivalencias
+        <select id="pf-eqdesc" onchange="(async(sel)=>{const r=await sb.rpc('compras_proveedor_equiv_desc',{p_codigo:'${_mEscP(p.codigo)}',p_valor:sel.value==='1'});if(r.error)alert(r.error.message);else _resP('datos','Equivalencias: '+(sel.value==='1'?'por código + descripción':'por código'),true);})(this)" title="Cómo se traduce su código a nuestro SKU. Por CÓDIGO: cada código del proveedor es un artículo nuestro. Por CÓDIGO + DESCRIPCIÓN (Los Naranjos): factura un solo código y el color va en la descripción, así que la equivalencia se carga por código + descripción; si una descripción no tiene la suya, se usa la del código entero. Se guarda al cambiarlo.">
+          <option value="0">Por código del proveedor</option>
+          <option value="1">Por código + descripción (el color/variante va en la descripción)</option>
+        </select>${(setTimeout(async () => { try { const r = await sb.from('compras_proveedor_datos').select('equiv_por_descripcion').eq('codigo', p.codigo).maybeSingle(); const el = document.getElementById('pf-eqdesc'); if (el && r.data) el.value = r.data.equiv_por_descripcion ? '1' : '0'; } catch (e) {} }, 0), '')}
+      </label>
       <label>Le compramos mercadería
         <select id="pf-lista" onchange="(async(sel)=>{const r=await sb.rpc('compras_proveedor_factura_lista',{p_codigo:'${_mEscP(p.codigo)}',p_lista:sel.value});if(r.error)alert(r.error.message);else _resP('datos','Lista de la factura: '+sel.value,true);})(this)" title="Qué precio trae la factura: COMPRA (lista del proveedor, el descuento se aplica aparte) o COSTO (ya viene con el descuento, como Los Naranjos). Se guarda al cambiarlo.">
           <option value="compra">Factura a lista COMPRA (con descuento aparte)</option>
@@ -4961,22 +4967,34 @@ async function guardarRegimenNuevo(){
 let PENDIENTES = [], enMapeo = null, partesMapeo = [], candidatos = [], EQUIV_HECHAS = [];
 // (v138, JP) descartados ("no es un artículo"), filtro por proveedor y sugerencias en la fila
 let EQ_IGNORADOS = [], EQ_PROV = '', EQ_VER_IGNORADOS = false, _eqSugCargando = false;
-const _eqClaveIgn = r => (r.cuit || '') + '|' + (r.codigo_proveedor || '') + '|' + (r.codigo_proveedor ? '' : String(r.descripcion || '').toUpperCase().trim());
+// (1-nov, JP) proveedores que traducen por CÓDIGO + DESCRIPCIÓN (Los Naranjos: un código, el color en la descripción).
+// _descClave copia compras_desc_clave del SQL: la equivalencia específica se guarda con esa clave.
+let EQ_POR_DESC = new Set();
+function _descClave(t){
+  const u = String(t || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const out = new Set();
+  u.split(/[^A-Z0-9]+/).filter(Boolean).forEach(w => { if (/^[A-Z]{4,}$/.test(w)) w = w.replace(/S$/, '').replace(/[AO]$/, ''); out.add(w); });
+  return [...out].sort().join(' ');
+}
+const _eqPorDesc = (cuit, cod) => !!cod && EQ_POR_DESC.has(String(cuit || ''));
+const _eqClaveIgn = r => (r.cuit || '') + '|' + (r.codigo_proveedor || '') + '|' + (r.codigo_proveedor ? (_eqPorDesc(r.cuit, r.codigo_proveedor) ? _descClave(r.descripcion) : '') : String(r.descripcion || '').toUpperCase().trim());
 
 async function vistaEquivalencias(){
   const c = document.getElementById('cont');
   c.innerHTML = '<div class="vacio">Buscando artículos sin traducir…</div>';
 
-  const [pend, hechas, ign, usoR] = await Promise.all([
+  const [pend, hechas, ign, usoR, pdR] = await Promise.all([
     sb.from('compras_renglones')
       .select('codigo_proveedor,descripcion,cantidad,importe,documento_id,compras_documentos!inner(cuit_emisor,proveedor_nombre,tipo_gasto)')
       .is('sku', null).eq('compras_documentos.tipo_gasto', 'mercaderia').limit(500),   // (v147, JP) solo facturas tipo M
     sb.from('compras_equivalencias')
-      .select('id,cuit_proveedor,codigo_proveedor,descripcion_proveedor,sku,cantidad_por_unidad,proporcion_costo,veces_usada,creada_por,creada_at')
+      .select('id,cuit_proveedor,codigo_proveedor,descripcion_proveedor,clave_desc,sku,cantidad_por_unidad,proporcion_costo,veces_usada,creada_por,creada_at')
       .order('creada_at', {ascending:false}).limit(600),
     sb.from('compras_equiv_ignorados').select('id,cuit_proveedor,codigo_proveedor,descripcion_clave,descripcion,motivo,creado_por,creado_at').order('creado_at', {ascending:false}),
     sb.rpc('compras_equiv_uso'),   // (v138) uso real: veces_usada nunca se incrementó, se cuenta en vivo
+    sb.rpc('compras_equiv_provs_desc'),   // (1-nov) proveedores que traducen por código + descripción
   ]);
+  EQ_POR_DESC = new Set((pdR.error ? [] : (pdR.data || [])).map(x => String(x.cuit)));
   const uso = {}; (usoR.error ? [] : (usoR.data || [])).forEach(u => { uso[u.cuit_proveedor + '|' + (u.codigo_proveedor || '') + '|' + (u.descripcion_clave || '') + '|' + u.sku] = Number(u.renglones) || 0; });
   if (pend.error){ c.innerHTML = `<div class="alerta">${esc(pend.error.message)}</div>`; return; }
   EQ_IGNORADOS = ign.error ? [] : (ign.data || []);
@@ -4986,7 +5004,7 @@ async function vistaEquivalencias(){
   const porCodigo = {};
   (pend.data || []).forEach(r => {
     const d = r.compras_documentos || {};
-    const k = (d.cuit_emisor || '') + '|' + (r.codigo_proveedor || r.descripcion || '');
+    const k = (d.cuit_emisor || '') + '|' + (r.codigo_proveedor || r.descripcion || '') + (_eqPorDesc(d.cuit_emisor, r.codigo_proveedor) ? '|' + _descClave(r.descripcion) : '');
     if (!porCodigo[k]) porCodigo[k] = {...r, cuit: d.cuit_emisor, prov: d.proveedor_nombre, veces: 0};
     porCodigo[k].veces++;
   });
@@ -4995,8 +5013,8 @@ async function vistaEquivalencias(){
   // Una equivalencia = un código del proveedor (puede tener varias partes si se fracciona)
   const grupos = {};
   (hechas.data || []).forEach(h => {
-    const k = h.cuit_proveedor + '|' + (h.codigo_proveedor || '') + '|' + (h.codigo_proveedor ? '' : (h.descripcion_proveedor || '').toUpperCase().trim());
-    (grupos[k] = grupos[k] || {cuit: h.cuit_proveedor, codigo_proveedor: h.codigo_proveedor || '',
+    const k = h.cuit_proveedor + '|' + (h.codigo_proveedor || '') + '|' + (h.clave_desc || '');
+    (grupos[k] = grupos[k] || {cuit: h.cuit_proveedor, codigo_proveedor: h.codigo_proveedor || '', clave_desc: h.clave_desc || '',
       descripcion: h.descripcion_proveedor || '', creada_at: h.creada_at, creada_por: h.creada_por, partes: []}).partes.push(h);
   });
   // (7-oct, JP) Un mismo artículo nuestro puede venir con VARIOS códigos del proveedor (blíster / granel…):
@@ -5008,7 +5026,7 @@ async function vistaEquivalencias(){
     const fam = familias[firma] = familias[firma] || {...g, codigos: [], usada: 0};
     fam.codigos.push({codigo: g.codigo_proveedor, descripcion: g.descripcion, ids: g.partes.map(p => p.id), creada_at: g.creada_at,
                       pack: g.partes.length === 1 ? (Number(g.partes[0].cantidad_por_unidad) || 1) : null});
-    fam.usada += g.partes.reduce((a, p) => a + (uso[g.cuit + '|' + (g.codigo_proveedor || '') + '|' + (g.codigo_proveedor ? '' : (g.descripcion || '').toUpperCase().trim()) + '|' + p.sku] || 0), 0);
+    fam.usada += g.partes.reduce((a, p) => a + (uso[g.cuit + '|' + (g.codigo_proveedor || '') + '|' + (g.clave_desc || '') + '|' + p.sku] || 0), 0);
     if (g.creada_at > fam.creada_at) fam.creada_at = g.creada_at;
   });
   EQUIV_HECHAS = Object.values(familias).map(fm => { fm.codigos.sort((a, b) => String(a.creada_at).localeCompare(String(b.creada_at))); return fm; });
@@ -5060,7 +5078,7 @@ function _pintarEquivalencias(){
               <th class="num">Veces</th>${EQ_VER_IGNORADOS ? '<th>Marcado</th>' : '<th>Sugerencia</th>'}<th></th></tr></thead>
             <tbody>${PEND.slice(0,200).map(p => { const i = PENDIENTES.indexOf(p); return `<tr ${EQ_VER_IGNORADOS ? '' : `onclick="abrirMapeo(${i})" title="Traducir a nuestro SKU"`}>
               <td class="prov"><span class="prov-nom">${esc(p.prov || p.cuit || '—')}</span></td>
-              <td><code>${esc(p.codigo_proveedor || '—')}</code></td>
+              <td><code>${esc(p.codigo_proveedor || '—')}</code>${_eqPorDesc(p.cuit, p.codigo_proveedor) ? ' <span class="mini" style="color:var(--primary)" title="Este proveedor traduce por código + descripción (se elige en la ficha del proveedor): la equivalencia vale para esta descripción; las demás del mismo código usan la del código entero, si la hay">+ descripción</span>' : ''}</td>
               <td>${esc(p.descripcion || '')}</td>
               <td class="num">${p.veces}</td>
               ${EQ_VER_IGNORADOS
@@ -5131,7 +5149,7 @@ async function ignorarPendiente(i){
   const motivo = prompt(`"${p.descripcion || p.codigo_proveedor}" de ${p.prov || p.cuit}\n\nSe saca de la lista porque no es un artículo. ¿Qué es? (opcional: servicio, cargo, comisión…)`, '');
   if (motivo === null) return;
   const {error} = await sb.from('compras_equiv_ignorados').upsert({cuit_proveedor: p.cuit, codigo_proveedor: p.codigo_proveedor || '',
-    descripcion_clave: p.codigo_proveedor ? '' : String(p.descripcion || '').toUpperCase().trim(), descripcion: p.descripcion || null, motivo: motivo.trim() || null},
+    descripcion_clave: _eqClaveIgn(p).split('|')[2] || '', descripcion: p.descripcion || null, motivo: motivo.trim() || null},
     {onConflict: 'cuit_proveedor,codigo_proveedor,descripcion_clave'});
   if (error){ alert('No se pudo marcar: ' + error.message); return; }
   vistaEquivalencias();
@@ -5311,6 +5329,10 @@ function pintarMapeo(cargando){
 }
 
 // Códigos del proveedor que se traducen a estas mismas partes: el que se está traduciendo + los alternativos.
+function _mapeoClaveK(k){
+  const cod = (k.codigo || '').trim().toUpperCase();
+  return (cod || ('~' + (k.descripcion || '').trim().toUpperCase())) + (cod && _eqPorDesc(enMapeo && enMapeo.cuit, cod) ? '|' + _descClave(k.descripcion) : '');
+}
 function _mapeoCodigos(){
   if (!enMapeo._codigos) enMapeo._codigos = [{codigo: enMapeo.codigo_proveedor || '', descripcion: enMapeo.descripcion || '', ids: []}];
   return enMapeo._codigos;
@@ -5398,7 +5420,7 @@ async function guardarMapeo(){
   if (!codigos.length) codigos.push({codigo: enMapeo.codigo_proveedor || '', descripcion: enMapeo.descripcion || '', ids: []});
   const vistos = new Set();
   for (const k of codigos){
-    const clave = (k.codigo || '').trim().toUpperCase() || ('~' + (k.descripcion || '').trim().toUpperCase());
+    const clave = _mapeoClaveK(k);
     if (vistos.has(clave)){ alert(`El código ${k.codigo || k.descripcion} está repetido.`); return; }
     vistos.add(clave);
   }
@@ -5416,9 +5438,9 @@ async function guardarMapeo(){
   }
   // al editar: los códigos que se sacaron de la lista se borran
   if (enMapeo._editar){
-    const quedan = new Set(codigos.map(k => (k.codigo || '').trim().toUpperCase() || ('~' + (k.descripcion || '').trim().toUpperCase())));
+    const quedan = new Set(codigos.map(k => _mapeoClaveK(k)));
     const sobrantes = (EQUIV_HECHAS.flatMap(g => g.codigos || []))
-      .filter(k => k.ids && k.ids.length && !quedan.has((k.codigo || '').trim().toUpperCase() || ('~' + (k.descripcion || '').trim().toUpperCase())))
+      .filter(k => k.ids && k.ids.length && !quedan.has(_mapeoClaveK(k)))
       .filter(k => (enMapeo._codigosOrig || []).some(o => o.codigo === k.codigo && o.descripcion === k.descripcion));
     for (const k of sobrantes){ await sb.from('compras_equivalencias').delete().in('id', k.ids); }
   }
@@ -6566,6 +6588,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=111"></script>
+<script src="manual.js?v=112"></script>
 </body>
 </html>
