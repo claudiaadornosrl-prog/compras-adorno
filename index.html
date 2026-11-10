@@ -681,6 +681,30 @@ main{padding:14px;max-width:1250px;margin:0 auto;}
 .op-tabs button span{font-size:12.5px;font-weight:600;opacity:.85;}
 .op-q{flex:1;min-width:220px;padding:9px 16px;border:1.5px solid #e3dbd0;border-radius:999px;background:#faf7f3;font:inherit;font-size:13.5px;}
 .op-q:focus{outline:2px solid #fdba74;background:#fff;}
+/* (v209, JP 10-nov) Listados "opción C": sub-pestañas en pastilla, cabecera naranja suave con el período y los totales, un listado por pestaña */
+.abar.le-subs{display:inline-flex;gap:6px;padding:6px;background:#fdf1e4;border-radius:999px;margin-bottom:12px;flex-wrap:wrap}
+.le-subs .fchip{border:0;background:none;font-weight:700;color:#9a3412;padding:9px 18px;font-size:13.5px}
+.le-subs .fchip:hover{background:#fbe3cb}
+.le-subs .fchip.on{background:var(--primary);color:#fff}
+.le-hd{background:linear-gradient(135deg,#fff7ed,#fde7d2);border-radius:20px;padding:16px;margin-bottom:14px}
+.le-hd select,.le-hd input[type=date]{border-radius:999px !important;border:1.5px solid #e3dbd0;background:#fff;font-family:inherit}
+.le-hd .lp-rangos{border-top-color:#f3d5b5}
+.le-hd .card{background:rgba(255,255,255,.75);border-radius:16px;margin:12px 0 0;border-color:#f3d5b5}
+.le-hd .alerta{margin:12px 0 0;border-radius:16px}
+.le-hd .kpis{margin:12px 0 0}
+.le-hd .kpi{border:0;border-radius:16px;background:rgba(255,255,255,.88)}
+.le-hd .kpi .val{color:#9a3412}
+.le-tabs{display:flex;gap:4px;align-items:flex-end;flex-wrap:wrap;border-bottom:2px solid #fde7d2;padding:0 6px}
+.le-tabs button{border:0;background:none;font:inherit;font-weight:700;font-size:13.5px;color:#857b70;padding:10px 16px;border-radius:14px 14px 0 0;cursor:pointer;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.le-tabs button:hover{background:#fff7ed;color:#9a3412}
+.le-tabs button.on{background:var(--primary);color:#fff}
+.le-tabs button i{font-style:normal;font-size:11.5px;opacity:.85}
+.le-tabs button.av i{background:#fcd34d;color:#5c3b00;border-radius:999px;padding:0 7px;opacity:1}
+.le-tabs .le-q{flex:1;min-width:200px;max-width:360px;margin:0 0 6px auto;padding:7px 14px}
+.card.le-pan{border-radius:0 0 16px 16px;border-top:0}
+.le-pan thead th{background:#fff7ed;color:#9a3412}
+.le-pan tbody tr:nth-child(even){background:#fcfaf7}
+.le-pan tfoot tr{background:#fff7ed !important}
 /* (v137) ficha de equivalencia: tres bloques, títulos con ℹ, botón + a la derecha del renglón */
 .eq-sec{border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fff;}
 .eq-sec h4{margin:0 0 8px;font-size:13.5px;display:flex;align-items:center;gap:7px;}
@@ -4097,7 +4121,7 @@ document.addEventListener('focusout', e => {
 function vistaListados(){
   const subs = [['gestion','barras','Gestión','Cuánto se compró: por tipo de gasto, mes a mes y por proveedor'],['estudio','factura','Para el estudio','Libro IVA compras, percepciones, retenciones y Libro IVA Digital'],['cc','pago','Cuenta corriente','Proveedores: qué les debemos (facturas contabilizadas menos pagos). Clientes: qué nos deben, según la cuenta corriente del Dragonfish']];
   setTimeout(() => { if (listSub === 'estudio') cargarListadosEstudio(); if (listSub === 'cc') cargarCuentaCorriente(); }, 0);
-  return `<div class="abar">${subs.map(([k,i,t,tip]) =>
+  return `<div class="abar le-subs">${subs.map(([k,i,t,tip]) =>
         `<button class="fchip ${listSub===k?'on':''}" title="${tip}" onclick="listSub='${k}'; render()">${ico(i,'s')} ${t}</button>`).join('')}</div>
     ${listSub === 'gestion' ? _listGestion()
       : listSub === 'cc' ? `<div id="list-cc"><div class="vacio">Cargando…</div></div>`
@@ -4361,7 +4385,7 @@ function _pintarEstudio(){
   const fila = listPer[_listFila()];
 
   c.innerHTML = `
-    <div class="card">
+    <div class="le-hd"><div class="le-per">
       <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end">
         <button class="act gh" style="padding:7px 11px" onclick="_listMes(-1)" title="Mes anterior">‹</button>
         <div><label class="mini">Mes</label><br>
@@ -4415,7 +4439,14 @@ function _pintarEstudio(){
       Revisalos antes de mandarle el listado al estudio:<br>
       ${malos.slice(0,6).map(x=>`· ${esc(x.comprobante)} — ${esc(x.proveedor_nombre||'')} (${plata(x.descuadre)})`).join('<br>')}</div>` : ''}
 
-    ${avisos.length ? `<div class="card" style="border-left:4px solid #f59e0b">
+    </div>
+    <div class="le-tabs">${[['iva','factura','IVA Compras',R.length], ['perc','inbox','Percepciones',(LIST_PDET||[]).length], ['ret','porcentaje','Retenciones',(LIST_RET||[]).length],
+        ...(avisos.length ? [['mirar','alerta','Para mirar',avisos.length]] : []), ...(LIST_FUERA && LIST_FUERA.length ? [['fuera','hoja','Fuera del Libro IVA',LIST_FUERA.length]] : [])]
+        .map(([k,i,t,n]) => `<button type="button" data-k="${k}" class="${k==='mirar' ? 'av' : ''}" onclick="_leTab('${k}')">${ico(i,'s')} ${t} <i>${n}</i></button>`).join('')}
+      <input type="search" id="le-q" class="op-q le-q" placeholder="Buscar en este listado: proveedor, CUIT, comprobante o importe…" oninput="_leBuscar(this.value)" title="Filtra los renglones del listado que estás viendo. Los totales de abajo siguen siendo los del período completo.">
+    </div>
+
+    ${avisos.length ? `<div class="card le-pan" data-k="mirar">
       <h3 style="font-size:14px;margin-bottom:4px">⚠ ${avisos.length} comprobante${avisos.length===1?'':'s'} para mirar</h3>
       <p class="mini" style="margin-bottom:8px">El libro cierra igual, pero estos tienen algo raro: un IVA de ajuste
         (la reconstrucción metió un tapón para que cuadre) o una imputación contable que no coincide con el neto.</p>
@@ -4426,7 +4457,7 @@ function _pintarEstudio(){
           <td><span class="chip" style="background:#fef3c7;color:#92400e">${esc(x.alerta)}</span></td></tr>`).join('')}
       </tbody></table></div></div>` : ''}
 
-    ${LIST_FUERA && LIST_FUERA.length ? `<div class="card" style="border-left:4px solid var(--mut)">
+    ${LIST_FUERA && LIST_FUERA.length ? `<div class="card le-pan" data-k="fuera">
       <h3 style="font-size:14px;margin-bottom:4px">↪ ${LIST_FUERA.length} comprobante${LIST_FUERA.length===1?'':'s'} fuera del Libro IVA</h3>
       <p class="mini" style="margin-bottom:8px">No están marcados "computa en el Libro IVA", así que no entran en los
         listados de arriba. Están acá para que se vea que existen y por qué no figuran — típicamente proveedores del
@@ -4439,7 +4470,7 @@ function _pintarEstudio(){
       </tr>`).join('')}</tbody></table>
     </div>` : ''}
 
-    <div class="card">
+    <div class="card le-pan" data-k="iva">
       <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('factura','s')} IVA Compras · ${esc(mesTxt)}
         ${ayuda('Un renglón por comprobante, con el neto abierto por alícuota. Es lo que va al Libro IVA Compras. Descargas: Excel completo (una columna por alícuota, descuadre y alertas), Formato estudio (las mismas columnas del Subdiario que se manda hoy) y PDF.')}
         ${R.length ? `<span class="list-dl">
@@ -4475,7 +4506,7 @@ function _pintarEstudio(){
       ${R.length ? '' : '<div class="vacio">No hay comprobantes en este período.</div>'}
     </div>
 
-    <div class="card">
+    <div class="card le-pan" data-k="perc">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
         <div><h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('inbox','s')} Percepciones sufridas
           ${ayuda('Lo que los proveedores le percibieron a la empresa. Son crédito contra el impuesto correspondiente, igual que el IVA. Abajo, el detalle por comprobante y jurisdicción: el mismo corte del listado que se manda hoy.')}
@@ -4500,7 +4531,7 @@ function _pintarEstudio(){
         </table></div>` : ''}
     </div>
 
-    <div class="card">
+    <div class="card le-pan" data-k="ret">
       <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('porcentaje','s')} Retenciones practicadas
         ${ayuda('Lo que la empresa le retuvo a sus proveedores al pagarles, agrupado por quincena (que es como se declara). Se llena solo con las órdenes de pago que emita el módulo.')}
         ${LIST_RET && LIST_RET.length ? `<span class="list-dl">
@@ -4522,6 +4553,27 @@ function _pintarEstudio(){
           el importe puesto a mano: el motivo es lo que explica el número en el certificado.</p>` : ''}`
       : `<div class="vacio">Todavía no hay retenciones en este período: se practican al emitir órdenes de pago.</div>`}
     </div>`;
+  _leTab();
+}
+// (v209, JP 10-nov) "Para el estudio" en pestañas: un listado por vez + buscador de renglones
+let LE_TAB = 'iva';
+function _leTab(k){
+  const c = document.getElementById('list-estudio'); if (!c) return;
+  k = k || LE_TAB; if (!c.querySelector('.le-pan[data-k="' + k + '"]')) k = 'iva';
+  LE_TAB = k;
+  c.querySelectorAll('.le-pan').forEach(p => { p.style.display = p.dataset.k === k ? '' : 'none'; });
+  c.querySelectorAll('.le-tabs button').forEach(bt => bt.classList.toggle('on', bt.dataset.k === k));
+  const q = document.getElementById('le-q'); if (q && q.value){ q.value = ''; }
+  _leBuscar('');
+}
+function _leBuscar(v){
+  const pan = document.querySelector('#list-estudio .le-pan[data-k="' + LE_TAB + '"]'); if (!pan) return;
+  const q = _opNorm(v).trim().split(/\s+/).filter(Boolean);
+  pan.querySelectorAll('tbody tr').forEach(tr => {
+    if (!q.length){ tr.style.display = ''; return; }
+    const t = _opNorm(tr.textContent), t2 = t.replace(/[.\s]/g, '');
+    tr.style.display = q.every(x => t.includes(x) || t2.includes(x.replace(/\./g, ''))) ? '' : 'none';
+  });
 }
 
 // ── Envío al estudio (24-oct, JP) ─────────────────────────────────────────────────────────────
@@ -6804,6 +6856,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=122"></script>
+<script src="manual.js?v=123"></script>
 </body>
 </html>
