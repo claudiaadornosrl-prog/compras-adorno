@@ -87,8 +87,23 @@ function _pt(doc, t, x, y, o = {}){
   if (o.maxWidth) opt.maxWidth = o.maxWidth;
   if (o.charSpace) opt.charSpace = o.charSpace;
   if (o.bold){ doc.setDrawColor(...col); doc.setLineWidth(o.size >= 12 ? 0.35 : 0.22); opt.renderingMode = 'fillAndStroke'; }
+  // (v7, JP 10-nov) con espaciado entre letras, jsPDF alinea sin contar ese espacio y el texto se pasa del margen:
+  // se mide a mano y se dibuja desde la izquierda.
+  if (o.charSpace && opt.align !== 'left' && !o.maxWidth){
+    const s = String(t ?? ''), w = doc.getTextWidth(s) + o.charSpace * Math.max(0, s.length - 1);
+    x = opt.align === 'right' ? x - w : x - w / 2; opt.align = 'left';
+  }
   doc.text(String(t ?? ''), x, y, opt);
   if (o.bold){ doc.setDrawColor(...(_PC.bd)); doc.setLineWidth(0.2); }
+}
+// (v7, JP 10-nov) importes en pesos: siempre con el signo adelante
+const _pdfM = v => '$ ' + _pdfN(v);
+// Varias líneas dentro de un ancho: dibuja y devuelve el y de la última línea
+function _ptLineas(doc, t, x, y, ancho, o = {}){
+  doc.setFontSize(o.size || 8.5);
+  const ls = doc.splitTextToSize(String(t ?? ''), ancho), paso = o.paso || (o.size || 8.5) * 0.43;
+  ls.forEach((l, i) => _pt(doc, l, x, y + i * paso, o));
+  return y + (ls.length - 1) * paso;
 }
 // Cabecera común: logo + datos de la empresa a la izquierda, bloque naranja a la derecha.
 function _pdfCabTarjetas(doc, emp, bloque){
@@ -98,9 +113,9 @@ function _pdfCabTarjetas(doc, emp, bloque){
   _pt(doc, `${emp.domicilio} · ${emp.localidad || ''}`, 14, 28.3, {size: 6.5, col: _PC.mut, maxWidth: 108});
   _pt(doc, `IIBB ${emp.iibb} · Inicio de actividades ${emp.inicio_actividades}`, 14, 31.6, {size: 6.5, col: _PC.mut, maxWidth: 108});
   doc.setFillColor(..._PC.or); doc.roundedRect(128, 12, 68, 21, 2.5, 2.5, 'F');
-  _pt(doc, bloque.titulo.toUpperCase(), 192, 17.5, {size: 5.6, col: _PC.blanco, align: 'right', charSpace: 0.25});
-  _pt(doc, bloque.numero, 192, 24.5, {size: 12.5, col: _PC.blanco, align: 'right', bold: true});
-  _pt(doc, bloque.pie, 192, 30, {size: 7, col: _PC.blanco, align: 'right'});
+  _pt(doc, bloque.titulo.toUpperCase(), 190, 17.5, {size: 5.6, col: _PC.blanco, align: 'right', charSpace: 0.25});
+  _pt(doc, bloque.numero, 190, 24.5, {size: 12.5, col: _PC.blanco, align: 'right', bold: true});
+  _pt(doc, bloque.pie, 190, 30, {size: 7, col: _PC.blanco, align: 'right'});
   return 40;
 }
 // Tarjeta: devuelve el y donde arranca el contenido; se cierra con _pdfCardFin.
@@ -173,19 +188,21 @@ async function descargarOpPdf(opId){
   let y = _pdfCabTarjetas(doc, emp, {titulo: 'Orden de pago', numero: `${o.letra || 'X'} ${nro}`, pie: _pdfF(o.fecha)});
   // proveedor + datos fiscales
   let y0 = y, yc = _pdfCardIni(doc, 14, y, 88, 'Proveedor');
-  _pt(doc, pv.nombre || o.proveedor_nombre || '', 18, yc + 5.5, {size: 8.5, bold: true, maxWidth: 80});
-  _pt(doc, [pv.domicilio, 'C.A.B.A.'].filter(Boolean).join(' · '), 18, yc + 10.5, {size: 7.5, col: _PC.mut, maxWidth: 80});
-  _pdfCardFin(doc, 14, y0, 88, yc + 14);
+  // (v7, JP 10-nov) nombre y domicilio en las líneas que hagan falta; se sacó el "C.A.B.A." fijo que se agregaba a todos
+  let yPv = _ptLineas(doc, pv.nombre || o.proveedor_nombre || '', 18, yc + 5.5, 79, {size: 8.5, bold: true, paso: 3.8});
+  if (pv.domicilio) yPv = _ptLineas(doc, pv.domicilio, 18, yPv + 4.6, 79, {size: 7.5, col: _PC.mut, paso: 3.4});
+  const yPvFin = Math.max(yPv + 3.5, yc + 14);
+  _pdfCardFin(doc, 14, y0, 88, yPvFin);
   yc = _pdfCardIni(doc, 108, y, 88, 'Datos fiscales');
   _pt(doc, `CUIT ${_pdfCuit(pv.cuit || o.cuit_proveedor)}`, 112, yc + 5.5, {size: 8.5, bold: true});
   _pt(doc, `${pv.cond_iva === 'RI' ? 'IVA Responsable Inscripto' : (pv.cond_iva || (pv.es_exterior ? 'Exterior' : 'Responsable Inscripto'))}${pv.codigo ? ' · Código de proveedor ' + pv.codigo : ''}`, 112, yc + 10.5, {size: 7.5, col: _PC.mut, maxWidth: 80});
-  y = _pdfCardFin(doc, 108, y0, 88, yc + 14);
+  y = _pdfCardFin(doc, 108, y0, 88, yPvFin);
   // comprobantes
   const tipoNom = {FC: 'Factura', NC: 'Nota de crédito', ND: 'Nota de débito', INT: 'Comprobante interno'};
   y0 = y; yc = _pdfCardIni(doc, 14, y, 182, 'Comprobantes cancelados');
   const colsF = [{t:'Emisión', x:18}, {t:'Vencimiento', x:42}, {t:'Comprobante', x:68, w:70}, {t:'Neto', x:160, align:'right', mut:true}, {t:'Importe', x:192, align:'right'}];
-  y = _pdfTabla(doc, 14, 182, yc, colsF, f.map(x => [_pdfF(x.fecha), _pdfF(x.vencimiento), `${tipoNom[x.tipo] || x.tipo} ${x.letra || ''} ${String(x.punto_venta||0).padStart(4,'0')}-${String(x.numero||0).padStart(8,'0')}`, _pdfN(x.neto), _pdfN(x.total)]),
-    ['Subtotal', null, null, null, _pdfN(o.subtotal)], yy => { _pdfCardFin(doc, 14, y0, 182, yy); const n = nuevaPagina(); y0 = n; return _pdfCardIni(doc, 14, n, 182, 'Comprobantes cancelados (cont.)'); });
+  y = _pdfTabla(doc, 14, 182, yc, colsF, f.map(x => [_pdfF(x.fecha), _pdfF(x.vencimiento), `${tipoNom[x.tipo] || x.tipo} ${x.letra || ''} ${String(x.punto_venta||0).padStart(4,'0')}-${String(x.numero||0).padStart(8,'0')}`, _pdfM(x.neto), _pdfM(x.total)]),
+    ['Subtotal', null, null, null, _pdfM(o.subtotal)], yy => { _pdfCardFin(doc, 14, y0, 182, yy); const n = nuevaPagina(); y0 = n; return _pdfCardIni(doc, 14, n, 182, 'Comprobantes cancelados (cont.)'); });
   y = _pdfCardFin(doc, 14, y0, 182, y);
   // (v204) descuento en el pago
   if (Number(o.descuento_importe) > 0){
@@ -198,8 +215,8 @@ async function descargarOpPdf(opId){
   if (r.length){
     const colsR = [{t:'Régimen', x:18}, {t:'Certificado', x:114}, {t:'Base', x:158, align:'right', mut:true}, {t:'Alíc.', x:172, align:'right'}, {t:'Importe', x:192, align:'right'}];
     const corto = (t, n) => { t = String(t || ''); return t.length > n ? t.slice(0, n - 1).trim() + '…' : t; };
-    y = _pdfTabla(doc, 14, 182, yc, colsR, r.map(x => [corto(`${x.codigo} · ${x.nombre || ''}`, 48), x.certificado_nro || '—', _pdfN(x.base_calculo), x.alicuota != null ? Number(x.alicuota) + ' %' : '—', _pdfN(x.importe)]),
-      ['Total retenido', null, null, null, _pdfN(o.retenciones_total)]);
+    y = _pdfTabla(doc, 14, 182, yc, colsR, r.map(x => [corto(`${x.codigo} · ${x.nombre || ''}`, 48), x.certificado_nro || '—', _pdfM(x.base_calculo), x.alicuota != null ? Number(x.alicuota) + ' %' : '—', _pdfM(x.importe)]),
+      ['Total retenido', null, null, null, _pdfM(o.retenciones_total)]);
   } else { _pt(doc, 'Sin retenciones.', 18, yc + 5.5, {size: 8, col: _PC.mut}); y = yc + 8; }
   y = _pdfCardFin(doc, 14, y0, 182, y);
   // total a pagar
@@ -211,8 +228,8 @@ async function descargarOpPdf(opId){
     let d = p.cuenta ? 'Cuenta ' + p.cuenta : '';
     if (p.cheque_numero || p.cheque_banco || p.cheque_fecha) d += (d ? ' · ' : '') + [p.cheque_numero ? 'N° ' + p.cheque_numero : '', p.cheque_banco, p.cheque_emision ? 'emisión ' + _pdfF(p.cheque_emision) : '', p.cheque_fecha ? 'pago ' + _pdfF(p.cheque_fecha) : ''].filter(Boolean).join(' · ');
     if (p.notas) d += (d ? ' · ' : '') + p.notas;
-    return [p.medio, d || '—', _pdfN(p.importe)];
-  }), pg.length > 1 ? ['Total', null, _pdfN(pg.reduce((a, p) => a + Number(p.importe || 0), 0))] : null);
+    return [p.medio, d || '—', _pdfM(p.importe)];
+  }), pg.length > 1 ? ['Total', null, _pdfM(pg.reduce((a, p) => a + Number(p.importe || 0), 0))] : null);
   y = _pdfCardFin(doc, 14, y0, 182, y);
   if (o.observaciones){
     y0 = y; yc = _pdfCardIni(doc, 14, y, 182, 'Observaciones');
@@ -252,16 +269,20 @@ async function descargarCertificadosPdf(opId){
     _pt(doc, imp, 14 + w1, y + 2, {size: 12, col: _PC.or, bold: true});
     y += 7;
     // A y B
+    // (v7, JP 10-nov) nombre y domicilio en las líneas que hagan falta; las dos tarjetas quedan del mismo alto
     let y0 = y, yc = _pdfCardIni(doc, 14, y, 88, 'Agente de retención', 'A');
-    _pt(doc, emp.nombre, 18, yc + 5.5, {size: 8.5, bold: true});
-    _pt(doc, `CUIT ${_pdfCuit(emp.cuit)}`, 18, yc + 10, {size: 7.5, col: _PC.mut});
-    _pt(doc, `${emp.domicilio} · ${emp.localidad}`, 18, yc + 14, {size: 7.5, col: _PC.mut, maxWidth: 80});
-    _pdfCardFin(doc, 14, y0, 88, yc + 17.5);
-    yc = _pdfCardIni(doc, 108, y, 88, 'Sujeto retenido', 'B');
-    _pt(doc, pv.nombre || o.proveedor_nombre || '', 112, yc + 5.5, {size: 8.5, bold: true, maxWidth: 80});
-    _pt(doc, `CUIT ${_pdfCuit(pv.cuit || o.cuit_proveedor)}`, 112, yc + 10, {size: 7.5, col: _PC.mut});
-    _pt(doc, pv.domicilio || '', 112, yc + 14, {size: 7.5, col: _PC.mut, maxWidth: 80});
-    y = _pdfCardFin(doc, 108, y0, 88, yc + 17.5);
+    const _ab = (x, nom, cuit, dom) => {
+      let yy = _ptLineas(doc, nom, x, yc + 5.5, 79, {size: 8.5, bold: true, paso: 3.8});
+      yy += 4.4; _pt(doc, `CUIT ${_pdfCuit(cuit)}`, x, yy, {size: 7.5, col: _PC.mut});
+      if (dom){ yy = _ptLineas(doc, dom, x, yy + 4, 79, {size: 7.5, col: _PC.mut, paso: 3.4}); }
+      return yy;
+    };
+    const yA = _ab(18, emp.nombre, emp.cuit, `${emp.domicilio} · ${emp.localidad}`);
+    _pdfCardIni(doc, 108, y, 88, 'Sujeto retenido', 'B');
+    const yB = _ab(112, pv.nombre || o.proveedor_nombre || '', pv.cuit || o.cuit_proveedor, pv.domicilio || '');
+    const yFin = Math.max(yA, yB) + 3.5;
+    _pdfCardFin(doc, 14, y0, 88, yFin);
+    y = _pdfCardFin(doc, 108, y0, 88, yFin);
     // C
     y0 = y; yc = _pdfCardIni(doc, 14, y, 182, 'Retención practicada', 'C');
     const kv = [['Impuesto', imp], ['Régimen', regimen],
@@ -275,8 +296,8 @@ async function descargarCertificadosPdf(opId){
     // comprobantes alcanzados
     y0 = y; yc = _pdfCardIni(doc, 14, y, 182, 'Comprobantes alcanzados por la retención');
     const colsF = [{t:'Emisión', x:18}, {t:'Comprobante', x:44, w:90}, {t:'Neto', x:160, align:'right', mut:true}, {t:'Importe', x:192, align:'right'}];
-    y = _pdfTabla(doc, 14, 182, yc, colsF, f.map(x => [_pdfF(x.fecha), `${tipoNom[x.tipo] || x.tipo} ${x.letra || ''} ${String(x.punto_venta||0).padStart(4,'0')}-${String(x.numero||0).padStart(8,'0')}`, _pdfN(x.neto), _pdfN(x.total)]),
-      [`Total · ${f.length} comprobante${f.length === 1 ? '' : 's'}`, null, _pdfN(f.reduce((a, x) => a + Number(x.neto || 0), 0)), _pdfN(montoComp)],
+    y = _pdfTabla(doc, 14, 182, yc, colsF, f.map(x => [_pdfF(x.fecha), `${tipoNom[x.tipo] || x.tipo} ${x.letra || ''} ${String(x.punto_venta||0).padStart(4,'0')}-${String(x.numero||0).padStart(8,'0')}`, _pdfM(x.neto), _pdfM(x.total)]),
+      [`Total · ${f.length} comprobante${f.length === 1 ? '' : 's'}`, null, _pdfM(f.reduce((a, x) => a + Number(x.neto || 0), 0)), _pdfM(montoComp)],
       yy => { _pdfCardFin(doc, 14, y0, 182, yy); const n = nuevaPagina(); y0 = n; return _pdfCardIni(doc, 14, n, 182, 'Comprobantes alcanzados (cont.)'); });
     y = _pdfCardFin(doc, 14, y0, 182, y);
     if (y > 240) y = nuevaPagina();
