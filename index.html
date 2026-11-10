@@ -568,9 +568,11 @@ table.tb-band .prov-nom{display:inline-block;max-width:230px;overflow:hidden;tex
 table.tb-band td.ctr{text-align:center}
 /* (v207, JP 10-nov) lista de proveedores: el nombre se acorta con … y el SKU y los íconos no se pisan con el CUIT */
 table.tb-band td.prov.prov-x{max-width:380px;overflow:hidden}
-table.tb-band .prov-cel{display:flex;align-items:center;gap:5px;min-width:0}
-table.tb-band .prov-cel>*{flex:none}
-table.tb-band .prov-cel>.prov-nom{flex:0 1 auto;min-width:60px;max-width:none}
+.prov-cel{display:flex;align-items:center;gap:5px;min-width:0}
+.prov-cel>*{flex:none}
+.prov-cel>.prov-nom,table.tb-band .prov-cel>.prov-nom{flex:0 1 auto;min-width:60px;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+table.tb-band td.prov-x .prov-cel>.prov-nom{max-width:none}
+td.prov:has(>.prov-cel){max-width:260px}
 /* (v207, JP 10-nov) todos los íconos se animan al hacerles clic */
 @keyframes ico-clic{0%{transform:scale(1)}30%{transform:scale(.72) rotate(-10deg)}65%{transform:scale(1.22) rotate(6deg)}100%{transform:scale(1) rotate(0)}}
 svg.ico-clic{animation:ico-clic .42s cubic-bezier(.3,1.5,.5,1) both;transform-origin:center;transform-box:fill-box}
@@ -3089,7 +3091,7 @@ function vistaBandeja(){
         const nro = `${esc(d.tipo)} ${esc(d.letra)} ${String(d.punto_venta).padStart(4,'0')}-${String(d.numero).padStart(8,'0')}`;
         return `<tr onclick="abrirControl(${d.id})">
           <td>${fechaCorta(d.fecha_emision)}</td>
-          <td class="prov" style="white-space:nowrap"><span class="prov-nom">${esc(d.proveedor_nombre || d.cuit_emisor || '—')}</span>${d.archivo_alerta ? ` <span title="${esc(d.archivo_alerta)}" style="color:var(--bad)">${ico('clip','s')}</span>` : ''}</td>
+          <td class="prov"><div class="prov-cel"><span class="prov-nom">${esc(d.proveedor_nombre || d.cuit_emisor || '—')}</span>${d.archivo_alerta ? ` <span title="${esc(d.archivo_alerta)}" style="color:var(--bad)">${ico('clip','s')}</span>` : ''}</div></td>
           <td class="oculta-mov">${d.archivo_path ? `<a class="nro" target="_blank" rel="noopener" href="${_pdfUrl(d.archivo_path)}" title="Abrir el PDF" onclick="event.stopPropagation()">${nro}</a>` : nro}</td>
           <td class="num" style="white-space:nowrap" ${(d.moneda && d.moneda !== 'ARS' && d.importe_moneda) ? `title="${esc(d.moneda)} ${Number(d.importe_moneda).toLocaleString('es-AR',{minimumFractionDigits:2})} × $${Number(d.cotizacion).toLocaleString('es-AR')}"` : ''}>${plata(d.total)}${(d.moneda && d.moneda !== 'ARS' && d.importe_moneda) ? ` <span class="mini" style="color:#0e7490">${esc(d.moneda)}</span>` : ''}</td>
           <td style="white-space:nowrap">${d.sug_concepto
@@ -4032,7 +4034,7 @@ function tabla(lista, bandeja){
       <td class="mini"><b>${d.numero_interno ?? '—'}</b></td>
       <td>${fechaCorta(d.fecha_emision)}</td>
       <td class="mini">${d.fecha_ingreso ? fechaCorta(d.fecha_ingreso) : '—'}</td>
-      <td class="prov"><span class="prov-nom" title="${esc(d.proveedor_nombre || d.cuit_emisor || '')}">${esc(d.proveedor_nombre || d.cuit_emisor || '—')}</span>${d.archivo_alerta ? ` <span title="${esc(d.archivo_alerta)}" style="color:var(--bad)">${ico('clip','s')}</span>` : ''}${d.nota ? ` <span title="${esc(d.nota)}" style="color:#b45309">${ico('hoja','s')}</span>` : ''}${docCerrado(d) ? ` <span title="Mes enviado al estudio: no se modifica" style="color:var(--mut)">${ico('candado','s')}</span>` : ''}</td>
+      <td class="prov"><div class="prov-cel"><span class="prov-nom" title="${esc(d.proveedor_nombre || d.cuit_emisor || '')}">${esc(d.proveedor_nombre || d.cuit_emisor || '—')}</span>${d.archivo_alerta ? ` <span title="${esc(d.archivo_alerta)}" style="color:var(--bad)">${ico('clip','s')}</span>` : ''}${d.nota ? ` <span title="${esc(d.nota)}" style="color:#b45309">${ico('hoja','s')}</span>` : ''}${docCerrado(d) ? ` <span title="Mes enviado al estudio: no se modifica" style="color:var(--mut)">${ico('candado','s')}</span>` : ''}</div></td>
       <td class="oculta-mov">${d.archivo_path ? `<a class="nro" href="${pdfUrl(d.archivo_path)}" target="_blank" rel="noopener" title="Abrir el PDF" onclick="event.stopPropagation()">${nro}</a>` : nro}</td>
       <td class="ctr">${letraTipo(d.tipo_gasto)}</td>
       <td class="num">${plata(d.total)}</td>
@@ -4141,7 +4143,7 @@ function _pintarCCClientes(c){
     ${!L.length ? `<div class="vacio">${LIST_CCC && LIST_CCC.length ? 'Ningún cliente con saldo.' : 'Todavía no se leyó la cuenta corriente del Dragonfish (corre con el sync diario de mercadería).'}</div>` : `<div style="overflow-x:auto"><table class="tb-band">
       <thead><tr><th>Cliente</th><th>CUIT</th><th class="num" title="Facturas con saldo sin imputar">Fact. abiertas</th><th class="num">Saldo</th><th>Última factura</th><th>Último recibo</th><th class="num" title="Facturado a cuenta corriente en los últimos 12 meses">Fact. 12 m</th><th></th></tr></thead>
       <tbody>${L.map(x => `<tr onclick="abrirCCCliente('${esc(x.cliente_codigo)}')" title="Ver los movimientos">
-        <td class="prov"><span class="prov-nom"><strong>${esc(x.nombre || x.cliente_codigo)}</strong></span> <code class="mini" style="background:#f1f5f9;padding:1px 5px;border-radius:5px">${esc(x.cliente_codigo)}</code></td>
+        <td class="prov"><div class="prov-cel"><span class="prov-nom"><strong>${esc(x.nombre || x.cliente_codigo)}</strong></span> <code class="mini" style="background:#f1f5f9;padding:1px 5px;border-radius:5px">${esc(x.cliente_codigo)}</code></div></td>
         <td class="mini" style="white-space:nowrap">${_cuitFmt(x.cuit)}</td>
         <td class="num">${x.facturas_abiertas}</td>
         <td class="num"><b style="color:${Number(x.saldo) > 0 ? '#991b1b' : '#166534'}">${plata(x.saldo)}</b></td>
@@ -4192,7 +4194,7 @@ function _pintarCuentaCorriente(){
     ${!L.length ? '<div class="vacio">Ningún proveedor con saldo.</div>' : `<div style="overflow-x:auto"><table class="tb-band">
       <thead><tr><th>Proveedor</th><th>CUIT</th><th class="num">Facturas pend.</th><th class="num">Saldo</th><th>Última factura</th><th>Último pago</th><th class="num" title="Pagado en los últimos 12 meses (OPs del módulo)">Pagado 12 m</th><th></th></tr></thead>
       <tbody>${L.map(x => `<tr onclick="abrirCC('${esc(x.cuit)}')" title="Ver el detalle de la cuenta">
-        <td class="prov"><span class="prov-nom"><strong>${esc(x.nombre || x.cuit)}</strong></span>${x.sku ? ` <code class="mini" style="background:#f1f5f9;padding:1px 5px;border-radius:5px">${esc(x.sku)}</code>` : ''}</td>
+        <td class="prov"><div class="prov-cel"><span class="prov-nom"><strong>${esc(x.nombre || x.cuit)}</strong></span>${x.sku ? ` <code class="mini" style="background:#f1f5f9;padding:1px 5px;border-radius:5px">${esc(x.sku)}</code>` : ''}</div></td>
         <td class="mini" style="white-space:nowrap">${_cuitFmt(x.cuit)}</td>
         <td class="num">${x.facturas_pend}</td>
         <td class="num"><b style="color:${Number(x.saldo) > 0 ? '#991b1b' : '#166534'}">${plata(x.saldo)}</b></td>
@@ -6799,7 +6801,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk" crossorigin="anonymous"></script>
 <script src="op-pdf.js?v=6"></script>
-<script src="pedidos.js?v=16"></script>
+<script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
 <script src="manual.js?v=122"></script>
