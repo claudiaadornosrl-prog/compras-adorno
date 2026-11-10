@@ -1915,6 +1915,7 @@ async function emitirOP(){
   }
   cerrarModalP();
   alert(`${data.comprobante} emitida\n\nA pagar: ${plata(data.neto_a_pagar)}` +
+        ((data.certificados || []).length ? `\nCertificado de retención N° ${data.certificados.join(', ')}` : '') +
         (data.mensaje_pago ? `\n\n${data.mensaje_pago}`
           : data.pendiente_tesoreria ? (data.pagos > 1 ? `\n\nQuedaron ${data.pagos} pendientes en Tesorería, uno por cada medio de pago.` : '\n\nYa quedó el pendiente cargado en Tesorería.') : '') +
         (data.estado_pendiente === 'pagado'
@@ -6690,6 +6691,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=117"></script>
+<script src="manual.js?v=118"></script>
 </body>
 </html>
