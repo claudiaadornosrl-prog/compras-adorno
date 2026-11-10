@@ -662,6 +662,14 @@ main{padding:14px;max-width:1250px;margin:0 auto;}
 .pf-c .pf-fila{border-radius:16px !important;background:#faf7f3 !important;}
 .pf-c .pf-pie{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:14px;position:sticky;bottom:-20px;background:#fff;padding:10px 0;border-top:1px solid #eee6dc;z-index:3;}
 @media(max-width:600px){.pf-c .pf-grid{grid-template-columns:1fr;}}
+/* (v206, JP 10-nov) Órdenes de pago: dos pestañas grandes en pastilla + buscador */
+.op-tabs{display:flex;gap:8px;padding:8px;background:#fdf1e4;border-radius:28px;margin-bottom:12px;flex-wrap:wrap;}
+.op-tabs button{flex:1;min-width:240px;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;border:0;background:none;font:inherit;font-size:15.5px;font-weight:700;color:#9a3412;padding:13px 20px;border-radius:999px;cursor:pointer;}
+.op-tabs button:hover{background:#fbe3cb;}
+.op-tabs button.on{background:var(--primary);color:#fff;box-shadow:0 2px 8px rgba(234,88,12,.3);}
+.op-tabs button span{font-size:12.5px;font-weight:600;opacity:.85;}
+.op-q{flex:1;min-width:220px;padding:9px 16px;border:1.5px solid #e3dbd0;border-radius:999px;background:#faf7f3;font:inherit;font-size:13.5px;}
+.op-q:focus{outline:2px solid #fdba74;background:#fff;}
 /* (v137) ficha de equivalencia: tres bloques, títulos con ℹ, botón + a la derecha del renglón */
 .eq-sec{border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fff;}
 .eq-sec h4{margin:0 0 8px;font-size:13.5px;display:flex;align-items:center;gap:7px;}
@@ -1244,23 +1252,30 @@ async function vistaOrdenes(){
   pintarOrdenes();
 }
 
-function pintarOrdenes(){
-  const c = document.getElementById('cont'); if (!c) return;
-  const pend = OP_PROVS.reduce((a,p) => a + Number(p.total||0), 0);
-  // (8-oct, JP) sin tarjetas de números: título + ⓘ con la explicación, exportar como íconos, la fila arma la OP
-  c.innerHTML = `
-    <div class="card">
-      <div class="abar" style="margin-bottom:8px">
-        <h3 style="font-size:15px;margin:0">Facturas esperando orden de pago <span class="mini">· ${OP_PROVS.length} proveedores · ${platac(pend)}</span></h3>
-        <span class="mini" style="cursor:help;color:var(--mut)" title="Son los comprobantes ya controlados, agrupados por proveedor. Tocá un proveedor para armarle la orden de pago. El total es antes de retenciones.${MODO_PRUEBA ? ' En prueba: las OP llevan punto de venta 9999 y NO generan el pendiente en Tesorería.' : ''}">${ico('info','s')}</span>
-        <span style="flex:1"></span>
-        <button class="act gh mini-ico" onclick="opExportar('pend','xlsx')" title="Bajar este listado en Excel">${ico('excel','s')}</button>
-        <button class="act gh mini-ico" onclick="opExportar('pend','pdf')" title="Bajar este listado en PDF">${ico('pdf','s')}</button>
-      </div>
-      ${OP_PROVS.length ? `<div style="overflow-x:auto"><table class="tb-band op-lista">
+// (v206, JP 10-nov) Órdenes de pago en DOS PESTAÑAS grandes (esperando OP / emitidas) + buscador.
+// El buscador filtra la pestaña que se está viendo: proveedor, CUIT, número de orden, estado, medio, fecha o importe.
+let OP_TAB = 'pend', OP_Q = '';
+const _opNorm = t => String(t ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+function _opCoincide(textos, importes){
+  const q = _opNorm(OP_Q).trim(); if (!q) return true;
+  const txt = _opNorm(textos.filter(Boolean).join(' '));
+  const nums = importes.map(v => (Number(v) || 0).toFixed(2).replace('.', '')).join(' ');
+  return q.split(/\s+/).every(tok => { if (txt.includes(tok)) return true;
+    const d = tok.replace(/\D/g, ''); return d.length >= 2 && /^[\d.,$]+$/.test(tok) && nums.includes(d); });
+}
+const _opPendFiltrada = () => (OP_PROVS || []).filter(p => _opCoincide([p.proveedor, p.cuit, _fecha(p.mas_vieja)], [p.total, p.neto]));
+function _opTab(t){ OP_TAB = t; pintarOrdenes(); }
+function _opBuscar(v){ OP_Q = v; _opPintarTabla(); }
+function _opPintarTabla(){
+  const cont = document.getElementById('op-tabla'); if (!cont) return;
+  const res = document.getElementById('op-res');
+  if (OP_TAB === 'pend'){
+    const L = _opPendFiltrada();
+    if (res) res.textContent = OP_Q.trim() ? `${L.length} de ${OP_PROVS.length} proveedores · ${platac(L.reduce((a,p) => a + Number(p.total||0), 0))}` : '';
+    cont.innerHTML = L.length ? `<div style="overflow-x:auto"><table class="tb-band op-lista">
         <thead><tr><th>Proveedor</th><th class="num">Comprob.</th>
           <th class="num" title="Sin IVA ni percepciones">Neto</th><th class="num">Total</th><th>Más vieja</th><th></th></tr></thead>
-        <tbody>${OP_PROVS.map(p => `<tr onclick="abrirOP('${esc(p.cuit)}')" title="Armar la orden de pago de ${esc(p.proveedor||'')}">
+        <tbody>${L.map(p => `<tr onclick="abrirOP('${esc(p.cuit)}')" title="Armar la orden de pago de ${esc(p.proveedor||'')}">
           <td class="prov"><span class="prov-nom" title="${esc(p.proveedor||'')} · CUIT ${esc(p.cuit||'')}"><b>${esc(p.proveedor||'—')}</b></span></td>
           <td class="num">${p.facturas}</td>
           <td class="num mini">${p.neto != null ? plata(p.neto) : '—'}</td>
@@ -1268,23 +1283,15 @@ function pintarOrdenes(){
           <td class="mini" style="white-space:nowrap">${_fecha(p.mas_vieja)}${_diasDesde(p.mas_vieja)}</td>
           <td class="num"><button class="act mini-ico" onclick="event.stopPropagation();abrirOP('${esc(p.cuit)}')" title="Armar orden de pago">${ico('pago','s')}</button></td>
         </tr>`).join('')}</tbody></table></div>`
-      : '<div class="vacio">No hay comprobantes controlados esperando orden de pago.</div>'}
-    </div>
-
-    <div class="card">
-      <div class="abar" style="margin-bottom:8px">
-        <h3 style="font-size:15px;margin:0">Órdenes emitidas <span class="mini">· ${OP_LISTA.filter(o=>o.estado!=='anulada').length}${OP_LISTA.some(o=>o.estado==='anulada') ? ` · ${OP_LISTA.filter(o=>o.estado==='anulada').length} anuladas` : ''}</span></h3>
-        <span style="flex:1"></span>
-        <input type="date" id="opl-desde" value="${esc(OP_FILTRO.desde)}" onchange="OP_FILTRO.desde=this.value;pintarOrdenes()" style="padding:5px 7px;font-size:12.5px" title="Desde">
-        <input type="date" id="opl-hasta" value="${esc(OP_FILTRO.hasta)}" onchange="OP_FILTRO.hasta=this.value;pintarOrdenes()" style="padding:5px 7px;font-size:12.5px" title="Hasta">
-        <button class="act gh mini-ico" onclick="opExportar('emit','xlsx')" title="Bajar este listado en Excel">${ico('excel','s')}</button>
-        <button class="act gh mini-ico" onclick="opExportar('emit','pdf')" title="Bajar este listado en PDF">${ico('pdf','s')}</button>
-      </div>
-      ${_opListaFiltrada().length ? `<div style="overflow-x:auto"><table class="tb-band op-lista">
+      : `<div class="vacio">${OP_PROVS.length ? 'Ningún proveedor coincide con la búsqueda.' : 'No hay comprobantes controlados esperando orden de pago.'}</div>`;
+  } else {
+    const L = _opListaFiltrada();
+    if (res) res.textContent = (OP_Q.trim() || OP_FILTRO.desde || OP_FILTRO.hasta) ? `${L.length} de ${OP_LISTA.length} órdenes · a pagar ${platac(L.filter(o => o.estado !== 'anulada').reduce((a,o) => a + Number(o.neto_a_pagar||0), 0))}` : '';
+    cont.innerHTML = L.length ? `<div style="overflow-x:auto"><table class="tb-band op-lista">
         <thead><tr><th>Orden</th><th>Fecha</th><th>Proveedor</th><th class="num">Comp.</th>
           <th class="num">Subtotal</th><th class="num">Retenc.</th><th class="num">A pagar</th>
           <th class="ctr">Estado</th><th></th></tr></thead>
-        <tbody>${_opListaFiltrada().map(o => { const E = {anulada:['anular','#fee2e2','#991b1b','Anulada'], pago_parcial:['reloj','#fef3c7','#92400e','Pago parcial'], pagada:['ok','#dcfce7','#166534','Pagada'], emitida:['pago','#e0e7ff','#3730a3','Emitida']}[o.estado] || ['pago','#e0e7ff','#3730a3',o.estado];
+        <tbody>${L.map(o => { const E = {anulada:['anular','#fee2e2','#991b1b','Anulada'], pago_parcial:['reloj','#fef3c7','#92400e','Pago parcial'], pagada:['ok','#dcfce7','#166534','Pagada'], emitida:['pago','#e0e7ff','#3730a3','Emitida']}[o.estado] || ['pago','#e0e7ff','#3730a3',o.estado];
           return `<tr onclick="verOP(${o.id})" title="Ver la orden"${o.estado==='anulada' ? ' style="opacity:.55"' : ''}>
           <td style="white-space:nowrap"><b>${esc(o.comprobante)}</b></td>
           <td class="mini">${_fecha(o.fecha)}</td>
@@ -1297,14 +1304,42 @@ function pintarOrdenes(){
           <td class="num" style="white-space:nowrap">
             ${o.estado!=='anulada' ? `<button class="act gh mini-ico" style="color:var(--bad);border-color:#fecaca" onclick="event.stopPropagation();anularOP(${o.id}, '${esc(o.comprobante)}')" title="Anular esta orden">${ico('anular','s')}</button>` : ''}</td>
         </tr>`; }).join('')}</tbody></table></div>`
-      : `<div class="vacio">${OP_LISTA.length ? 'No hay órdenes en ese rango de fechas.' : 'Todavía no se emitió ninguna orden de pago.'}</div>`}
+      : `<div class="vacio">${OP_LISTA.length ? 'No hay órdenes que coincidan con la búsqueda o el rango de fechas.' : 'Todavía no se emitió ninguna orden de pago.'}</div>`;
+  }
+}
+function pintarOrdenes(){
+  const c = document.getElementById('cont'); if (!c) return;
+  const pend = OP_PROVS.reduce((a,p) => a + Number(p.total||0), 0);
+  const nEmit = OP_LISTA.filter(o => o.estado !== 'anulada').length, nAnul = OP_LISTA.length - nEmit;
+  const esP = OP_TAB === 'pend';
+  c.innerHTML = `
+    <div class="op-tabs">
+      <button class="${esP ? 'on' : ''}" onclick="_opTab('pend')" title="Comprobantes ya controlados, agrupados por proveedor. Tocá un proveedor para armarle la orden de pago. El total es antes de retenciones.">
+        ${ico('factura','s')} Facturas esperando orden de pago <span>${OP_PROVS.length} proveedores · ${platac(pend)}</span></button>
+      <button class="${esP ? '' : 'on'}" onclick="_opTab('emit')" title="Las órdenes de pago ya emitidas. Tocá una para verla, bajar el PDF o el certificado.">
+        ${ico('pago','s')} Órdenes emitidas <span>${nEmit}${nAnul ? ` · ${nAnul} anuladas` : ''}</span></button>
+    </div>
+    <div class="card">
+      <div class="abar" style="margin-bottom:8px;gap:8px;flex-wrap:wrap">
+        <input type="search" id="op-q" class="op-q" value="${esc(OP_Q)}" oninput="_opBuscar(this.value)" placeholder="${esP ? 'Buscar por proveedor, CUIT o importe…' : 'Buscar por proveedor, CUIT, número de orden, importe, estado o medio de pago…'}" title="Filtra el listado mientras escribís. Podés combinar palabras (ej.: naranjos 998254). Los importes se buscan con o sin puntos.">
+        <span class="mini" id="op-res" style="white-space:nowrap"></span>
+        ${esP ? `<span class="mini" style="cursor:help;color:var(--mut)" title="Son los comprobantes ya controlados, agrupados por proveedor. Tocá un proveedor para armarle la orden de pago. El total es antes de retenciones.${MODO_PRUEBA ? ' En prueba: las OP llevan punto de venta 9999 y NO generan el pendiente en Tesorería.' : ''}">${ico('info','s')}</span>` : `
+        <input type="date" id="opl-desde" value="${esc(OP_FILTRO.desde)}" onchange="OP_FILTRO.desde=this.value;_opPintarTabla()" style="padding:5px 7px;font-size:12.5px" title="Desde">
+        <input type="date" id="opl-hasta" value="${esc(OP_FILTRO.hasta)}" onchange="OP_FILTRO.hasta=this.value;_opPintarTabla()" style="padding:5px 7px;font-size:12.5px" title="Hasta">`}
+        <button class="act gh mini-ico" onclick="opExportar('${OP_TAB}','xlsx')" title="Bajar este listado (lo que se ve, con el filtro) en Excel">${ico('excel','s')}</button>
+        <button class="act gh mini-ico" onclick="opExportar('${OP_TAB}','pdf')" title="Bajar este listado (lo que se ve, con el filtro) en PDF">${ico('pdf','s')}</button>
+      </div>
+      <div id="op-tabla"></div>
     </div>`;
+  _opPintarTabla();
 }
 
 // ── Listados de OP a Excel y PDF (2-oct, JP) ───────────────────────────
 const OP_FILTRO = {desde: '', hasta: ''};
 const _opListaFiltrada = () => (OP_LISTA || []).filter(o =>
-  (!OP_FILTRO.desde || o.fecha >= OP_FILTRO.desde) && (!OP_FILTRO.hasta || o.fecha <= OP_FILTRO.hasta));
+  (!OP_FILTRO.desde || o.fecha >= OP_FILTRO.desde) && (!OP_FILTRO.hasta || o.fecha <= OP_FILTRO.hasta)
+  && _opCoincide([o.proveedor, o.cuit, o.comprobante, o.estado === 'pago_parcial' ? 'pago parcial' : o.estado, o.medio_pago, _fecha(o.fecha), o.emitida_por],
+                 [o.neto_a_pagar, o.subtotal, o.retenciones_total]));
 function _cargarScript(src){
   return new Promise((ok, mal) => { const sc = document.createElement('script'); sc.src = src; sc.onload = ok; sc.onerror = () => mal(new Error('No se pudo cargar ' + src)); document.head.appendChild(sc); });
 }
@@ -1312,7 +1347,7 @@ async function opExportar(cual, formato){
   // columnas: [título, valor(fila), 'n' importe / 'e' entero, ancho relativo en el PDF]
   let titulo, filas, cols;
   if (cual === 'pend'){
-    titulo = 'Facturas esperando orden de pago'; filas = OP_PROVS || [];
+    titulo = 'Facturas esperando orden de pago'; filas = _opPendFiltrada();
     cols = [['Proveedor', p => p.proveedor || '', '', 70], ['CUIT', p => p.cuit || '', '', 26], ['Comprob.', p => Number(p.facturas)||0, 'e', 18],
             ['Neto', p => Number(p.neto)||0, 'n', 32], ['Total', p => Number(p.total)||0, 'n', 32], ['Más vieja', p => _fecha(p.mas_vieja), '', 22]];
   } else {
@@ -6747,6 +6782,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=121"></script>
+<script src="manual.js?v=122"></script>
 </body>
 </html>
