@@ -163,7 +163,7 @@ function _pdfPie(doc, izq, firma, prueba){
 async function descargarOpPdf(opId){
   const {data, error} = await sb.rpc('compras_op_detalle', {p_op: opId});
   if (error){ alert(error.message); return; }
-  const o = data.orden, f = data.facturas || [], r = (data.retenciones || []).filter(x => Number(x.importe) > 0), pg = data.pagos || [], pv = data.proveedor || {}, emp = data.empresa;
+  const o = data.orden, f = (data.facturas || []).filter(x => x.id !== data.orden.descuento_nc_id), r = (data.retenciones || []).filter(x => Number(x.importe) > 0), pg = data.pagos || [], pv = data.proveedor || {}, emp = data.empresa;
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit: 'mm', format: 'a4'});
   const fnt = (await _opCargarFuente(doc)) ? 'AdornoTitulo' : 'helvetica';
@@ -187,6 +187,11 @@ async function descargarOpPdf(opId){
   y = _pdfTabla(doc, 14, 182, yc, colsF, f.map(x => [_pdfF(x.fecha), _pdfF(x.vencimiento), `${tipoNom[x.tipo] || x.tipo} ${x.letra || ''} ${String(x.punto_venta||0).padStart(4,'0')}-${String(x.numero||0).padStart(8,'0')}`, _pdfN(x.neto), _pdfN(x.total)]),
     ['Subtotal', null, null, null, _pdfN(o.subtotal)], yy => { _pdfCardFin(doc, 14, y0, 182, yy); const n = nuevaPagina(); y0 = n; return _pdfCardIni(doc, 14, n, 182, 'Comprobantes cancelados (cont.)'); });
   y = _pdfCardFin(doc, 14, y0, 182, y);
+  // (v204) descuento en el pago
+  if (Number(o.descuento_importe) > 0){
+    _pt(doc, `Descuento en el pago ${Number(o.descuento_pct)} %: - $ ${_pdfN(o.descuento_importe)}     Subtotal con descuento: $ ${_pdfN(o.total)}`, 192, y + 1, {size: 8.5, align: 'right'});
+    y += 6;
+  }
   if (y > 230) y = nuevaPagina();
   // retenciones
   y0 = y; yc = _pdfCardIni(doc, 14, y, 182, 'Retenciones practicadas');
@@ -225,7 +230,7 @@ async function descargarCertificadosPdf(opId){
   if (eN){ alert(eN.message); return; }
   const {data, error} = await sb.rpc('compras_op_detalle', {p_op: opId});
   if (error){ alert(error.message); return; }
-  const o = data.orden, f = data.facturas || [], rets = (data.retenciones || []).filter(x => Number(x.importe) > 0), pv = data.proveedor || {}, emp = data.empresa;
+  const o = data.orden, f = (data.facturas || []).filter(x => x.id !== data.orden.descuento_nc_id), rets = (data.retenciones || []).filter(x => Number(x.importe) > 0), pv = data.proveedor || {}, emp = data.empresa;
   if (!rets.length){ alert('Esta orden no practicó retenciones: no hay certificado para emitir.'); return; }
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit: 'mm', format: 'a4'});

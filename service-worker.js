@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v203-certificado-pdf-al-emitir';
+const CACHE_VERSION = 'compras-v204-op-descuento';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './firma-jp.jpg', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

@@ -1418,6 +1418,7 @@ function _pintarModalOP(cands){
     <div class="op-blq"><h4>Datos de la orden</h4><div class="cont op-fila3">
       <div><label>Fecha de la OP</label><input type="date" id="op-fecha" value="${_hoyISO()}"></div>
       <div><label title="Se propone el vencimiento más cercano de las facturas marcadas. Es la fecha de pago del pendiente en Tesorería.">Vence (fecha de pago)</label><input type="date" id="op-venc" value="${_opVencDefault(cands)}" onchange="opVencManual=true;_opChqVenc()"></div>
+      <div style="width:120px"><label title="Descuento que el proveedor hace por este pago (ej. 10 %). Baja el total a pagar y la base de las retenciones. Después el proveedor manda la nota de crédito, que se vincula a esta orden desde Órdenes de pago.">Descuento en el pago %</label><input type="number" id="op-desc" min="0" max="100" step="0.01" placeholder="0" onchange="_opCalcular()"></div>
       <div style="flex:1;min-width:180px"><label>Observaciones</label><input id="op-obs" placeholder="opcional"></div>
     </div></div>
     <datalist id="dl-medios"><option>Transferencia</option><option>Cheque</option>
@@ -1471,7 +1472,7 @@ async function _opCalcular(){
   cont.innerHTML = '<div class="vacio">Calculando…</div>';
   const {data, error} = await sb.rpc('compras_op_preparar',
     {p_cuit: opSel, p_docs: opDocs, p_fecha: document.getElementById('op-fecha')?.value || null,
-     p_prueba: MODO_PRUEBA});
+     p_prueba: MODO_PRUEBA, p_descuento_pct: _opDescPct()});
   if (error){
     opPrep = null; if (btn) btn.disabled = true;
     cont.innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return;
@@ -1510,7 +1511,11 @@ async function _opCalcular(){
     <div class="op-blq"><h4>Retenciones y neto a pagar</h4><div class="cont" style="padding:0 12px 8px">
     <table style="font-size:13px"><tbody>
       <tr><td>Comprobantes (${data.comprobantes}) <span class="mini">(neto)</span></td>
-          <td class="num" title="Total con impuestos; entre paréntesis el neto sin IVA ni percepciones, base de las retenciones"><b>${plata(data.subtotal)}</b> <span class="mini">(${plata(data.neto)})</span></td></tr>
+          <td class="num" title="Total con impuestos; entre paréntesis el neto sin IVA ni percepciones, base de las retenciones"><b>${plata(data.subtotal_bruto ?? data.subtotal)}</b> <span class="mini">(${plata(data.neto_bruto ?? data.neto)})</span></td></tr>
+      ${Number(data.descuento) > 0 ? `<tr style="color:#166534"><td>Descuento en el pago ${Number(data.descuento_pct)} % <span class="mini">(falta que manden la nota de crédito)</span></td>
+          <td class="num">− ${plata(data.descuento)}</td></tr>
+      <tr><td>Subtotal con descuento <span class="mini">(neto, base de las retenciones)</span></td>
+          <td class="num"><b>${plata(data.subtotal)}</b> <span class="mini">(${plata(data.neto)})</span></td></tr>` : ''}
     </tbody></table>
     <div id="op-rets"></div></div></div>
     <div class="op-blq"><h4>Medio de pago</h4><div class="cont"><div id="op-pagos"></div></div></div>`;
@@ -1755,6 +1760,8 @@ function _opPagoQuitar(i){
 const _opEditada = r => Math.abs(Number(r.importe||0) - Number(r.calculado||0)) > 0.005;
 const _opTotRet  = () => opRets.reduce((a,r) => a + (Number(r.importe)||0), 0);
 const _opNeto    = () => Number(opPrep?.subtotal || 0) - _opTotRet();
+// (v204, JP 10-nov) descuento en el pago: % cargado en "Datos de la orden"
+const _opDescPct = () => { const v = Number(String(document.getElementById('op-desc')?.value || '').replace(',', '.')); return v > 0 ? Math.min(v, 100) : null; };
 
 function _opPintarRets(){
   const cont = document.getElementById('op-rets'); if (!cont) return;
@@ -1881,7 +1888,8 @@ async function emitirOP(){
     if (opPagos.some(p => !(Number(p.importe) > 0))){ alert('Hay un medio de pago con importe cero: sacalo o ponele importe.'); return; }
   }
   const txt = `Emitir la orden de pago de ${opPrep.proveedor}\n\n` +
-    `${opPrep.comprobantes} comprobante(s): ${plata(opPrep.subtotal)}\n` +
+    `${opPrep.comprobantes} comprobante(s): ${plata(opPrep.subtotal_bruto ?? opPrep.subtotal)}\n` +
+    (Number(opPrep.descuento) > 0 ? `Descuento en el pago ${Number(opPrep.descuento_pct)} %: − ${plata(opPrep.descuento)} (después hay que vincular la nota de crédito)\n` : '') +
     `Retenciones: ${plata(_opTotRet())}` +
     (editadas.length ? ` (${editadas.length} puesta(s) a mano)` : '') + '\n' +
     `A pagar: ${plata(_opNeto())}\n` +
@@ -1907,7 +1915,7 @@ async function emitirOP(){
       notas: (p.notas||'').trim() || null})),
     p_retenciones: opRets.map(r => ({codigo: r.codigo, importe: Number(r.importe)||0,
                                      motivo_edicion: (r.motivo_edicion||'').trim() || null})),
-    p_prueba: MODO_PRUEBA });
+    p_prueba: MODO_PRUEBA, p_descuento_pct: Number(opPrep.descuento_pct) > 0 ? Number(opPrep.descuento_pct) : null });
   if (error){
     alert('No se pudo emitir: ' + error.message);
     if (btn){ btn.disabled = false; btn.textContent = 'Emitir orden de pago'; }
@@ -1915,6 +1923,7 @@ async function emitirOP(){
   }
   cerrarModalP();
   alert(`${data.comprobante} emitida\n\nA pagar: ${plata(data.neto_a_pagar)}` +
+        (Number(data.descuento) > 0 ? `\nDescuento en el pago: ${plata(data.descuento)} · cuando llegue la nota de crédito, vinculala desde la orden` : '') +
         ((data.certificados || []).length ? `\nCertificado de retención N° ${data.certificados.join(', ')} (el PDF se descarga al aceptar)` : '') +
         (data.mensaje_pago ? `\n\n${data.mensaje_pago}`
           : data.pendiente_tesoreria ? (data.pagos > 1 ? `\n\nQuedaron ${data.pagos} pendientes en Tesorería, uno por cada medio de pago.` : '\n\nYa quedó el pendiente cargado en Tesorería.') : '') +
@@ -1929,10 +1938,28 @@ async function emitirOP(){
   vistaOrdenes();
 }
 
+// (v204, JP 10-nov) vincular la nota de crédito que el proveedor manda por el descuento de una OP
+async function opVincularNc(opId){
+  const {data, error} = await sb.rpc('compras_op_nc_candidatas', {p_op: opId});
+  if (error){ alert(error.message); return; }
+  if (!(data || []).length){ alert('Este proveedor no tiene ninguna nota de crédito cargada sin orden de pago.\n\nCuando llegue y esté en el módulo, volvé a esta orden y vinculala.'); return; }
+  const lista = data.map((d, i) => `${i + 1}) ${d.comprobante} · ${_fecha(d.fecha)} · ${plata(d.total)}`).join('\n');
+  const n = prompt('¿Cuál es la nota de crédito del descuento? Escribí el número de la lista:\n\n' + lista, '1');
+  if (n === null) return;
+  const d = data[Number(n) - 1]; if (!d){ alert('Ese número no está en la lista.'); return; }
+  const r = await sb.rpc('compras_op_vincular_nc', {p_op: opId, p_doc: d.id});
+  if (r.error){ alert(r.error.message); return; }
+  const dif = Number(r.data.diferencia) || 0;
+  alert(`Nota de crédito ${d.comprobante} vinculada a la orden.` + (Math.abs(dif) > 1 ? `\n\n⚠ La NC es por ${plata(r.data.nc_total)} y el descuento fue de ${plata(r.data.descuento)}: hay una diferencia de ${plata(dif)}.` : ''));
+  verOP(opId);
+}
 async function verOP(id){
   const {data, error} = await sb.rpc('compras_op_detalle', {p_op: id});
   if (error){ alert(error.message); return; }
-  const o = data.orden, f = data.facturas || [], r = data.retenciones || [], pg = data.pagos || [];
+  const o = data.orden, fTodas = data.facturas || [], r = data.retenciones || [], pg = data.pagos || [];
+  // (v204) la NC del descuento vinculada no se lista como comprobante: se muestra en el renglón del descuento
+  const ncDto = o.descuento_nc_id ? fTodas.find(x => x.id === o.descuento_nc_id) : null;
+  const f = fTodas.filter(x => x !== ncDto), dto = Number(o.descuento_importe) || 0;
   const _estPend = e => e === 'pagado' ? '<span class="chip" style="background:#dcfce7;color:#166534">pagado</span>'
     : e === 'por_confirmar' ? '<span class="chip" style="background:#fef3c7;color:#92400e">por confirmar</span>'
     : e === 'cancelado' ? '<span class="chip" style="background:#fee2e2;color:#991b1b">cancelado</span>'
@@ -1956,6 +1983,11 @@ async function verOP(id){
       <td class="num mini" title="Neto, sin IVA ni percepciones"${x.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(x.neto)}</td>
       <td class="num"${x.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(x.total)}</td></tr>`).join('')}
       <tr class="tot"><td colspan="2">Subtotal</td><td class="num mini" title="Neto sobre el que se calculan las retenciones">${plata(f.reduce((a,x) => a + Number(x.neto||0), 0))} <span style="font-weight:400">(neto)</span></td><td class="num">${plata(o.subtotal)}</td></tr>
+      ${dto > 0 ? `<tr style="color:#166534"><td colspan="3">Descuento en el pago ${Number(o.descuento_pct)} %
+          ${ncDto ? `<span class="chip" style="background:#dcfce7;color:#166534">NC ${esc(ncDto.comprobante.replace(/^NC\s*/, ''))} vinculada</span>`
+                  : (o.estado === 'anulada' ? '' : `<span class="chip" style="background:#fef3c7;color:#92400e">falta la nota de crédito</span> <button class="act gh" style="padding:2px 9px;font-size:12px" onclick="opVincularNc(${o.id})" title="Cuando el proveedor mande la nota de crédito por este descuento y esté cargada, vinculala acá para que no se descuente otra vez en un pago futuro">Vincular NC</button>`)}</td>
+        <td class="num">− ${plata(dto)}</td></tr>
+      <tr class="tot"><td colspan="3">Subtotal con descuento</td><td class="num">${plata(o.total)}</td></tr>` : ''}
     </tbody></table></div>
 
     <div class="op-sec"><h4>${ico('porcentaje','s')} ${anul ? 'Retenciones <span style="color:var(--bad)">anuladas con la orden</span>' : 'Retenciones practicadas'}
@@ -6692,10 +6724,10 @@ async function editarContabilizacion(docId){
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk" crossorigin="anonymous"></script>
-<script src="op-pdf.js?v=5"></script>
+<script src="op-pdf.js?v=6"></script>
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=119"></script>
+<script src="manual.js?v=120"></script>
 </body>
 </html>
