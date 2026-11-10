@@ -1915,12 +1915,17 @@ async function emitirOP(){
   }
   cerrarModalP();
   alert(`${data.comprobante} emitida\n\nA pagar: ${plata(data.neto_a_pagar)}` +
-        ((data.certificados || []).length ? `\nCertificado de retención N° ${data.certificados.join(', ')}` : '') +
+        ((data.certificados || []).length ? `\nCertificado de retención N° ${data.certificados.join(', ')} (el PDF se descarga al aceptar)` : '') +
         (data.mensaje_pago ? `\n\n${data.mensaje_pago}`
           : data.pendiente_tesoreria ? (data.pagos > 1 ? `\n\nQuedaron ${data.pagos} pendientes en Tesorería, uno por cada medio de pago.` : '\n\nYa quedó el pendiente cargado en Tesorería.') : '') +
         (data.estado_pendiente === 'pagado'
           ? '\n\nLos PDF se archivan como PAGADAS en aproximadamente un minuto.'
           : '\n\nLos PDF se mudan a 4 - CON OP SIN PAGAR en aproximadamente un minuto.'));
+  // (v203, JP 10-nov) el certificado de retención sale junto con la OP: se baja el PDF al emitir
+  if ((data.certificados || []).length){
+    try { await descargarCertificadosPdf(data.orden_pago_id); }
+    catch (e) { alert('La orden se emitió bien, pero no se pudo generar el PDF del certificado: ' + (e.message || e) + '\n\nBajalo desde la orden, con el botón "Certificado".'); }
+  }
   vistaOrdenes();
 }
 
@@ -6691,6 +6696,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=118"></script>
+<script src="manual.js?v=119"></script>
 </body>
 </html>
