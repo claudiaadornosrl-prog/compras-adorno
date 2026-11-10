@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v198-cara-30-dias';
+const CACHE_VERSION = 'compras-v199-monotributo-sin-retencion';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './firma-jp.jpg', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

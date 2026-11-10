@@ -286,6 +286,7 @@ function _manualSecciones() {
         '🚨 Crear el régimen NO retiene a nadie todavía. Un régimen se aplica en una OP solo si está ASIGNADO en la ficha del proveedor (🏢 Proveedores → ficha → Retenciones), o si es el que el sistema propone por tipo de gasto cuando la ficha no tiene ninguno. Después del alta, asignalo a los proveedores que corresponda.',
         'Sin alícuota cargada el sistema no inventa nada: calcula $0 con aviso y el importe se pone a mano en la OP, con motivo. Es a propósito — un número viejo con aire de autoridad es peor que un cero que avisa.',
         'La casilla "Activo" saca o vuelve a poner un régimen en juego sin borrarlo: desactivado no se propone en ninguna OP, pero su historia queda (R902 e IIBB Buenos Aires están así porque no se practican desde 2022).',
+        '🧾 MONOTRIBUTISTAS (10-nov): a los proveedores monotributistas no se les retiene nada. La orden de pago sale sin retenciones y avisa "Monotributista: no se le retiene", aunque la ficha tenga un régimen cargado. La condición se toma de la ficha del proveedor (Datos comerciales → IVA) y, si ahí está sin definir, del padrón de ARCA. Si a alguien que es monotributista le aparece una retención, es porque figura con otra condición: corregí el IVA en su ficha.',
         'Al régimen se le puede cargar también una exclusión por proveedor (certificado de no retención con vencimiento) desde la ficha del proveedor; ahí manda la ficha, no la tabla.',
       ],
     },
