@@ -1417,7 +1417,7 @@ function _pintarModalOP(cands){
       return n ? `<div class="alerta" style="margin:-4px 0 12px;font-size:13px">⚠ ${n} factura${n>1?'s':''} de mercadería sin remito asociado: la mercadería todavía no tiene cómo entrar al stock. Se puede pagar igual; conviene resolver el remito en 🚚 Mercadería.</div>` : ''; })()}
     <div class="op-blq"><h4>Datos de la orden</h4><div class="cont op-fila3">
       <div><label>Fecha de la OP</label><input type="date" id="op-fecha" value="${_hoyISO()}"></div>
-      <div><label title="Se propone el vencimiento más cercano de las facturas marcadas. Es la fecha de pago del pendiente en Tesorería.">Vence (fecha de pago)</label><input type="date" id="op-venc" value="${_opVencDefault(cands)}" onchange="opVencManual=true"></div>
+      <div><label title="Se propone el vencimiento más cercano de las facturas marcadas. Es la fecha de pago del pendiente en Tesorería.">Vence (fecha de pago)</label><input type="date" id="op-venc" value="${_opVencDefault(cands)}" onchange="opVencManual=true;_opChqVenc()"></div>
       <div style="flex:1;min-width:180px"><label>Observaciones</label><input id="op-obs" placeholder="opcional"></div>
     </div></div>
     <datalist id="dl-medios"><option>Transferencia</option><option>Cheque</option>
@@ -1449,13 +1449,13 @@ function _opToggleTodos(on){
   document.querySelectorAll('#prov-modal input[data-doc]').forEach(c => { c.checked = on; });
   opDocs = on ? opCands.map(c => c.documento_id) : [];
   const vi = document.getElementById('op-venc');
-  if (vi && !opVencManual) vi.value = _opVencDefault();
+  if (vi && !opVencManual){ vi.value = _opVencDefault(); opPagos.forEach(p => { if (_opEsCheque(p.medio)) _opChqSync(p, 'venc'); }); }
   _opCalcular();
 }
 function _opToggle(id, on){
   opDocs = on ? Array.from(new Set(opDocs.concat([id]))) : opDocs.filter(x => x !== id);
   const vi = document.getElementById('op-venc');
-  if (vi && !opVencManual) vi.value = _opVencDefault();
+  if (vi && !opVencManual){ vi.value = _opVencDefault(); opPagos.forEach(p => { if (_opEsCheque(p.medio)) _opChqSync(p, 'venc'); }); }
   _opCalcular();
 }
 
@@ -1602,12 +1602,42 @@ const _opSumPagos = () => opPagos.reduce((a,p) => a + (Number(p.importe)||0), 0)
 const _opEsCheque = m => /cheq|echeq/i.test(m||'');
 const _opEsEcheq  = m => /echeq|e-cheq|e cheq/i.test(m||'');
 // Cheque/Echeq: fecha de emisión + días de diferimiento → fecha de pago (22-sep, JP)
+// (v201, JP 10-nov) la fecha de pago del cheque es editable y arranca con el "Vence (fecha de pago)" de la OP:
+// los tres datos (emisión, días, fecha de pago) se mantienen de acuerdo. Si se toca a mano, deja de seguir a la OP.
+const _opMasDias = (f, n) => { const d = new Date(f + 'T12:00:00'); d.setDate(d.getDate() + (Number(n)||0)); return d.toISOString().slice(0,10); };
+const _opDifDias = (a, b) => Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
 function _opFechaPago(p){
-  if (p.cheque_emision && p.dias_diferimiento !== '' && p.dias_diferimiento != null){
-    const d = new Date(p.cheque_emision + 'T12:00:00'); d.setDate(d.getDate() + (Number(p.dias_diferimiento)||0));
-    return d.toISOString().slice(0,10);
+  if (p.cheque_fecha) return p.cheque_fecha;
+  if (p.cheque_emision && p.dias_diferimiento !== '' && p.dias_diferimiento != null) return _opMasDias(p.cheque_emision, p.dias_diferimiento);
+  return '';
+}
+function _opChqSync(p, origen){
+  if (origen === 'cheque_fecha'){
+    p._fpManual = true;
+    if (p.cheque_fecha && !p.cheque_emision) p.cheque_emision = document.getElementById('op-fecha')?.value || _hoyISO();
+    if (p.cheque_fecha && p.cheque_emision) p.dias_diferimiento = Math.max(0, _opDifDias(p.cheque_emision, p.cheque_fecha));
+  } else if (origen === 'dias_diferimiento'){
+    p._fpManual = true;
+    if (p.cheque_emision && p.dias_diferimiento !== '') p.cheque_fecha = _opMasDias(p.cheque_emision, p.dias_diferimiento);
+  } else if (origen === 'cheque_emision'){
+    if (!p.cheque_emision) return;
+    if (p._fpManual && p.dias_diferimiento !== '' && p.dias_diferimiento != null) p.cheque_fecha = _opMasDias(p.cheque_emision, p.dias_diferimiento);
+    else if (p.cheque_fecha) p.dias_diferimiento = Math.max(0, _opDifDias(p.cheque_emision, p.cheque_fecha));
+  } else if (origen === 'venc'){
+    if (p._fpManual) return;
+    const v = document.getElementById('op-venc')?.value; if (!v) return;
+    p.cheque_fecha = v;
+    if (!p.cheque_emision) p.cheque_emision = document.getElementById('op-fecha')?.value || _hoyISO();
+    if (p.cheque_emision > v) p.cheque_emision = v;
+    p.dias_diferimiento = _opDifDias(p.cheque_emision, v);
   }
-  return p.cheque_fecha || '';
+}
+// el "Vence" de la OP cambió: los cheques que no se tocaron a mano lo siguen
+function _opChqVenc(){
+  let alguno = false;
+  opPagos.forEach(p => { if (_opEsCheque(p.medio)){ _opChqSync(p, 'venc'); alguno = true; } });
+  if (alguno && document.getElementById('op-fpago-0') !== null) _opPintarPagos();
+  else if (alguno) { try { _opPintarPagos(); } catch (e) {} }
 }
 // Título con mayúscula inicial para mostrar (lo guardado se normaliza igual)
 const _opCap = m => { m = String(m||'').trim(); return m ? m.charAt(0).toUpperCase() + m.slice(1) : m; };
@@ -1659,9 +1689,9 @@ function _opPintarPagos(){
         ${_opEsCheque(p.medio) ? `
           ${_opEsEcheq(p.medio) ? '' : `<div style="width:110px"><label>N° cheque</label><input value="${esc(p.cheque_numero||'')}" oninput="_opPagoSet(${i},'cheque_numero',this.value)" style="font-size:12.5px;padding:5px 7px"></div>`}
           <div style="width:110px"><label>Banco</label><input value="${esc(p.cheque_banco||'')}" oninput="_opPagoSet(${i},'cheque_banco',this.value)" style="font-size:12.5px;padding:5px 7px"></div>
-          <div style="width:135px"><label>Fecha de emisión</label><input type="date" value="${esc(p.cheque_emision||'')}" onchange="_opPagoSet(${i},'cheque_emision',this.value)" style="font-size:12.5px;padding:5px 7px"></div>
-          <div style="width:95px"><label>Días difer.</label><input type="number" min="0" step="1" value="${p.dias_diferimiento ?? ''}" placeholder="30" oninput="_opPagoSet(${i},'dias_diferimiento',this.value)" style="font-size:12.5px;padding:5px 7px"></div>
-          <div style="width:120px"><label>Fecha de pago</label><div id="op-fpago-${i}" class="mini" style="padding:6px 0;font-weight:600">${_opFechaPago(p) ? _fecha(_opFechaPago(p)) : '—'}</div></div>
+          <div style="width:135px"><label>Fecha de emisión</label><input type="date" id="op-emi-${i}" value="${esc(p.cheque_emision||'')}" onchange="_opPagoSet(${i},'cheque_emision',this.value)" style="font-size:12.5px;padding:5px 7px"></div>
+          <div style="width:95px"><label>Días difer.</label><input type="number" id="op-dias-${i}" min="0" step="1" value="${p.dias_diferimiento ?? ''}" placeholder="30" oninput="_opPagoSet(${i},'dias_diferimiento',this.value)" style="font-size:12.5px;padding:5px 7px"></div>
+          <div style="width:135px"><label title="Arranca con el Vence (fecha de pago) de la orden. Si la cambiás, los días de diferimiento se recalculan solos; si cambiás los días, se recalcula esta fecha.">Fecha de pago</label><input type="date" id="op-fpago-${i}" value="${esc(_opFechaPago(p))}" min="${esc(p.cheque_emision||'')}" onchange="_opPagoSet(${i},'cheque_fecha',this.value)" style="font-size:12.5px;padding:5px 7px;font-weight:600"></div>
           ${_opEsEcheq(p.medio) ? `<div class="mini" style="width:100%;color:#64748b">El número del Echeq lo asigna el banco al emitirlo: no se carga acá.</div>` : ''}` : ''}
         ${opPagos.length>1 ? `<button class="act gh" onclick="_opPagoQuitar(${i})" title="Quitar este medio" style="padding:4px 8px">✕</button>` : ''}
       </div>`).join('')}
@@ -1678,9 +1708,11 @@ function _opPagoSet(i, campo, val){
   if (campo === 'importe') p.importe = Math.max(0, Number(String(val).replace(',', '.')) || 0);
   else if (campo === 'cuenta_id') p.cuenta_id = val ? Number(val) : null;
   else p[campo] = val;
-  if (campo === 'cheque_emision' || campo === 'dias_diferimiento'){
-    const f = document.getElementById('op-fpago-' + i); const fp = _opFechaPago(p);
-    if (f) f.textContent = fp ? _fecha(fp) : '—';
+  if (campo === 'cheque_emision' || campo === 'dias_diferimiento' || campo === 'cheque_fecha'){
+    _opChqSync(p, campo);
+    const pone = (id, v) => { const el = document.getElementById(id + i); if (el && document.activeElement !== el) el.value = v ?? ''; };
+    pone('op-fpago-', _opFechaPago(p)); pone('op-emi-', p.cheque_emision); pone('op-dias-', p.dias_diferimiento);
+    const fp = document.getElementById('op-fpago-' + i); if (fp) fp.min = p.cheque_emision || '';
   }
   if (campo === 'medio' || campo === 'importe'){
     // el medio decide si aparecen los campos del cheque; el importe mueve el "faltan"
@@ -1689,7 +1721,7 @@ function _opPagoSet(i, campo, val){
       // (8-oct, JP) si para ese medio hay una sola cuenta posible (Mercado Pago → MP Locales), queda elegida sola
       const l = _opCuentasPara(val);
       if ((val||'').trim() && l.length === 1 && p.cuenta_id !== l[0].id){ p.cuenta_id = l[0].id; _opPintarPagos(); return; }
-      if (era !== es || eraE !== esE) { _opPintarPagos(); return; }
+      if (era !== es || eraE !== esE) { if (es) _opChqSync(p, 'venc'); _opPintarPagos(); return; }
     }
     const d = document.getElementById('op-pagos-dif');
     if (d && opPagos.length > 1){
@@ -6658,6 +6690,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=116"></script>
+<script src="manual.js?v=117"></script>
 </body>
 </html>
