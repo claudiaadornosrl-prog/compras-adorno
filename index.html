@@ -645,7 +645,8 @@ main{padding:14px;max-width:1250px;margin:0 auto;}
 .pf-tabs .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#dc2626;margin-left:5px;vertical-align:middle;}
 .pf-tabs button.on .dot{background:#fff;}
 .pf-c .pf-sec{border:0;background:none;margin:0;}
-.pf-c .pf-sec>summary{pointer-events:none;padding:2px 4px 10px;font-size:14px;color:#9a3412;}
+.pf-c .pf-sec>summary{cursor:default;padding:2px 4px 10px;font-size:14px;color:#9a3412;}
+.pf-c .pf-sec>summary[title]{cursor:help;}
 .pf-c .pf-sec>summary .chev{display:none;}
 .pf-c .pf-sec .pf-body{padding:0 4px 4px;border:0;border-radius:0;}
 .pf-c .pf-g{padding-bottom:14px;margin-bottom:14px;border-bottom:1px dashed #e3dbd0;}
@@ -2170,7 +2171,25 @@ function _pfTabs(act){
   act = act || t.dataset.act || secs[0].id; t.dataset.act = act;
   t.innerHTML = secs.map(s => { const r = s.querySelector('.res'), k = s.id.replace('sec-','');
     return `<button type="button" class="${s.id === act ? 'on' : ''}" onclick="_pfTabs('${s.id}')" title="${_mEscP(r ? r.textContent : '')}">${_PF_TABS[k] || k}${r && r.classList.contains('warn') ? '<i class="dot"></i>' : ''}</button>`; }).join('');
-  secs.forEach(s => { s.open = true; s.style.display = s.id === act ? '' : 'none'; });
+  secs.forEach(s => { s.open = true; s.style.display = s.id === act ? '' : 'none'; const su = s.querySelector('summary'); if (su) su.onclick = e => e.preventDefault(); });
+}
+// (v205, JP 10-nov) los textos de ayuda de la ficha no se ven: pasan a nota emergente (title) del campo
+// o, si son la explicación de la pestaña, del título de la pestaña. Los íconos de ayuda (ⓘ) se conservan.
+function _pfNotas(){
+  document.querySelectorAll('#prov-modal .pf-c .pf-body .hint').forEach(h => {
+    if (h.closest('#pf-ret, #pf-arca, #pf-contactos, #pf-descuentos')) return;   // contenido que se carga solo, no es ayuda
+    const propios = [...h.childNodes].filter(n => n.nodeType === 3);
+    const txt = propios.map(n => n.textContent).join(' ').replace(/\s+/g, ' ').trim();
+    if (!txt) return;
+    const lab = h.closest('label');
+    if (lab){
+      lab.title = txt; lab.querySelectorAll('input,select,textarea').forEach(e => { if (!e.title) e.title = txt; });
+      h.style.display = 'none';
+    } else {
+      const su = h.closest('details')?.querySelector('summary'); if (su) su.title = txt;
+      if (h.children.length) propios.forEach(n => n.remove()); else h.style.display = 'none';
+    }
+  });
 }
 // (v135) meses desde una fecha (para la antigüedad de la constancia de ARCA)
 const _mesesDesde = d => d ? (Date.now() - new Date(d).getTime()) / 2592000000 : null;
@@ -2383,7 +2402,7 @@ async function fichaProveedor(i){
       <button class="btn primary" onclick="guardarFichaProveedor('${_mEscP(p.codigo)}','${_mEscP(p.cuit||'')}')">${ico('guardar','s')} Guardar</button>
     </div>
     </div>`);
-  _pfTabs('sec-datos');
+  _pfTabs('sec-datos'); _pfNotas();
   if (ivaDif) _resP('datos', document.getElementById('res-datos').textContent, false, true);
   // 4) mail para la OP: es el dato que traba algo
   if (!p.es_exterior && !(p.email_op || '').trim()) _resP('empresa', 'falta mail para la OP', false, true);
@@ -6728,6 +6747,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=120"></script>
+<script src="manual.js?v=121"></script>
 </body>
 </html>
