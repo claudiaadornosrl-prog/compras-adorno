@@ -695,13 +695,20 @@ main{padding:14px;max-width:1250px;margin:0 auto;}
 .le-hd .kpi{border:0;border-radius:16px;background:rgba(255,255,255,.88)}
 .le-hd .kpi .val{color:#9a3412}
 .le-tabs{display:flex;gap:4px;align-items:flex-end;flex-wrap:wrap;border-bottom:2px solid #fde7d2;padding:0 6px}
-.le-tabs button{border:0;background:none;font:inherit;font-weight:700;font-size:13.5px;color:#857b70;padding:10px 16px;border-radius:14px 14px 0 0;cursor:pointer;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
-.le-tabs button:hover{background:#fff7ed;color:#9a3412}
-.le-tabs button.on{background:var(--primary);color:#fff}
-.le-tabs button i{font-style:normal;font-size:11.5px;opacity:.85}
-.le-tabs button.av i{background:#fcd34d;color:#5c3b00;border-radius:999px;padding:0 7px;opacity:1}
+.le-tabs button[data-k]{border:0;background:none;font:inherit;font-weight:700;font-size:13.5px;color:#857b70;padding:10px 16px;border-radius:14px 14px 0 0;cursor:pointer;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.le-tabs button[data-k]:hover{background:#fff7ed;color:#9a3412}
+.le-tabs button[data-k].on{background:var(--primary);color:#fff}
+.le-tabs button[data-k] i{font-style:normal;font-size:11.5px;opacity:.85}
+.le-tabs button[data-k].av i{background:#fcd34d;color:#5c3b00;border-radius:999px;padding:0 7px;opacity:1}
 .le-tabs .le-q{flex:1;min-width:200px;max-width:360px;margin:0 0 6px auto;padding:7px 14px}
 .card.le-pan{border-radius:0 0 16px 16px;border-top:0}
+/* (v210) Gestión y Cuenta corriente con el mismo estilo */
+.le-hd input[type=search],.le-hd input[type=text]{border-radius:999px !important;border:1.5px solid #e3dbd0;background:#fff}
+.le-bar{background:#f3e7da;border-radius:999px;height:8px;margin:6px 0 2px;overflow:hidden}
+.le-bar i{display:block;height:8px;border-radius:999px;background:var(--primary)}
+.le-cc{align-items:center;gap:8px;padding-bottom:0}
+.le-cc button[data-k]{align-self:flex-end}
+.le-cc>.fchip,.le-cc>input,.le-cc>span{margin-bottom:6px}
 .le-pan thead th{background:#fff7ed;color:#9a3412}
 .le-pan tbody tr:nth-child(even){background:#fcfaf7}
 .le-pan tfoot tr{background:#fff7ed !important}
@@ -4145,17 +4152,27 @@ async function cargarCuentaCorriente(){
 let LIST_CCC = null, CC_VISTA = 'proveedores';
 function _ccVistaChips(){
   const n = (LIST_CCC || []).filter(x => Math.abs(Number(x.saldo)) >= 0.5).length;
-  return `<span style="display:inline-flex;gap:4px;margin-right:6px">
-    <button class="fchip ${CC_VISTA === 'proveedores' ? 'on' : ''}" type="button" onclick="CC_VISTA='proveedores';_pintarCuentaCorriente()" title="Lo que le debemos a los proveedores">${ico('edificio','s')} Proveedores</button>
-    <button class="fchip ${CC_VISTA === 'clientes' ? 'on' : ''}" type="button" onclick="CC_VISTA='clientes';_pintarCuentaCorriente()" title="Lo que nos deben los clientes (cuenta corriente del Dragonfish)">${ico('cliente','s')} Clientes${n ? ` <b>${n}</b>` : ''}</button></span>`;
+  const np = (LIST_CC || []).filter(x => Math.abs(Number(x.saldo)) >= 0.5).length;
+  return `<button type="button" data-k="proveedores" class="${CC_VISTA === 'proveedores' ? 'on' : ''}" onclick="CC_VISTA='proveedores';_pintarCuentaCorriente()" title="Lo que le debemos a los proveedores">${ico('edificio','s')} Proveedores <i>${np}</i></button>
+    <button type="button" data-k="clientes" class="${CC_VISTA === 'clientes' ? 'on' : ''}" onclick="CC_VISTA='clientes';_pintarCuentaCorriente()" title="Lo que nos deben los clientes (cuenta corriente del Dragonfish)">${ico('cliente','s')} Clientes <i>${n}</i></button>`;
+}
+// (v210, JP 10-nov) cabecera de la cuenta corriente: los cuatro totales, siempre a la vista
+function _ccCab(){
+  const P = (LIST_CC || []).filter(x => Math.abs(Number(x.saldo)) >= 0.5), C = (LIST_CCC || []).filter(x => Math.abs(Number(x.saldo)) >= 0.5);
+  const sp = P.reduce((a, x) => a + (Number(x.saldo) || 0), 0), sc = C.reduce((a, x) => a + (Number(x.saldo) || 0), 0);
+  return `<div class="le-hd"><div class="kpis" style="margin-top:0">
+      <div class="kpi"><div class="lbl">Les debemos</div><div class="val" style="color:#991b1b">${platac(sp)}</div><div class="sub">a ${P.length} proveedor${P.length === 1 ? '' : 'es'}</div></div>
+      <div class="kpi"><div class="lbl">Facturas sin pagar</div><div class="val">${P.reduce((a, x) => a + (Number(x.facturas_pend) || 0), 0)}</div><div class="sub">de proveedores</div></div>
+      <div class="kpi"><div class="lbl">Nos deben</div><div class="val" style="color:#166534">${platac(sc)}</div><div class="sub">${C.length} cliente${C.length === 1 ? '' : 's'} · según el Dragonfish</div></div>
+      <div class="kpi"><div class="lbl">Diferencia</div><div class="val">${platac(sc - sp)}</div><div class="sub">nos deben − les debemos</div></div>
+    </div></div>`;
 }
 function _pintarCCClientes(c){
   const q = CC_BUSCA.trim().toLowerCase();
   const L = (LIST_CCC || []).filter(x => (!CC_SOLO_SALDO || Math.abs(Number(x.saldo)) >= 0.5) && (!q || [x.nombre, x.cuit, x.cliente_codigo].join(' ').toLowerCase().includes(q)));
   const tot = L.reduce((a, x) => a + (Number(x.saldo) || 0), 0);
   const sync = (LIST_CCC || []).reduce((a, x) => x.sync_at > a ? x.sync_at : a, '');
-  c.innerHTML = `<div class="card">
-    <div class="abar" style="margin-bottom:10px">
+  c.innerHTML = `${_ccCab()}<div class="le-tabs le-cc">
       ${_ccVistaChips()}
       <span class="fchip" style="cursor:default"><b>${L.length}</b> cliente${L.length === 1 ? '' : 's'} <span class="mini">· nos deben <b style="color:#991b1b">${plata(tot)}</b></span></span>
       <button class="fchip ${CC_SOLO_SALDO ? 'on' : ''}" type="button" onclick="CC_SOLO_SALDO=!CC_SOLO_SALDO;_pintarCuentaCorriente()" title="Ocultar los clientes con saldo cero">${ico('ojo','s')} ${CC_SOLO_SALDO ? 'Solo con saldo' : 'Todos'}</button>
@@ -4164,7 +4181,7 @@ function _pintarCCClientes(c){
       ${ayuda('Es la cuenta corriente de clientes del Dragonfish (facturas a cuenta corriente menos recibos), tal como la imputa administración allá. Saldo positivo = nos deben; negativo = pagaron de más o anticiparon. Se actualiza una vez por día desde la base de Oficina (puede tener un día de atraso). Acá solo se consulta: los cobros y las imputaciones se cargan en el Dragonfish.')}
       ${sync ? `<span class="mini" title="Última lectura del Dragonfish">${ico('refrescar','s')} ${_fechaTs(sync)}</span>` : ''}
     </div>
-    ${!L.length ? `<div class="vacio">${LIST_CCC && LIST_CCC.length ? 'Ningún cliente con saldo.' : 'Todavía no se leyó la cuenta corriente del Dragonfish (corre con el sync diario de mercadería).'}</div>` : `<div style="overflow-x:auto"><table class="tb-band">
+    <div class="card le-pan">${!L.length ? `<div class="vacio">${LIST_CCC && LIST_CCC.length ? 'Ningún cliente con saldo.' : 'Todavía no se leyó la cuenta corriente del Dragonfish (corre con el sync diario de mercadería).'}</div>` : `<div style="overflow-x:auto"><table class="tb-band">
       <thead><tr><th>Cliente</th><th>CUIT</th><th class="num" title="Facturas con saldo sin imputar">Fact. abiertas</th><th class="num">Saldo</th><th>Última factura</th><th>Último recibo</th><th class="num" title="Facturado a cuenta corriente en los últimos 12 meses">Fact. 12 m</th><th></th></tr></thead>
       <tbody>${L.map(x => `<tr onclick="abrirCCCliente('${esc(x.cliente_codigo)}')" title="Ver los movimientos">
         <td class="prov"><div class="prov-cel"><span class="prov-nom"><strong>${esc(x.nombre || x.cliente_codigo)}</strong></span> <code class="mini" style="background:#f1f5f9;padding:1px 5px;border-radius:5px">${esc(x.cliente_codigo)}</code></div></td>
@@ -4206,8 +4223,7 @@ function _pintarCuentaCorriente(){
   const q = CC_BUSCA.trim().toLowerCase();
   const L = LIST_CC.filter(x => (!CC_SOLO_SALDO || Math.abs(Number(x.saldo)) >= 0.5) && (!q || [x.nombre, x.cuit, x.sku].join(' ').toLowerCase().includes(q)));
   const tot = L.reduce((a, x) => a + (Number(x.saldo) || 0), 0);
-  c.innerHTML = `<div class="card">
-    <div class="abar" style="margin-bottom:10px">
+  c.innerHTML = `${_ccCab()}<div class="le-tabs le-cc">
       ${_ccVistaChips()}
       <span class="fchip" style="cursor:default"><b>${L.length}</b> proveedor${L.length === 1 ? '' : 'es'} <span class="mini">· debemos <b style="color:#991b1b">${plata(tot)}</b></span></span>
       <button class="fchip ${CC_SOLO_SALDO ? 'on' : ''}" type="button" onclick="CC_SOLO_SALDO=!CC_SOLO_SALDO;_pintarCuentaCorriente()" title="Ocultar los proveedores con saldo cero">${ico('ojo','s')} ${CC_SOLO_SALDO ? 'Solo con saldo' : 'Todos'}</button>
@@ -4215,7 +4231,7 @@ function _pintarCuentaCorriente(){
              oninput="CC_BUSCA=this.value;clearTimeout(window._ccT);window._ccT=setTimeout(()=>{const p=this.selectionStart;_pintarCuentaCorriente();const i=document.querySelector('#list-cc input[type=search]');if(i){i.focus();try{i.setSelectionRange(p,p);}catch(_){}}},350)">
       ${ayuda('Saldo = facturas contabilizadas (más notas de débito, menos notas de crédito) que todavía no están pagadas. Un pago es una orden de pago PAGADA; la emitida sin pagar se ve en el detalle pero no descuenta. Lo arma el módulo con sus propios datos, no se lee del Dragonfish.')}
     </div>
-    ${!L.length ? '<div class="vacio">Ningún proveedor con saldo.</div>' : `<div style="overflow-x:auto"><table class="tb-band">
+    <div class="card le-pan">${!L.length ? '<div class="vacio">Ningún proveedor con saldo.</div>' : `<div style="overflow-x:auto"><table class="tb-band">
       <thead><tr><th>Proveedor</th><th>CUIT</th><th class="num">Facturas pend.</th><th class="num">Saldo</th><th>Última factura</th><th>Último pago</th><th class="num" title="Pagado en los últimos 12 meses (OPs del módulo)">Pagado 12 m</th><th></th></tr></thead>
       <tbody>${L.map(x => `<tr onclick="abrirCC('${esc(x.cuit)}')" title="Ver el detalle de la cuenta">
         <td class="prov"><div class="prov-cel"><span class="prov-nom"><strong>${esc(x.nombre || x.cuit)}</strong></span>${x.sku ? ` <code class="mini" style="background:#f1f5f9;padding:1px 5px;border-radius:5px">${esc(x.sku)}</code>` : ''}</div></td>
@@ -5015,37 +5031,47 @@ function _listGestion(){
   const tipos = Object.keys(TIPOS).filter(t => porTipo[t]);
   const top = Object.entries(porProv).sort((a,b)=>b[1]-a[1]).slice(0,25);
 
-  return `<div class="card">${barraFiltros()}</div>
-  <div class="card">
-    <h3 style="font-size:15px;margin-bottom:11px">Por tipo de gasto · ${filtro.anio}</h3>
-    <table><tbody>${tipos.map(t => `<tr>
-        <td><span class="chip c-${t}">${TIPOS[t]}</span></td>
-        <td class="num"><b>${platac(porTipo[t])}</b></td>
-        <td class="num mini">${(porTipo[t]/total*100).toFixed(1)}%</td>
-        <td style="width:45%"><div style="background:#f1f5f9;border-radius:6px;height:12px">
-          <div style="background:var(--primary);height:12px;border-radius:6px;width:${(porTipo[t]/total*100).toFixed(1)}%"></div></div></td>
-      </tr>`).join('')}
-      <tr><td><b>Total</b></td><td class="num"><b>${platac(total)}</b></td><td colspan="2"></td></tr>
-    </tbody></table>
+  // (v210, JP 10-nov) mismo estilo que "Para el estudio": cabecera con filtros y totales, y un cuadro por pestaña
+  const totReal = Object.values(porTipo).reduce((a,b)=>a+b, 0);
+  const pct = v => (v / total * 100).toFixed(1);
+  const meses = Object.keys(porMes).sort();
+  if (!['mes','top'].includes(LG_TAB)) LG_TAB = 'mes';
+  return `<div class="le-hd"><div class="le-per">${barraFiltros()}</div>
+    <div class="kpis">
+      <div class="kpi"><div class="lbl">Total comprado · ${filtro.anio}</div><div class="val">${platac(totReal)}</div>
+        <div class="sub">${f.length} comprobante${f.length === 1 ? '' : 's'}</div></div>
+      ${tipos.map(t => `<div class="kpi"><div class="lbl"><span class="chip c-${t}">${TIPOS[t]}</span></div>
+        <div class="val">${platac(porTipo[t])}</div>
+        <div class="le-bar"><i style="width:${pct(porTipo[t])}%"></i></div>
+        <div class="sub">${pct(porTipo[t])} % del total</div></div>`).join('')}
+    </div>
   </div>
-  <div class="card">
-    <h3 style="font-size:15px;margin-bottom:11px">Mes a mes</h3>
-    <div style="overflow-x:auto"><table>
+  <div class="le-tabs">
+    <button type="button" data-k="mes" class="${LG_TAB === 'mes' ? 'on' : ''}" onclick="LG_TAB='mes';render()">${ico('barras','s')} Mes a mes <i>${meses.length}</i></button>
+    <button type="button" data-k="top" class="${LG_TAB === 'top' ? 'on' : ''}" onclick="LG_TAB='top';render()">${ico('edificio','s')} Top proveedores <i>${top.length}</i></button>
+  </div>
+  ${LG_TAB === 'mes' ? `<div class="card le-pan">
+    ${meses.length ? `<div style="overflow-x:auto"><table>
       <thead><tr><th>Mes</th>${tipos.map(t=>`<th class="num">${TIPOS[t]}</th>`).join('')}<th class="num">Total</th></tr></thead>
-      <tbody>${Object.keys(porMes).sort().map(m => {
+      <tbody>${meses.map(m => {
         const fila = porMes[m], tot = Object.values(fila).reduce((a,b)=>a+b,0);
         return `<tr><td>${MESES[+m-1]||m}</td>
           ${tipos.map(t=>`<td class="num">${fila[t]?platac(fila[t]):'—'}</td>`).join('')}
           <td class="num"><b>${platac(tot)}</b></td></tr>`;
-      }).join('')}</tbody></table></div>
-  </div>
-  <div class="card">
-    <h3 style="font-size:15px;margin-bottom:11px">Top proveedores</h3>
-    <table><tbody>${top.map(([p,v],i) => `<tr>
+      }).join('')}</tbody>
+      <tfoot><tr style="font-weight:700"><td>Total</td>${tipos.map(t=>`<td class="num">${platac(porTipo[t])}</td>`).join('')}<td class="num">${platac(totReal)}</td></tr></tfoot>
+    </table></div>` : '<div class="vacio">No hay comprobantes con esos filtros.</div>'}
+  </div>` : `<div class="card le-pan">
+    ${top.length ? `<div style="overflow-x:auto"><table>
+      <thead><tr><th style="width:36px">#</th><th>Proveedor</th><th class="num">Comprado</th><th class="num">%</th><th style="width:32%"></th></tr></thead>
+      <tbody>${top.map(([p,v],i) => `<tr>
       <td class="mini">${i+1}</td><td>${esc(p)}</td><td class="num"><b>${platac(v)}</b></td>
-      <td class="num mini">${(v/total*100).toFixed(1)}%</td></tr>`).join('')}</tbody></table>
-  </div>`;
+      <td class="num mini">${pct(v)}%</td>
+      <td><div class="le-bar"><i style="width:${(v / (top[0][1] || 1) * 100).toFixed(1)}%"></i></div></td></tr>`).join('')}</tbody></table></div>`
+      : '<div class="vacio">No hay comprobantes con esos filtros.</div>'}
+  </div>`}`;
 }
+let LG_TAB = 'mes';
 
 // ── ⚙️ RETENCIONES Y PERCEPCIONES: los parámetros los pone JP ──────────
 // El módulo propone con estos valores; en cada orden de pago se pueden pisar.
@@ -6856,6 +6882,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=123"></script>
+<script src="manual.js?v=124"></script>
 </body>
 </html>
