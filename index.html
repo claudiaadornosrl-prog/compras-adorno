@@ -566,6 +566,15 @@ table.tb-band td.oculta-mov{white-space:nowrap}
 table.tb-band td.prov{max-width:260px}
 table.tb-band .prov-nom{display:inline-block;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
 table.tb-band td.ctr{text-align:center}
+/* (v207, JP 10-nov) lista de proveedores: el nombre se acorta con … y el SKU y los íconos no se pisan con el CUIT */
+table.tb-band td.prov.prov-x{max-width:380px;overflow:hidden}
+table.tb-band .prov-cel{display:flex;align-items:center;gap:5px;min-width:0}
+table.tb-band .prov-cel>*{flex:none}
+table.tb-band .prov-cel>.prov-nom{flex:0 1 auto;min-width:60px;max-width:none}
+/* (v207, JP 10-nov) todos los íconos se animan al hacerles clic */
+@keyframes ico-clic{0%{transform:scale(1)}30%{transform:scale(.72) rotate(-10deg)}65%{transform:scale(1.22) rotate(6deg)}100%{transform:scale(1) rotate(0)}}
+svg.ico-clic{animation:ico-clic .42s cubic-bezier(.3,1.5,.5,1) both;transform-origin:center;transform-box:fill-box}
+@media (prefers-reduced-motion:reduce){svg.ico-clic{animation:none}}
 .chip.tletra{font-weight:800;padding:2px 8px;cursor:help;min-width:26px;display:inline-block;text-align:center}
 .eico{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;cursor:help}
 a.nro{color:var(--tx);font-weight:600;text-decoration:none;border-bottom:1px dotted var(--mut)}
@@ -2146,13 +2155,13 @@ function pintarProveedores(){
       <th>Proveedor</th><th>CUIT</th><th class="num">Facturas</th><th class="num">Total comprado</th>
       <th>Última</th><th class="num" title="Cuenta corriente: facturas contabilizadas que todavía no se pagaron (las notas de crédito restan)">Saldo CC</th><th>Condición de pago</th><th class="ctr">Contacto</th><th class="ctr" title="Ficha completa">Ficha</th></tr></thead><tbody>
     ${lista.map(p => { const i = _provCache.indexOf(p); return `<tr onclick="fichaProveedor(${i})" title="Abrir la ficha del proveedor">
-      <td class="prov" style="white-space:nowrap"><span class="prov-nom" title="${p.nombre_propio && p.nombre_propio !== p.nombre ? 'En el Dragonfish: ' + _mEscP(p.nombre) : ''}"><strong>${_mEscP(_provNom(p))}</strong></span>${p.sku ? ` <code class="mini" title="SKU del proveedor" style="background:#f1f5f9;padding:1px 5px;border-radius:5px">${_mEscP(p.sku)}</code>` : ''}
+      <td class="prov prov-x"><div class="prov-cel"><span class="prov-nom" title="${p.nombre_propio && p.nombre_propio !== p.nombre ? 'En el Dragonfish: ' + _mEscP(p.nombre) : ''}"><strong>${_mEscP(_provNom(p))}</strong></span>${p.sku ? ` <code class="mini" title="SKU del proveedor" style="background:#f1f5f9;padding:1px 5px;border-radius:5px">${_mEscP(p.sku)}</code>` : ''}
         ${_provEsMerc(p) ? `<span class="eico" style="background:#dcfce7;color:#166534" title="Le compramos mercadería${p.compra_mercaderia == null ? ' (automático)' : ''}: aparece al armar pedidos">${ico('camion','s')}</span>` : ''}
         ${p.es_exterior ? `<span class="eico" style="background:#ede9fe;color:#5b21b6" title="Proveedor del exterior">${ico('mundo','s')}</span>` : ''}
         ${p.origen === 'manual' ? `<span class="eico" style="color:#475569" title="Creado a mano en el módulo">${ico('mano','s')}</span>` : ''}
         ${!p.activo ? `<span class="eico" style="background:#fee2e2;color:#991b1b" title="Inactivo">${ico('apagado','s')}</span>` : ''}
         ${p.copias_mismo_cuit > 1 ? `<span class="eico" style="background:#fef3c7;color:#b45309" title="Dragonfish tiene ${p.copias_mismo_cuit} fichas con este mismo CUIT: cargá los datos en una sola">${ico('alerta','s')}</span>` : ''}
-      </td>
+      </div></td>
       <td style="font-variant-numeric:tabular-nums;white-space:nowrap">${_mEscP(p.cuit || '—')}
         ${p.arca ? (p.arca.vigente === true ? `<span class="eico" title="ARCA: CUIT vigente" style="background:#dcfce7;color:#166534">${ico('ok','s')}</span>`
                    : `<span class="eico" title="ARCA: ${_mEscP(p.arca.estado_clave || p.arca.error || 'sin dato')}" style="background:#fee2e2;color:#991b1b">${ico('alerta','s')}</span>`) : ''}</td>
@@ -2167,6 +2176,17 @@ function pintarProveedores(){
       <td class="ctr">${p.tiene_ficha ? `<span class="eico" style="color:var(--ok)" title="Ficha completa">${ico('ok','s')}</span>` : `<span class="eico" style="color:var(--mut)" title="Ficha sin completar">${ico('circulo','s')}</span>`}</td>
     </tr>`; }).join('')}</tbody></table>`}`;
 }
+
+// (v207, JP 10-nov) animación de TODOS los íconos al hacerles clic: se dispara al apretar (pointerdown),
+// así se ve aunque el clic repinte la pantalla. Toma el ícono tocado o el del botón / chip / pestaña que lo contiene.
+document.addEventListener('pointerdown', ev => {
+  const t = ev.target; if (!t || !t.closest) return;
+  let svg = t.closest('svg');
+  if (!svg){ const caja = t.closest('button, a, .eico, .fchip, summary, label.c-tog, [onclick]'); svg = caja && caja.tagName !== 'TR' ? caja.querySelector('svg') : null; }
+  if (!svg || svg.closest('.girar, .reloj')) return;
+  svg.classList.remove('ico-clic'); void svg.getBoundingClientRect(); svg.classList.add('ico-clic');
+  setTimeout(() => svg.classList.remove('ico-clic'), 480);
+}, true);
 
 // ── Helpers de contacto: links directos a WhatsApp y mail ──
 function _waLink(tel){
