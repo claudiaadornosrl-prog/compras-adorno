@@ -629,6 +629,38 @@ main{padding:14px;max-width:1250px;margin:0 auto;}
 #prov-modal .pf-aviso{background:#fef3c7;color:#92400e;border-left:3px solid #d97706;border-radius:6px;padding:7px 10px;font-size:12.5px;margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 .pf-sec .pf-body{padding:8px 12px 12px;background:#fff;border-top:1px solid var(--bd);border-radius:0 0 10px 10px;}
 .pf-sec .hint{font-size:12px;color:var(--mut);line-height:1.5;}
+/* (v200, JP 10-nov) ficha del proveedor "opción C": cabecera naranja suave + apartados como pestañas en pastilla + grupos */
+.pf-c .pf-hd{background:linear-gradient(135deg,#fff7ed,#fde7d2);color:#7c2d12;border-radius:18px;padding:16px 18px;margin-bottom:10px;}
+.pf-c .pf-hd h3{margin:0 0 3px;font-size:19px;color:#7c2d12;}
+.pf-c .pf-hd .hint{color:#9a3412;font-size:12.5px;margin-bottom:9px;}
+.pf-c .pf-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.pf-c .pf-chip{padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:#fff;color:#7c2d12;white-space:nowrap;}
+.pf-c .pf-chip.rojo{background:#fde2e2;color:#a11d1d;}
+.pf-c .pf-chip.amb{background:#fef0c7;color:#8a5a00;}
+.pf-c .pf-hd .btn{border-radius:999px !important;border-color:transparent !important;}
+.pf-tabs{display:flex;flex-wrap:wrap;gap:4px 6px;padding:8px;background:#fdf1e4;border-radius:24px;margin-bottom:12px;position:sticky;top:-20px;z-index:3;}
+.pf-tabs button{border:0;background:none;font:inherit;font-size:13px;font-weight:700;color:#9a3412;padding:7px 15px;border-radius:999px;cursor:pointer;white-space:nowrap;}
+.pf-tabs button:hover{background:#fbe3cb;}
+.pf-tabs button.on{background:var(--primary);color:#fff;}
+.pf-tabs .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#dc2626;margin-left:5px;vertical-align:middle;}
+.pf-tabs button.on .dot{background:#fff;}
+.pf-c .pf-sec{border:0;background:none;margin:0;}
+.pf-c .pf-sec>summary{pointer-events:none;padding:2px 4px 10px;font-size:14px;color:#9a3412;}
+.pf-c .pf-sec>summary .chev{display:none;}
+.pf-c .pf-sec .pf-body{padding:0 4px 4px;border:0;border-radius:0;}
+.pf-c .pf-g{padding-bottom:14px;margin-bottom:14px;border-bottom:1px dashed #e3dbd0;}
+.pf-c .pf-g:last-child{border:0;margin-bottom:0;padding-bottom:0;}
+.pf-c .pf-g>h4{margin:0 0 10px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--primary);display:flex;align-items:center;gap:8px;}
+.pf-c .pf-g>h4:after{content:"";flex:1;height:2px;background:#fde7d2;border-radius:2px;}
+.pf-c .pf-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;}
+.pf-c label{font-size:12.5px;font-weight:700;color:#5c544c;}
+.pf-c input:not([type=checkbox]),.pf-c select{border-radius:999px !important;background-color:#faf7f3 !important;border-color:#e3dbd0 !important;padding-left:14px !important;margin-top:3px;}
+.pf-c textarea{border-radius:16px !important;background:#faf7f3 !important;border-color:#e3dbd0 !important;}
+.pf-c input:focus,.pf-c select:focus,.pf-c textarea:focus{outline:2px solid #fdba74;background-color:#fff !important;}
+.pf-c .btn{border-radius:999px !important;}
+.pf-c .pf-fila{border-radius:16px !important;background:#faf7f3 !important;}
+.pf-c .pf-pie{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:14px;position:sticky;bottom:-20px;background:#fff;padding:10px 0;border-top:1px solid #eee6dc;z-index:3;}
+@media(max-width:600px){.pf-c .pf-grid{grid-template-columns:1fr;}}
 /* (v137) ficha de equivalencia: tres bloques, títulos con ℹ, botón + a la derecha del renglón */
 .eq-sec{border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fff;}
 .eq-sec h4{margin:0 0 8px;font-size:13.5px;display:flex;align-items:center;gap:7px;}
@@ -2058,7 +2090,18 @@ const _h4P = t => `<h4 style="margin:18px 0 8px;font-size:13px;letter-spacing:.4
 // (v133) apartado plegable de la ficha: título + resumen a la derecha (se actualiza con _resP)
 const _secP = (id, icon, titulo, resumen, body, abierto) =>
   `<details class="pf-sec" id="sec-${id}" ${abierto ? 'open' : ''}><summary>${ico('chevron','s chev')}${ico(icon,'s')} ${titulo}<span class="res" id="res-${id}">${resumen}</span></summary><div class="pf-body">${body}</div></details>`;
-function _resP(id, txt, ok, warn){ const r = document.getElementById('res-'+id); if (r){ r.textContent = txt; r.classList.toggle('ok', !!ok && !warn); r.classList.toggle('warn', !!warn); } }
+function _resP(id, txt, ok, warn){ const r = document.getElementById('res-'+id); if (r){ r.textContent = txt; r.classList.toggle('ok', !!ok && !warn); r.classList.toggle('warn', !!warn); } _pfTabs(); }
+// (v200, JP 10-nov) los apartados de la ficha se ven como pestañas: uno por vez; punto rojo si el resumen avisa algo.
+// Los campos de las pestañas ocultas siguen en la página, así que Guardar y el aviso de cambios funcionan igual.
+const _PF_TABS = { datos:'Datos comerciales', empresa:'Contacto', personas:'Personas', pedidos:'Pedidos', descuentos:'Descuentos', ret:'Retenciones', notas:'Notas', arca:'ARCA' };
+function _pfTabs(act){
+  const t = document.getElementById('pf-tabs'); if (!t) return;
+  const secs = [...document.querySelectorAll('#prov-modal .pf-c details.pf-sec')]; if (!secs.length) return;
+  act = act || t.dataset.act || secs[0].id; t.dataset.act = act;
+  t.innerHTML = secs.map(s => { const r = s.querySelector('.res'), k = s.id.replace('sec-','');
+    return `<button type="button" class="${s.id === act ? 'on' : ''}" onclick="_pfTabs('${s.id}')" title="${_mEscP(r ? r.textContent : '')}">${_PF_TABS[k] || k}${r && r.classList.contains('warn') ? '<i class="dot"></i>' : ''}</button>`; }).join('');
+  secs.forEach(s => { s.open = true; s.style.display = s.id === act ? '' : 'none'; });
+}
 // (v135) meses desde una fecha (para la antigüedad de la constancia de ARCA)
 const _mesesDesde = d => d ? (Date.now() - new Date(d).getTime()) / 2592000000 : null;
 // (v135) CBU: 22 dígitos y dos dígitos verificadores (módulo 10, pesos 7-1-3-9)
@@ -2152,13 +2195,23 @@ async function fichaProveedor(i){
   // (v135) ARCA ↔ ficha: la condición de IVA que informa ARCA vs la cargada
   const ivaDif = !!(p.arca && p.arca.cond_iva && !p.es_exterior && p.arca.cond_iva !== (p.cond_iva || ''));
   openModalP(`
-    <h3 style="margin:0 0 4px;">🏢 ${_mEscP(_provNom(p))}${p.sku ? ` <code style="font-size:13px;background:#f1f5f9;padding:2px 7px;border-radius:6px;margin-left:6px">${_mEscP(p.sku)}</code>` : ''}</h3>
-    <div class="hint" style="margin-bottom:8px;">
-      ${p.cuit ? 'CUIT ' + _mEscP(p.cuit) : '<em>sin CUIT</em>'} · código ${_mEscP(p.codigo)}${Number(p.saldo_cc) ? ` · saldo CC ${_saldoChip(p.saldo_cc)}` : ''} ·
+    <div class="pf-c">
+    <div class="pf-hd">
+    <h3>${_mEscP(_provNom(p))}${p.sku ? ` <code style="font-size:13px;background:#fff;padding:2px 9px;border-radius:999px;margin-left:6px">${_mEscP(p.sku)}</code>` : ''}</h3>
+    <div class="hint">
+      ${p.cuit ? 'CUIT ' + _mEscP(p.cuit) : '<em>sin CUIT</em>'} · código ${_mEscP(p.codigo)} ·
       ${p.origen === 'dragonfish' ? 'viene de Dragonfish' : 'cargado a mano'}
       ${p.facturas ? ` · ${p.facturas} facturas por ${_fmtP(p.total_comprado)}` : ' · todavía sin facturas cargadas'}
     </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">${_contactoLinks({ whatsapp: p.whatsapp, telefono: p.telefono || p.df_telefono, email: p.email || p.email_op || p.df_email })}</div>
+    <div class="pf-chips">
+      ${Number(p.saldo_cc) ? `<span class="pf-chip rojo">Saldo CC ${_fmtP(p.saldo_cc)}</span>` : ''}
+      ${p.condicion_pago ? `<span class="pf-chip">Paga a ${_mEscP(p.condicion_pago)}</span>` : ''}
+      ${p.cond_iva ? `<span class="pf-chip">${_mEscP(_condIvaTxt[p.cond_iva] || p.cond_iva)}</span>` : ''}
+      ${!p.es_exterior && !(p.email_op || '').trim() ? '<span class="pf-chip amb">Falta mail para la OP</span>' : ''}
+      ${_contactoLinks({ whatsapp: p.whatsapp, telefono: p.telefono || p.df_telefono, email: p.email || p.email_op || p.df_email })}
+    </div>
+    </div>
+    <div class="pf-tabs" id="pf-tabs"></div>
 
     ${_secP('datos', 'tarjeta', 'Datos comerciales',
       ivaDif ? `⚠ IVA: ARCA dice ${_mEscP(_condIvaTxt[p.arca.cond_iva] || p.arca.cond_iva)}` :
@@ -2166,43 +2219,49 @@ async function fichaProveedor(i){
     <div class="hint" style="margin-bottom:10px;">Lo que el módulo necesita para pagarle y para los listados del estudio. Si no lo tenés, dejalo vacío: se puede completar después.</div>
     ${ivaDif ? `<div class="pf-aviso" id="pf-iva-aviso">${ico('alerta','s')} La ficha dice <b>${_mEscP(_condIvaTxt[p.cond_iva] || p.cond_iva || 'sin definir')}</b> pero ARCA informa <b>${_mEscP(_condIvaTxt[p.arca.cond_iva] || p.arca.cond_iva)}</b>. Impacta en retenciones y Libro IVA.
       <button class="btn" type="button" onclick="document.getElementById('pf-iva').value='${_mEscP(p.arca.cond_iva)}';document.getElementById('pf-iva').dispatchEvent(new Event('change'));this.closest('.pf-aviso').remove();_resP('datos','IVA tomado de ARCA · guardá la ficha',true)">${ico('ok','s')} Usar lo de ARCA</button></div>` : ''}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+    <div class="pf-g"><h4>Identificación</h4><div class="pf-grid">
       <label>Razón social<input id="pf-nombre" value="${_mEscP(p.nombre_propio || p.nombre || '')}" placeholder="${_mEscP(p.nombre || '')}">
         <div class="hint" style="font-weight:400;margin-top:3px;">${p.origen === 'dragonfish' ? 'En el Dragonfish figura como "' + _mEscP(p.nombre) + '"; si la corregís acá, el módulo usa la tuya.' : 'Nombre con el que se ve en todo el módulo.'}</div></label>
       <label>SKU del proveedor<input id="pf-sku" value="${_mEscP(p.sku || '')}" placeholder="ej.: ESPALMA" maxlength="20" style="text-transform:uppercase">
         <div class="hint" style="font-weight:400;margin-top:3px;">Código corto nuestro para identificarlo (en el Dragonfish se repetía el CUIT). Tiene que ser único.</div></label>
-      <label>Condición de pago<select id="pf-cond">${cp.map(v => `<option value="${v}" ${(p.condicion_pago||'')===v?'selected':''}>${v||'— sin definir —'}</option>`).join('')}</select></label>
       <label>Condición frente al IVA<select id="pf-iva">
         ${[['','— sin definir —'],['RI','Responsable Inscripto'],['MT','Monotributo'],['EX','Exento'],['NI','No inscripto'],['CF','Consumidor Final'],['EXT','Del exterior']]
           .map(([v,t]) => `<option value="${v}" ${(p.cond_iva||'')===v?'selected':''}>${t}</option>`).join('')}</select></label>
+      <label>Domicilio<input id="pf-dom" value="${_mEscP(p.domicilio||'')}"></label>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;">
+        <input type="checkbox" id="pf-ext" ${p.es_exterior?'checked':''} style="width:17px;height:17px;margin-top:2px;">
+        <span>Proveedor del exterior
+          <div class="hint" style="font-weight:400;">Sin CUIT ni IVA discriminado; sus facturas van aparte en el Libro IVA y no se le retiene.</div></span></label>
+      <div id="pf-pais-wrap" style="grid-column:1/-1;${p.es_exterior?'':'display:none;'}"><label>País<input id="pf-pais" value="${_mEscP(p.pais||'')}" placeholder="Estados Unidos"></label></div>
+    </div></div>
+    <div class="pf-g"><h4>Pago</h4><div class="pf-grid">
+      <label>Condición de pago<select id="pf-cond">${cp.map(v => `<option value="${v}" ${(p.condicion_pago||'')===v?'selected':''}>${v||'— sin definir —'}</option>`).join('')}</select></label>
+      <label>Moneda habitual<select id="pf-moneda">${['ARS','USD','EUR'].map(m => `<option ${(p.moneda_habitual||'ARS')===m?'selected':''}>${m}</option>`).join('')}</select></label>
       <label>CBU<input id="pf-cbu" value="${_mEscP(p.cbu||'')}" placeholder="22 dígitos"></label>
       <label>Alias<input id="pf-alias" value="${_mEscP(p.alias_cbu||'')}"></label>
-      <label>Moneda habitual<select id="pf-moneda">${['ARS','USD','EUR'].map(m => `<option ${(p.moneda_habitual||'ARS')===m?'selected':''}>${m}</option>`).join('')}</select></label>
-      <label>Domicilio<input id="pf-dom" value="${_mEscP(p.domicilio||'')}"></label>
+    </div></div>
+    <div class="pf-g"><h4>Mercadería</h4><div class="pf-grid">
       <label>Equivalencias
         <select id="pf-eqdesc" onchange="(async(sel)=>{const r=await sb.rpc('compras_proveedor_equiv_desc',{p_codigo:'${_mEscP(p.codigo)}',p_valor:sel.value==='1'});if(r.error)alert(r.error.message);else _resP('datos','Equivalencias: '+(sel.value==='1'?'por código + descripción':'por código'),true);})(this)" title="Cómo se traduce su código a nuestro SKU. Por CÓDIGO: cada código del proveedor es un artículo nuestro. Por CÓDIGO + DESCRIPCIÓN (Los Naranjos): factura un solo código y el color va en la descripción, así que la equivalencia se carga por código + descripción; si una descripción no tiene la suya, se usa la del código entero. Se guarda al cambiarlo.">
           <option value="0">Por código del proveedor</option>
           <option value="1">Por código + descripción (el color/variante va en la descripción)</option>
         </select>${(setTimeout(async () => { try { const r = await sb.from('compras_proveedor_datos').select('equiv_por_descripcion').eq('codigo', p.codigo).maybeSingle(); const el = document.getElementById('pf-eqdesc'); if (el && r.data) el.value = r.data.equiv_por_descripcion ? '1' : '0'; } catch (e) {} }, 0), '')}
       </label>
-      <label>Le compramos mercadería
+      <label>Lista con la que factura
         <select id="pf-lista" onchange="(async(sel)=>{const r=await sb.rpc('compras_proveedor_factura_lista',{p_codigo:'${_mEscP(p.codigo)}',p_lista:sel.value});if(r.error)alert(r.error.message);else _resP('datos','Lista de la factura: '+sel.value,true);})(this)" title="Qué precio trae la factura: COMPRA (lista del proveedor, el descuento se aplica aparte) o COSTO (ya viene con el descuento, como Los Naranjos). Se guarda al cambiarlo.">
           <option value="compra">Factura a lista COMPRA (con descuento aparte)</option>
           <option value="costo">Factura a lista COSTO (ya descontada)</option>
           <option value="costo_pct">Lista COSTO y el % del renglón es lo FACTURADO del pedido (ej. factura el 30 %)</option>
-        </select>${(setTimeout(async () => { try { const r = await sb.from('compras_proveedor_datos').select('factura_lista').eq('codigo', p.codigo).maybeSingle(); const el = document.getElementById('pf-lista'); if (el && r.data && r.data.factura_lista) el.value = r.data.factura_lista; } catch (e) {} }, 0), '')}
+        </select>${(setTimeout(async () => { try { const r = await sb.from('compras_proveedor_datos').select('factura_lista').eq('codigo', p.codigo).maybeSingle(); const el = document.getElementById('pf-lista'); if (el && r.data && r.data.factura_lista) el.value = r.data.factura_lista; } catch (e) {} }, 0), '')}</label>
+      <label>Aparece al armar un pedido
         <select id="pf-merc">
           <option value="" ${p.compra_mercaderia == null ? 'selected' : ''}>Automático (${p.mercaderia_auto ? 'sí' : 'no'})</option>
           <option value="si" ${p.compra_mercaderia === true ? 'selected' : ''}>Sí</option>
           <option value="no" ${p.compra_mercaderia === false ? 'selected' : ''}>No</option>
         </select>
         <div class="hint" style="font-weight:400;margin-top:3px;">Define si aparece al armar un 📝 Pedido. En automático lo decide el sistema por sus facturas de mercadería, remitos o artículos del stock.</div></label>
-      <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;">
-        <input type="checkbox" id="pf-ext" ${p.es_exterior?'checked':''} style="width:17px;height:17px;margin-top:2px;">
-        <span>Proveedor del exterior
-          <div class="hint" style="font-weight:400;">Sin CUIT ni IVA discriminado; sus facturas van aparte en el Libro IVA y no se le retiene.</div></span></label>
-      <div id="pf-pais-wrap" style="grid-column:1/-1;${p.es_exterior?'':'display:none;'}"><label>País<input id="pf-pais" value="${_mEscP(p.pais||'')}" placeholder="Estados Unidos"></label></div>
-    </div>`, true)}
+    </div></div>
+    `, true)}
 
     ${_secP('empresa', 'telefono', 'Contacto de la empresa',
       (n => n ? _nP(n, 'dato', 'datos') : 'sin cargar')([p.telefono, p.whatsapp, p.email, p.email_op, p.web].filter(Boolean).length), `
@@ -2248,11 +2307,13 @@ async function fichaProveedor(i){
     <div class="hint" style="margin-bottom:10px;">Lo que ARCA informa de este CUIT: si está vigente, condición de IVA, domicilio fiscal, actividad e impuestos en los que está inscripto.</div>
     <div id="pf-arca">${p.arca ? _arcaCard(p.arca) : '<div class="hint">Todavía no se consultó.</div>'}</div>
     <button class="btn" type="button" style="margin-top:10px;" onclick="validarArca('${_mEscP(p.cuit)}','pf-arca', true).then(c=>{if(c)_resP('arca',_arcaResumen(c),c.vigente===true)})">${ico('refrescar','s')} ${p.arca ? 'Volver a consultar' : 'Consultar en ARCA'}</button>`, false) : ''}
-    <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:14px;position:sticky;bottom:-20px;background:#fff;padding:10px 0;">
+    <div class="pf-pie">
       <span id="pf-guardado" class="mini" style="color:#16a34a;font-weight:700;opacity:0;transition:opacity .3s;margin-right:auto;">✓ guardado</span>
       <button class="btn" onclick="cerrarFichaProveedor()">Cancelar</button>
       <button class="btn primary" onclick="guardarFichaProveedor('${_mEscP(p.codigo)}','${_mEscP(p.cuit||'')}')">${ico('guardar','s')} Guardar</button>
+    </div>
     </div>`);
+  _pfTabs('sec-datos');
   if (ivaDif) _resP('datos', document.getElementById('res-datos').textContent, false, true);
   // 4) mail para la OP: es el dato que traba algo
   if (!p.es_exterior && !(p.email_op || '').trim()) _resP('empresa', 'falta mail para la OP', false, true);
@@ -6597,6 +6658,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=16"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=115"></script>
+<script src="manual.js?v=116"></script>
 </body>
 </html>
