@@ -238,7 +238,14 @@ async function descargarOpPdf(opId){
   }
   await _pdfCargarFirma();
   _pdfPie(doc, `Orden de pago ${o.letra || 'X'} ${nro} · emitida el ${_pdfF(o.fecha)} por ${o.emitida_por || ''}`, {x: 136, w: 60, t1: `Por ${emp.nombre}`, t2: 'Juan Pablo Simonelli', img: true}, o.es_prueba);
-  doc.save(`OP ${nro} ${(pv.nombre || '').replace(/[\\/:*?"<>|]/g,'')}.pdf`);
+  _pdfSalida(doc, `OP ${nro} ${(pv.nombre || '').replace(/[\\/:*?"<>|]/g,'')}.pdf`);
+}
+
+// (v10, JP 11-nov) con _PDF_CAPTURA activo el PDF no se descarga: se guarda para mandarlo por mail / WhatsApp
+var _PDF_CAPTURA = null;
+function _pdfSalida(doc, nombre){
+  if (Array.isArray(_PDF_CAPTURA)) _PDF_CAPTURA.push({nombre, blob: doc.output('blob')});
+  else doc.save(nombre);
 }
 
 // ── CERTIFICADO DE RETENCIÓN (uno por régimen retenido) ───────────────
@@ -313,5 +320,5 @@ async function descargarCertificadosPdf(opId){
   // (v9, JP 11-nov) el archivo empieza por el número del certificado y después el de la orden:
   // "Retención N° 9999-00000017 - OP N° X 9999-00000021 - Proveedor.pdf" (si la orden retuvo por más de un régimen, van todos los números)
   const nrosCert = rets.map(x => x.certificado_nro).filter(Boolean).join(' y ') || 's-n';
-  doc.save(`Retención N° ${nrosCert} - OP N° ${nroOP} - ${pv.nombre || ''}`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim() + '.pdf');
+  _pdfSalida(doc, `Retención N° ${nrosCert} - OP N° ${nroOP} - ${pv.nombre || ''}`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim() + '.pdf');
 }

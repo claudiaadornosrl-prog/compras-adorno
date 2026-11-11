@@ -712,6 +712,9 @@ main{padding:14px;max-width:1250px;margin:0 auto;}
 .le-pan thead th{background:#fff7ed;color:#9a3412}
 .le-pan tbody tr:nth-child(even){background:#fcfaf7}
 .le-pan tfoot tr{background:#fff7ed !important}
+/* (v217) orden de pago: botones para mandarla por WhatsApp / mail */
+#prov-modal button.op-env-wa{color:#166534;border-color:#86efac;background:#f0fdf4}
+#prov-modal button.op-env-mail{color:#1e40af;border-color:#93c5fd;background:#eff6ff}
 /* (v214) orden de pago: importe a tomar de cada comprobante */
 #prov-modal input.op-imp{width:142px !important;text-align:right;padding:4px 10px !important;font-size:12.5px !important;border-radius:999px !important;font-variant-numeric:tabular-nums}
 /* (v137) ficha de equivalencia: tres bloques, títulos con ℹ, botón + a la derecha del renglón */
@@ -2052,6 +2055,131 @@ async function emitirOP(){
 }
 
 // (v204, JP 10-nov) vincular la nota de crédito que el proveedor manda por el descuento de una OP
+// ── (v217, JP 11-nov) mandar la orden de pago y el certificado al proveedor, por mail o por WhatsApp ──
+// No sale sola al emitir: sale cuando se toca el botón. Cada envío queda anotado en compras_op_envios y se ve en la orden.
+// Mail: mismos pasos que "Enviar al estudio" (PDF al bucket compras-estudio + cola compras_envios_estudio, origen 'op').
+// WhatsApp: no admite adjuntos desde un enlace, así que el mensaje lleva los enlaces a los PDF (sirven 30 días).
+let _opEnv = null;
+const _opEnvIn = 'width:100%;box-sizing:border-box;padding:8px 14px;border:1px solid var(--bd);border-radius:999px;font:inherit;font-size:13px';
+async function opEnviar(opId, canal){
+  const {data, error} = await sb.rpc('compras_op_detalle', {p_op: opId});
+  if (error){ alert(error.message); return; }
+  const o = data.orden, pv = data.proveedor || {}, hayCert = (data.retenciones || []).some(x => Number(x.importe) > 0);
+  let pd = {};
+  if (pv.codigo){ const q = await sb.from('compras_proveedor_datos').select('email_op,email,whatsapp,contactos').eq('codigo', pv.codigo).maybeSingle(); pd = q.data || {}; }
+  const cts = Array.isArray(pd.contactos) ? pd.contactos : [];
+  const mail = pd.email_op || pd.email || (cts.find(c => c.email) || {}).email || '';
+  const wa = pd.whatsapp || (cts.find(c => c.whatsapp) || {}).whatsapp || '';
+  const esMail = canal === 'mail', falta = pv.codigo && !(esMail ? pd.email_op : pd.whatsapp);
+  _opEnv = {opId, canal, o, pv, hayCert};
+  const que = hayCert ? 'la orden de pago y el certificado de retención' : 'la orden de pago';
+  const cuerpo = esMail
+    ? `Hola,\n\nLes enviamos ${que} correspondiente${hayCert ? 's' : ''} al pago por ${plata(o.neto_a_pagar)}.\n\nCualquier duda nos avisan.\n\nSaludos,\nAdministración · Claudia Adorno SRL`
+    : `Hola, les enviamos ${que} de Claudia Adorno SRL por el pago de ${plata(o.neto_a_pagar)}.`;
+  const lbl = t => `<label class="mini" style="display:block;margin:10px 0 4px;font-weight:600">${t}</label>`;
+  openModalP(`
+    <h3 class="op-tit" style="margin:0 0 4px;display:flex;align-items:center;gap:8px">${ico(esMail ? 'mail' : 'chat')} Enviar por ${esMail ? 'mail' : 'WhatsApp'}</h3>
+    <p class="mini" style="margin:0 0 6px">Orden ${esc(o.comprobante || '')} · ${esc(o.proveedor_nombre || pv.nombre || '')}${o.es_prueba ? ' · <b>de prueba</b>' : ''}</p>
+    ${esMail ? `${lbl('Para (si son varios, separalos con coma)')}<input id="ope-para" style="${_opEnvIn}" value="${esc(mail)}" placeholder="pagos@proveedor.com">
+      ${lbl('Con copia a (opcional)')}<input id="ope-cc" style="${_opEnvIn}" value="">
+      ${lbl('Asunto')}<input id="ope-asunto" style="${_opEnvIn}" value="${esc('Claudia Adorno SRL · Orden de pago ' + String(o.comprobante || '').replace(/^OP\s*/, ''))}">`
+    : `${lbl('WhatsApp del proveedor (si lo dejás vacío, elegís el contacto en WhatsApp)')}<input id="ope-para" style="${_opEnvIn}" value="${esc(wa)}" placeholder="11 5555-5555">`}
+    ${lbl('Mensaje')}<textarea id="ope-cuerpo" rows="${esMail ? 8 : 3}" style="${_opEnvIn};border-radius:16px;resize:vertical">${esc(cuerpo)}</textarea>
+    ${esMail ? '' : '<div class="mini" style="margin-top:4px">WhatsApp no deja adjuntar archivos desde acá: al final del mensaje van los enlaces para abrir los PDF (sirven 30 días).</div>'}
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:13px">
+      <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="ope-op" checked> Orden de pago</label>
+      ${hayCert ? '<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="ope-cert" checked> Certificado de retención</label>' : ''}
+      ${falta ? `<label style="display:flex;align-items:center;gap:6px" title="Así la próxima vez ya viene cargado"><input type="checkbox" id="ope-guardar" checked> Guardar ${esMail ? 'este mail' : 'este número'} en la ficha del proveedor</label>` : ''}
+    </div>
+    <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap">
+      <span class="mini" id="ope-est" style="margin-right:auto"></span>
+      <button class="act gh" onclick="verOP(${opId})">Volver a la orden</button>
+      <button class="act" id="ope-btn" style="display:inline-flex;align-items:center;gap:6px" onclick="opEnviarOk()">${ico(esMail ? 'mail' : 'chat', 's')} ${esMail ? 'Enviar' : 'Abrir WhatsApp'}</button>
+    </div>`);
+}
+async function opEnviarOk(){
+  const E = _opEnv; if (!E) return;
+  const g = id => document.getElementById(id), esMail = E.canal === 'mail', o = E.o;
+  const est = g('ope-est'), btn = g('ope-btn');
+  const conOp = g('ope-op').checked, conCert = !!(g('ope-cert') && g('ope-cert').checked);
+  if (!conOp && !conCert){ alert('Marcá qué querés mandar: la orden de pago, el certificado o los dos.'); return; }
+  const partir = t => String(t || '').split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
+  let para = [], cc = [], tel = '';
+  if (esMail){
+    para = partir(g('ope-para').value); cc = partir(g('ope-cc').value);
+    const mal = para.concat(cc).find(m => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m));
+    if (!para.length){ alert('Falta el mail del proveedor en "Para".'); return; }
+    if (mal){ alert(`"${mal}" no parece un mail válido.`); return; }
+  } else tel = g('ope-para').value.trim();
+  // WhatsApp: la pestaña se abre YA (después de subir los PDF el navegador la bloquearía) y se le carga el chat al final
+  const win = esMail ? null : window.open('', '_blank');
+  const falla = m => { if (win) win.close(); btn.disabled = false; est.textContent = ''; alert(m); };
+  btn.disabled = true; est.textContent = 'Armando los PDF…';
+  _PDF_CAPTURA = [];
+  try {
+    if (conOp) await descargarOpPdf(E.opId);
+    if (conCert) await descargarCertificadosPdf(E.opId);
+  } catch (e){ _PDF_CAPTURA = null; falla('No pude armar los PDF: ' + e.message); return; }
+  const pdfs = _PDF_CAPTURA; _PDF_CAPTURA = null;
+  if (!pdfs.length){ falla('No pude armar los PDF.'); return; }
+  const carpeta = `${o.es_prueba ? 'prueba/' : ''}op/${E.opId}/${Date.now()}`, subidos = [];
+  for (const a of pdfs){
+    est.textContent = `Subiendo ${a.nombre}…`;
+    const limpio = a.nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/°/g, '').replace(/[^A-Za-z0-9._-]+/g, '_');
+    const path = `${carpeta}/${limpio}`;
+    const up = await sb.storage.from('compras-estudio').upload(path, a.blob, {upsert: true, contentType: 'application/pdf'});
+    if (up.error){ falla(`No se pudo subir ${a.nombre}: ` + up.error.message); return; }
+    subidos.push({path, nombre: a.nombre, bytes: a.blob.size, cert: /^Retenci/.test(a.nombre)});
+  }
+  const incluye = [conOp ? 'orden de pago' : '', conCert ? 'certificado' : ''].filter(Boolean).join(' + ');
+  let envioId = null, destino = '';
+  if (esMail){
+    est.textContent = 'Dejando el mail para que salga…';
+    const ins = await sb.from('compras_envios_estudio').insert({periodo: String(o.fecha).slice(0, 7) + '-01', es_prueba: !!o.es_prueba, para, cc, asunto: g('ope-asunto').value.trim() || ('Orden de pago ' + o.comprobante),
+      cuerpo: g('ope-cuerpo').value, archivos: subidos.map(({path, nombre, bytes}) => ({path, nombre, bytes})), pedido_por: session.email || null, origen: 'op'}).select('id').single();
+    if (ins.error){ falla('No se pudo dejar el mail para enviar: ' + ins.error.message); return; }
+    envioId = ins.data.id; destino = para.join(', ');
+  } else {
+    est.textContent = 'Preparando los enlaces…';
+    const lineas = [];
+    for (const a of subidos){
+      const su = await sb.storage.from('compras-estudio').createSignedUrl(a.path, 60 * 60 * 24 * 30);
+      if (su.error){ falla('No pude armar el enlace de ' + a.nombre + ': ' + su.error.message); return; }
+      lineas.push(`${a.cert ? 'Certificado de retención' : 'Orden de pago'}: ${su.data.signedUrl}`);
+    }
+    const txt = `${g('ope-cuerpo').value.trim()}\n\n${lineas.join('\n\n')}`;
+    const url = (tel ? _waLink(tel) : 'https://wa.me/') + '?text=' + encodeURIComponent(txt);
+    if (win) win.location.href = url; else window.open(url, '_blank');
+    destino = tel || 'contacto elegido en WhatsApp';
+  }
+  const reg = await sb.from('compras_op_envios').insert({orden_pago_id: E.opId, canal: E.canal, destino, incluye, envio_id: envioId, enviado_por: session.email || null});
+  if (reg.error) console.warn('compras_op_envios', reg.error.message);
+  if (g('ope-guardar') && g('ope-guardar').checked && E.pv.codigo && (esMail ? para[0] : tel)){
+    const fila = {codigo: E.pv.codigo, actualizado_por: session.email || null, actualizado_at: new Date().toISOString()};
+    if (esMail) fila.email_op = para[0]; else fila.whatsapp = tel;
+    const up = await sb.from('compras_proveedor_datos').upsert(fila, {onConflict: 'codigo'});
+    if (up.error) console.warn('ficha proveedor', up.error.message);
+  }
+  _opEnv = null;
+  if (esMail) alert(`Mail en camino a ${destino}, con ${incluye}.\n\nSale desde claudiaadornosrl@gmail.com en unos 5 minutos (desde la PC de JP). En la orden vas a ver cuándo salió.`);
+  verOP(E.opId);
+}
+// aviso dentro de la orden: a quién se mandó, por dónde y cuándo
+async function _opPintarEnvios(opId){
+  const el = document.getElementById('op-envios'); if (!el) return;
+  const q = await sb.from('compras_op_envios').select('id,canal,destino,incluye,enviado_por,enviado_at,envio:compras_envios_estudio(estado,enviado_at,error_msg)').eq('orden_pago_id', opId).order('id', {ascending: false});
+  const L = q.data || [];
+  if (!document.getElementById('op-envios')) return;
+  if (!L.length){ el.innerHTML = ''; return; }
+  el.innerHTML = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;padding:8px 14px;margin-bottom:10px;font-size:12.5px;display:flex;flex-direction:column;gap:4px">${L.map(e => {
+    const quien = esc((e.enviado_por || '').split('@')[0]), mail = e.canal === 'mail', en = e.envio || {};
+    let chip, cuando = e.enviado_at;
+    if (!mail) chip = '<span class="chip" style="background:#dcfce7;color:#166534">enviada por WhatsApp</span>';
+    else if (en.estado === 'enviado'){ chip = '<span class="chip" style="background:#dcfce7;color:#166534">enviada por mail</span>'; cuando = en.enviado_at || cuando; }
+    else if (en.estado === 'error') chip = `<span class="chip" style="background:#fee2e2;color:#991b1b;cursor:help" title="${esc(en.error_msg || '')}">el mail no salió</span>`;
+    else chip = '<span class="chip" style="background:#fef3c7;color:#92400e" title="Sale desde la PC de JP, cada 5 minutos">mail por salir</span>';
+    return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${ico(mail ? 'mail' : 'chat', 's')} ${chip} <b>${_fechaTs(cuando)} ${new Date(cuando).toLocaleTimeString('es-AR', {hour: '2-digit', minute: '2-digit'})}</b> <span>a ${esc(e.destino || '—')}</span> <span class="mini">· ${esc(e.incluye || '')}${quien ? ' · ' + quien : ''}</span></div>`; }).join('')}</div>`;
+}
 async function opVincularNc(opId){
   const [{data, error}, det] = await Promise.all([sb.rpc('compras_op_nc_candidatas', {p_op: opId}), sb.rpc('compras_op_detalle', {p_op: opId})]);
   if (error){ alert(error.message); return; }
@@ -2102,6 +2230,7 @@ async function verOP(id){
     <p class="mini" style="margin:0 0 12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span class="prov-nom" style="display:inline-block;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;font-weight:600;color:var(--tx)" title="${esc(o.proveedor_nombre||'')}">${esc(o.proveedor_nombre||'')}</span>
       · CUIT ${esc(o.cuit_proveedor||'')} · ${_fecha(o.fecha)} · <span title="Emitida por ${esc(o.emitida_por||'')}" style="cursor:help">${esc((o.emitida_por||'').split('@')[0])}</span></p>
     ${(o.avisos && o.avisos.length) ? `<div class="aviso-amb" style="margin-bottom:10px">${o.avisos.map(a => `<div>${ico('alerta','s')} ${esc(a)}</div>`).join('')}</div>` : ''}
+    <div id="op-envios">${(setTimeout(() => _opPintarEnvios(o.id), 0), '')}</div>
 
     <div class="op-sec"><h4>${ico('factura','s')} Comprobantes imputados <span style="margin-left:auto;text-transform:none;letter-spacing:0">${f.length}</span></h4>
     <table style="font-size:13px"><tbody>${f.map(x => `<tr>
@@ -2140,7 +2269,9 @@ async function verOP(id){
     </tbody></table></div>` : ''}
 
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;flex-wrap:wrap;align-items:center">
-      ${!anul ? `<button class="act gh" style="display:inline-flex;align-items:center;gap:6px" onclick="descargarOpPdf(${o.id})" title="Bajar la orden de pago en PDF">${ico('pdf','s')} Orden de pago</button>
+      ${!anul ? `<button class="act gh op-env-wa" style="display:inline-flex;align-items:center;gap:6px;margin-right:0" onclick="opEnviar(${o.id}, 'whatsapp')" title="Mandarle al proveedor la orden de pago${r.some(x => Number(x.importe) > 0) ? ' y el certificado de retención' : ''} por WhatsApp">${ico('chat','s')} WhatsApp</button>
+      <button class="act gh op-env-mail" style="display:inline-flex;align-items:center;gap:6px;margin-right:auto" onclick="opEnviar(${o.id}, 'mail')" title="Mandarle al proveedor la orden de pago${r.some(x => Number(x.importe) > 0) ? ' y el certificado de retención' : ''} por mail">${ico('mail','s')} Mail</button>
+      <button class="act gh" style="display:inline-flex;align-items:center;gap:6px" onclick="descargarOpPdf(${o.id})" title="Bajar la orden de pago en PDF">${ico('pdf','s')} Orden de pago</button>
       ${r.some(x => Number(x.importe) > 0) ? `<button class="act gh" style="display:inline-flex;align-items:center;gap:6px" onclick="descargarCertificadosPdf(${o.id})" title="Bajar el certificado de retención en PDF (para el proveedor)">${ico('pdf','s')} Certificado</button>` : ''}` : ''}
       <button class="act" onclick="cerrarModalP()">Cerrar</button></div>`);
 }
@@ -4656,7 +4787,7 @@ function _envioMesTxt(mesKey){ const [y, m] = mesKey.split('-'); return `${MESES
 async function _pintarEnviosEstudio(mesKey){
   const el = document.getElementById('envios-estudio'); if (!el || !mesKey) return;
   const r = await sb.from('compras_envios_estudio').select('id,estado,para,cc,archivos,pedido_por,pedido_at,enviado_at,error_msg,intentos')
-    .eq('periodo', mesKey + '-01').eq('es_prueba', MODO_PRUEBA).order('id', {ascending: false}).limit(5);
+    .eq('periodo', mesKey + '-01').eq('es_prueba', MODO_PRUEBA).is('origen', null).order('id', {ascending: false}).limit(5);
   const L = (r.data || []);
   if (!L.length){ el.innerHTML = ''; return; }
   const chip = e => e.estado === 'enviado' ? `<span class="chip" style="background:#dcfce7;color:#166534">enviado ${_fechaTs(e.enviado_at)}</span>`
@@ -6927,10 +7058,10 @@ async function editarContabilizacion(docId){
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk" crossorigin="anonymous"></script>
-<script src="op-pdf.js?v=9"></script>
+<script src="op-pdf.js?v=10"></script>
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=127"></script>
+<script src="manual.js?v=128"></script>
 </body>
 </html>

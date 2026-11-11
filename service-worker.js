@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v216-nombre-certificado';
+const CACHE_VERSION = 'compras-v217-op-enviar-mail-whatsapp';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './firma-jp.jpg', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
