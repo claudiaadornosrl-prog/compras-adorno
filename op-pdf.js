@@ -201,7 +201,7 @@ async function descargarOpPdf(opId){
   const tipoNom = {FC: 'Factura', NC: 'Nota de crédito', ND: 'Nota de débito', INT: 'Comprobante interno'};
   y0 = y; yc = _pdfCardIni(doc, 14, y, 182, 'Comprobantes cancelados');
   const colsF = [{t:'Emisión', x:18}, {t:'Vencimiento', x:42}, {t:'Comprobante', x:68, w:70}, {t:'Neto', x:160, align:'right', mut:true}, {t:'Importe', x:192, align:'right'}];
-  y = _pdfTabla(doc, 14, 182, yc, colsF, f.map(x => [_pdfF(x.fecha), _pdfF(x.vencimiento), `${tipoNom[x.tipo] || x.tipo} ${x.letra || ''} ${String(x.punto_venta||0).padStart(4,'0')}-${String(x.numero||0).padStart(8,'0')}`, _pdfM(x.neto), _pdfM(x.total)]),
+  y = _pdfTabla(doc, 14, 182, yc, colsF, f.map(x => [_pdfF(x.fecha), _pdfF(x.vencimiento), `${tipoNom[x.tipo] || x.tipo} ${x.letra || ''} ${String(x.punto_venta||0).padStart(4,'0')}-${String(x.numero||0).padStart(8,'0')}${x.parcial ? ' · parcial de $ ' + _pdfN(Math.abs(x.total_doc)) : ''}`, _pdfM(x.neto), _pdfM(x.total)]),
     ['Subtotal', null, null, null, _pdfM(o.subtotal)], yy => { _pdfCardFin(doc, 14, y0, 182, yy); const n = nuevaPagina(); y0 = n; return _pdfCardIni(doc, 14, n, 182, 'Comprobantes cancelados (cont.)'); });
   y = _pdfCardFin(doc, 14, y0, 182, y);
   // (v204) descuento en el pago
@@ -296,7 +296,7 @@ async function descargarCertificadosPdf(opId){
     // comprobantes alcanzados
     y0 = y; yc = _pdfCardIni(doc, 14, y, 182, 'Comprobantes alcanzados por la retención');
     const colsF = [{t:'Emisión', x:18}, {t:'Comprobante', x:44, w:90}, {t:'Neto', x:160, align:'right', mut:true}, {t:'Importe', x:192, align:'right'}];
-    y = _pdfTabla(doc, 14, 182, yc, colsF, f.map(x => [_pdfF(x.fecha), `${tipoNom[x.tipo] || x.tipo} ${x.letra || ''} ${String(x.punto_venta||0).padStart(4,'0')}-${String(x.numero||0).padStart(8,'0')}`, _pdfM(x.neto), _pdfM(x.total)]),
+    y = _pdfTabla(doc, 14, 182, yc, colsF, f.map(x => [_pdfF(x.fecha), `${tipoNom[x.tipo] || x.tipo} ${x.letra || ''} ${String(x.punto_venta||0).padStart(4,'0')}-${String(x.numero||0).padStart(8,'0')}${x.parcial ? ' · parcial de $ ' + _pdfN(Math.abs(x.total_doc)) : ''}`, _pdfM(x.neto), _pdfM(x.total)]),
       [`Total · ${f.length} comprobante${f.length === 1 ? '' : 's'}`, null, _pdfM(f.reduce((a, x) => a + Number(x.neto || 0), 0)), _pdfM(montoComp)],
       yy => { _pdfCardFin(doc, 14, y0, 182, yy); const n = nuevaPagina(); y0 = n; return _pdfCardIni(doc, 14, n, 182, 'Comprobantes alcanzados (cont.)'); });
     y = _pdfCardFin(doc, 14, y0, 182, y);

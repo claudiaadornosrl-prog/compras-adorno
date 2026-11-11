@@ -712,6 +712,8 @@ main{padding:14px;max-width:1250px;margin:0 auto;}
 .le-pan thead th{background:#fff7ed;color:#9a3412}
 .le-pan tbody tr:nth-child(even){background:#fcfaf7}
 .le-pan tfoot tr{background:#fff7ed !important}
+/* (v214) orden de pago: importe a tomar de cada comprobante */
+#prov-modal input.op-imp{width:128px !important;text-align:right;padding:4px 10px !important;font-size:12.5px !important;border-radius:999px !important;font-variant-numeric:tabular-nums}
 /* (v137) ficha de equivalencia: tres bloques, títulos con ℹ, botón + a la derecha del renglón */
 .eq-sec{border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fff;}
 .eq-sec h4{margin:0 0 8px;font-size:13.5px;display:flex;align-items:center;gap:7px;}
@@ -1447,7 +1449,7 @@ const _diasDesde = f => {
 };
 
 async function abrirOP(cuit){
-  opSel = cuit; opPrep = null; opRets = []; opPagos = []; opVencManual = false;
+  opSel = cuit; opPrep = null; opRets = []; opPagos = []; opVencManual = false; opImportes = {};
   // el catálogo de regímenes lo carga la pestaña ⚙️; si nunca la abrieron, acá
   if (!REGIMENES.length){
     const rg = await sb.from('compras_regimenes').select('*').order('codigo');
@@ -1477,7 +1479,8 @@ function _pintarModalOP(cands){
 
     <div class="op-blq"><h4>Facturas que se pagan</h4><div class="cont" style="max-height:230px;overflow:auto;padding:0">
       <table style="font-size:13px"><thead><tr>
-        <th style="width:34px;text-align:center"><input type="checkbox" checked title="Marcar / desmarcar todos" onchange="_opToggleTodos(this.checked)"></th><th>Fecha</th><th>Vence</th><th>Comprobante</th><th>Tipo</th><th title="Remito asociado a la factura y en qué estado está su stock">Remito</th><th class="num" title="Sin IVA ni percepciones">Neto</th><th class="num">Total</th></tr></thead>
+        <th style="width:34px;text-align:center"><input type="checkbox" checked title="Marcar / desmarcar todos" onchange="_opToggleTodos(this.checked)"></th><th>Fecha</th><th>Vence</th><th>Comprobante</th><th>Tipo</th><th title="Remito asociado a la factura y en qué estado está su stock">Remito</th><th class="num" title="Sin IVA ni percepciones">Neto</th><th class="num" title="Total del comprobante. Si ya se pagó una parte en otra orden, debajo figura el saldo que le queda.">Total</th>
+        <th class="num" title="Cuánto de este comprobante entra en esta orden. Viene todo el saldo; cambialo para pagar (o, en una nota de crédito, descontar) solo una parte. Lo que quede sigue esperando orden de pago.">A tomar</th></tr></thead>
       <tbody>${cands.map(d => `<tr${d.es_nc ? ' style="background:#fef2f2"' : ''}>
         <td style="text-align:center"><input type="checkbox" data-doc="${d.documento_id}" checked
              onchange="_opToggle(${d.documento_id}, this.checked)"></td>
@@ -1487,7 +1490,10 @@ function _pintarModalOP(cands){
         <td class="ctr">${letraTipo(d.tipo_gasto)}${d.moneda!=='ARS' ? ` <span class="mini">${esc(d.moneda)}</span>` : ''}</td>
         <td style="white-space:nowrap;font-size:12px">${d.es_nc ? '<span class="mini">—</span>' : celdaRemitos({id: d.documento_id, tipo_gasto: d.tipo_gasto})}</td>
         <td class="num mini"${d.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(d.neto)}</td>
-        <td class="num"${d.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(d.total)}</td>
+        <td class="num"${d.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(d.total)}${Number(d.imputado) > 0.005 ? `<div class="mini" style="color:#b45309" title="Ya se tomaron ${plata(d.imputado)} en otra orden de pago">saldo ${plata(d.saldo)}</div>` : ''}</td>
+        <td class="num" style="white-space:nowrap">${d.es_nc ? '<span class="mini" style="color:var(--bad)">−</span> ' : ''}<input type="number" id="op-imp-${d.documento_id}" class="op-imp" step="0.01" min="0.01" max="${Math.abs(Number(d.saldo ?? d.total)).toFixed(2)}" value="${Math.abs(Number(d.saldo ?? d.total)).toFixed(2)}"
+             onchange="_opImporte(${d.documento_id}, this.value)" title="${d.es_nc ? 'Cuánto de esta nota de crédito se descuenta en esta orden' : 'Cuánto de esta factura se paga en esta orden'}">
+          <div class="mini" id="op-queda-${d.documento_id}" style="color:#b45309;min-height:0"></div></td>
       </tr>`).join('')}</tbody></table>
     </div></div>
 
@@ -1524,6 +1530,24 @@ function _opVencDefault(cands){
   return v[0] || _hoyISO();
 }
 
+// (v214, JP 11-nov) pago PARCIAL: cuánto se toma de cada comprobante en esta orden. Solo se guarda lo que difiere del saldo.
+let opImportes = {};
+function _opImporte(id, val){
+  const c = (opCands || []).find(x => x.documento_id === id); if (!c) return;
+  const saldo = Math.round(Math.abs(Number(c.saldo ?? c.total)) * 100) / 100;
+  let n = Math.round((Number(String(val).replace(',', '.')) || 0) * 100) / 100;
+  const inp = document.getElementById('op-imp-' + id), q = document.getElementById('op-queda-' + id);
+  if (n <= 0){ n = saldo; }
+  if (n > saldo){ n = saldo; alert(`De ${c.comprobante} quedan ${plata(saldo)}: no se puede tomar más que eso.`); }
+  if (Math.abs(n - saldo) < 0.005) delete opImportes[id]; else opImportes[id] = n;
+  if (inp) inp.value = n.toFixed(2);
+  if (q) q.textContent = opImportes[id] ? `quedan ${plata(saldo - n)}` : '';
+  // tocar el importe de un comprobante sin tilde lo suma a la orden
+  const chk = document.querySelector(`#prov-modal input[data-doc="${id}"]`);
+  if (chk && !chk.checked){ chk.checked = true; opDocs = Array.from(new Set(opDocs.concat([id]))); }
+  _opCalcular();
+}
+const _opImps = () => { const o = {}; opDocs.forEach(id => { if (opImportes[id]) o[String(id)] = opImportes[id]; }); return Object.keys(o).length ? o : null; };
 function _opToggleTodos(on){
   document.querySelectorAll('#prov-modal input[data-doc]').forEach(c => { c.checked = on; });
   opDocs = on ? opCands.map(c => c.documento_id) : [];
@@ -1550,7 +1574,7 @@ async function _opCalcular(){
   cont.innerHTML = '<div class="vacio">Calculando…</div>';
   const {data, error} = await sb.rpc('compras_op_preparar',
     {p_cuit: opSel, p_docs: opDocs, p_fecha: document.getElementById('op-fecha')?.value || null,
-     p_prueba: MODO_PRUEBA, p_descuento_pct: _opDescPct()});
+     p_prueba: MODO_PRUEBA, p_descuento_pct: _opDescPct(), p_importes: _opImps()});
   if (error){
     opPrep = null; if (btn) btn.disabled = true;
     cont.innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return;
@@ -1993,7 +2017,7 @@ async function emitirOP(){
       notas: (p.notas||'').trim() || null})),
     p_retenciones: opRets.map(r => ({codigo: r.codigo, importe: Number(r.importe)||0,
                                      motivo_edicion: (r.motivo_edicion||'').trim() || null})),
-    p_prueba: MODO_PRUEBA, p_descuento_pct: Number(opPrep.descuento_pct) > 0 ? Number(opPrep.descuento_pct) : null });
+    p_prueba: MODO_PRUEBA, p_descuento_pct: Number(opPrep.descuento_pct) > 0 ? Number(opPrep.descuento_pct) : null, p_importes: _opImps() });
   if (error){
     alert('No se pudo emitir: ' + error.message);
     if (btn){ btn.disabled = false; btn.textContent = 'Emitir orden de pago'; }
@@ -2071,7 +2095,7 @@ async function verOP(id){
     <div class="op-sec"><h4>${ico('factura','s')} Comprobantes imputados <span style="margin-left:auto;text-transform:none;letter-spacing:0">${f.length}</span></h4>
     <table style="font-size:13px"><tbody>${f.map(x => `<tr>
       <td class="mini" style="white-space:nowrap">${_fecha(x.fecha)}</td>
-      <td style="white-space:nowrap">${x.archivo_path ? `<a class="nro" href="${_pdfUrl(x.archivo_path)}" target="_blank" rel="noopener" title="Abrir el PDF">${esc(x.comprobante)}</a>` : esc(x.comprobante)}${x.es_nc ? ' <span class="chip" style="background:#fee2e2;color:#991b1b">NC</span>' : ''}</td>
+      <td style="white-space:nowrap">${x.archivo_path ? `<a class="nro" href="${_pdfUrl(x.archivo_path)}" target="_blank" rel="noopener" title="Abrir el PDF">${esc(x.comprobante)}</a>` : esc(x.comprobante)}${x.es_nc ? ' <span class="chip" style="background:#fee2e2;color:#991b1b">NC</span>' : ''}${x.parcial ? ` <span class="chip" style="background:#fef3c7;color:#92400e" title="En esta orden entró una parte: ${plata(x.total)} de ${plata(x.total_doc)}">parcial · de ${plata(x.total_doc)}</span>` : ''}</td>
       <td class="num mini" title="Neto, sin IVA ni percepciones"${x.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(x.neto)}</td>
       <td class="num"${x.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(x.total)}</td></tr>`).join('')}
       <tr class="tot"><td colspan="2">Subtotal</td><td class="num mini" title="Neto sobre el que se calculan las retenciones">${plata(f.reduce((a,x) => a + Number(x.neto||0), 0))} <span style="font-weight:400">(neto)</span></td><td class="num">${plata(o.subtotal)}</td></tr>
@@ -6892,10 +6916,10 @@ async function editarContabilizacion(docId){
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk" crossorigin="anonymous"></script>
-<script src="op-pdf.js?v=7"></script>
+<script src="op-pdf.js?v=8"></script>
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=125"></script>
+<script src="manual.js?v=126"></script>
 </body>
 </html>
