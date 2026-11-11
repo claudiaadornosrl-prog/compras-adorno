@@ -2018,17 +2018,31 @@ async function emitirOP(){
 
 // (v204, JP 10-nov) vincular la nota de crédito que el proveedor manda por el descuento de una OP
 async function opVincularNc(opId){
-  const {data, error} = await sb.rpc('compras_op_nc_candidatas', {p_op: opId});
+  const [{data, error}, det] = await Promise.all([sb.rpc('compras_op_nc_candidatas', {p_op: opId}), sb.rpc('compras_op_detalle', {p_op: opId})]);
   if (error){ alert(error.message); return; }
   if (!(data || []).length){ alert('Este proveedor no tiene ninguna nota de crédito cargada sin orden de pago.\n\nCuando llegue y esté en el módulo, volvé a esta orden y vinculala.'); return; }
-  const lista = data.map((d, i) => `${i + 1}) ${d.comprobante} · ${_fecha(d.fecha)} · ${plata(d.total)}`).join('\n');
-  const n = prompt('¿Cuál es la nota de crédito del descuento? Escribí el número de la lista:\n\n' + lista, '1');
-  if (n === null) return;
-  const d = data[Number(n) - 1]; if (!d){ alert('Ese número no está en la lista.'); return; }
-  const r = await sb.rpc('compras_op_vincular_nc', {p_op: opId, p_doc: d.id});
+  // (v212, JP 11-nov) antes pedía escribir "el número de la lista" y se confundía con el número de la NC:
+  // ahora se elige con un clic. La primera es la de importe más parecido al descuento.
+  const o = (det.data || {}).orden || {}, dto = Number(o.descuento_importe) || 0;
+  openModalP(`
+    <h3 class="op-tit" style="margin:0 0 4px;display:flex;align-items:center;gap:8px">${ico('factura')} Vincular la nota de crédito</h3>
+    <p class="mini" style="margin:0 0 12px">Orden ${esc(o.comprobante || '')} · ${esc(o.proveedor_nombre || '')} · descuento en el pago <b>${plata(dto)}</b>. Tocá la nota de crédito que mandó el proveedor por ese descuento.</p>
+    <div style="overflow-x:auto"><table class="tb-band op-lista"><thead><tr><th>Nota de crédito</th><th>Fecha</th><th class="num">Importe</th><th></th><th></th></tr></thead>
+      <tbody>${data.map(d => { const dif = Math.round((Number(d.total) - dto) * 100) / 100, igual = Math.abs(dif) <= 1;
+        return `<tr onclick="opVincularNcOk(${opId}, ${d.id}, '${esc(d.comprobante)}')" title="Vincular esta nota de crédito a la orden">
+          <td style="white-space:nowrap"><b>${esc(d.comprobante)}</b></td>
+          <td class="mini">${_fecha(d.fecha)}</td>
+          <td class="num"><b>${plata(d.total)}</b></td>
+          <td>${igual ? '<span class="chip" style="background:#dcfce7;color:#166534">coincide con el descuento</span>' : `<span class="chip" style="background:#fef3c7;color:#92400e">diferencia ${plata(dif)}</span>`}</td>
+          <td class="num"><button class="act" style="padding:5px 14px" onclick="event.stopPropagation();opVincularNcOk(${opId}, ${d.id}, '${esc(d.comprobante)}')">Vincular</button></td></tr>`; }).join('')}
+      </tbody></table></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="act gh" onclick="verOP(${opId})">Volver a la orden</button></div>`);
+}
+async function opVincularNcOk(opId, docId, comp){
+  const r = await sb.rpc('compras_op_vincular_nc', {p_op: opId, p_doc: docId});
   if (r.error){ alert(r.error.message); return; }
   const dif = Number(r.data.diferencia) || 0;
-  alert(`Nota de crédito ${d.comprobante} vinculada a la orden.` + (Math.abs(dif) > 1 ? `\n\n⚠ La NC es por ${plata(r.data.nc_total)} y el descuento fue de ${plata(r.data.descuento)}: hay una diferencia de ${plata(dif)}.` : ''));
+  if (Math.abs(dif) > 1) alert(`Nota de crédito ${comp} vinculada a la orden.\n\n⚠ La NC es por ${plata(r.data.nc_total)} y el descuento fue de ${plata(r.data.descuento)}: hay una diferencia de ${plata(dif)}.`);
   verOP(opId);
 }
 async function verOP(id){
@@ -6882,6 +6896,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=124"></script>
+<script src="manual.js?v=125"></script>
 </body>
 </html>
