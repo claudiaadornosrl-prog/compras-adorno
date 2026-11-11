@@ -2122,7 +2122,10 @@ async function opEnviar(opId, canal){
   const wa = pd.whatsapp || (cts.find(c => c.whatsapp) || {}).whatsapp || '';
   const esMail = canal === 'mail', falta = pv.codigo && !(esMail ? pd.email_op : pd.whatsapp);
   _opEnv = {opId, canal, o, pv, hayCert};
-  const que = hayCert ? 'la orden de pago y el certificado de retención' : 'la orden de pago';
+  // (JP 11-nov) el asunto y el texto llevan el número de la orden y el del certificado de retención
+  const nroOp = String(o.comprobante || '').replace(/^OP\s*/, ''), certs = (data.retenciones || []).filter(x => Number(x.importe) > 0 && x.certificado_nro).map(x => x.certificado_nro);
+  const nroCert = certs.length ? ' N° ' + certs.join(' y N° ') : '';
+  const que = `la orden de pago N° ${nroOp}` + (hayCert ? ` y ${certs.length > 1 ? 'los certificados' : 'el certificado'} de retención${nroCert}` : '');
   const cuerpo = esMail
     ? `Hola,\n\nLes enviamos ${que} correspondiente${hayCert ? 's' : ''} al pago por ${plata(o.neto_a_pagar)}.\n\nCualquier duda nos avisan.\n\nSaludos,\nAdministración · Claudia Adorno SRL`
     : `Hola, les enviamos ${que} de Claudia Adorno SRL por el pago de ${plata(o.neto_a_pagar)}.`;
@@ -2132,7 +2135,7 @@ async function opEnviar(opId, canal){
     <p class="mini" style="margin:0 0 6px">Orden ${esc(o.comprobante || '')} · ${esc(o.proveedor_nombre || pv.nombre || '')}${o.es_prueba ? ' · <b>de prueba</b>' : ''}</p>
     ${esMail ? `${lbl('Para (si son varios, separalos con coma)')}<input id="ope-para" style="${_opEnvIn}" value="${esc(mail)}" placeholder="pagos@proveedor.com">
       ${lbl('Con copia a (opcional)')}<input id="ope-cc" style="${_opEnvIn}" value="">
-      ${lbl('Asunto')}<input id="ope-asunto" style="${_opEnvIn}" value="${esc('Claudia Adorno SRL · Orden de pago ' + String(o.comprobante || '').replace(/^OP\s*/, ''))}">`
+      ${lbl('Asunto')}<input id="ope-asunto" style="${_opEnvIn}" value="${esc('Claudia Adorno SRL · Orden de pago N° ' + nroOp + (hayCert ? ` · Certificado${certs.length > 1 ? 's' : ''} de retención${nroCert}` : ''))}">`
     : `${lbl('WhatsApp del proveedor (si lo dejás vacío, elegís el contacto en WhatsApp)')}<input id="ope-para" style="${_opEnvIn}" value="${esc(wa)}" placeholder="11 5555-5555">`}
     ${lbl('Mensaje')}<textarea id="ope-cuerpo" rows="${esMail ? 8 : 3}" style="${_opEnvIn};border-radius:16px;resize:vertical">${esc(cuerpo)}</textarea>
     ${esMail ? '' : '<div class="mini" style="margin-top:4px">WhatsApp no deja adjuntar archivos desde acá: al final del mensaje van los enlaces para abrir los PDF (sirven 30 días).</div>'}
@@ -7182,6 +7185,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=134"></script>
+<script src="manual.js?v=135"></script>
 </body>
 </html>
