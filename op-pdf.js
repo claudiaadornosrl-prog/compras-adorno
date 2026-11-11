@@ -310,5 +310,8 @@ async function descargarCertificadosPdf(opId){
     doc.setDrawColor(..._PC.bd);
   });
   _pdfPie(doc, `Certificado${rets.length > 1 ? 's' : ''} de retención · Orden de pago ${nroOP} · ${_pdfF(o.fecha)}`, null, o.es_prueba);
-  doc.save(`Retencion OP ${nroOP.replace(/\s/g, ' ')} ${(pv.nombre || '').replace(/[\\/:*?"<>|]/g,'')}.pdf`);
+  // (v9, JP 11-nov) el archivo empieza por el número del certificado y después el de la orden:
+  // "Retención N° 9999-00000017 - OP N° X 9999-00000021 - Proveedor.pdf" (si la orden retuvo por más de un régimen, van todos los números)
+  const nrosCert = rets.map(x => x.certificado_nro).filter(Boolean).join(' y ') || 's-n';
+  doc.save(`Retención N° ${nrosCert} - OP N° ${nroOP} - ${pv.nombre || ''}`.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim() + '.pdf');
 }
