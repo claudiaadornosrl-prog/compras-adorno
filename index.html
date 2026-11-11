@@ -855,6 +855,15 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 .op-tipbox table.op-ec td.num{text-align:right;padding-left:14px}
 .op-tipbox table.op-ec tr.ig td{border-top:1px solid rgba(255,255,255,.25)!important;font-weight:700}
 .op-tipbox table.op-ec tr.sub td{color:#cbd5e1;font-style:italic;padding-top:5px}
+/* (v221) pagos anteriores del mes, desplegable */
+.op-tipbox .op-pa-tog{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+.op-tipbox .op-pa-tog .fl{color:#fbbf24;font-weight:700}
+.op-tipbox .pa-ch{display:inline-block;border-radius:999px;padding:0 7px;font-size:10.5px;background:rgba(255,255,255,.14);color:#e5e7eb;text-decoration:none;margin-left:3px}
+.op-tipbox .pa-ch.r{background:rgba(134,239,172,.2);color:#bbf7d0}
+.op-tipbox table.op-ec tr.pa td{font-size:11.5px!important;color:#cbd5e1!important;padding-top:1px!important;padding-bottom:1px!important}
+.op-tipbox table.op-ec tr.pa.no td{color:#94a3b8!important}
+.op-tipbox table.op-ec tr.pa td:nth-child(2){white-space:normal!important}
+.op-tipbox table.op-ec tr.pa td.num{vertical-align:top}
 .op-tipbox .nota{color:#cbd5e1;font-weight:400;font-style:italic}
 </style>
 </head>
@@ -1464,7 +1473,7 @@ const _diasDesde = f => {
 };
 
 async function abrirOP(cuit){
-  opSel = cuit; opPrep = null; opRets = []; opPagos = []; opVencManual = false; opImportes = {};
+  opSel = cuit; opPrep = null; opRets = []; opPagos = []; opVencManual = false; opImportes = {}; opIncluir = []; _opPaAbierto = false;
   // el catálogo de regímenes lo carga la pestaña ⚙️; si nunca la abrieron, acá
   if (!REGIMENES.length){
     const rg = await sb.from('compras_regimenes').select('*').order('codigo');
@@ -1600,7 +1609,7 @@ async function _opCalcular(){
   cont.innerHTML = '<div class="vacio">Calculando…</div>';
   const {data, error} = await sb.rpc('compras_op_preparar',
     {p_cuit: opSel, p_docs: opDocs, p_fecha: document.getElementById('op-fecha')?.value || null,
-     p_prueba: MODO_PRUEBA, p_descuento_pct: _opDescPct(), p_importes: _opImps()});
+     p_prueba: MODO_PRUEBA, p_descuento_pct: _opDescPct(), p_importes: _opImps(), p_incluir_pagos: opIncluir.length ? opIncluir : null});
   if (error){
     opPrep = null; if (btn) btn.disabled = true;
     cont.innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return;
@@ -1657,7 +1666,36 @@ async function _opCalcular(){
 //  La RPC devuelve los pasos en castellano (calculo[]) — el front solo los
 //  muestra. Así lo que se lee al pasar el mouse es EXACTAMENTE lo que se
 //  calculó, y en la OP emitida queda guardado tal cual.
-function _opTip(lineas, texto){
+// (v221, JP 11-nov) "Pagos ant. del mes" se despliega (arranca cerrado): una fila por orden de pago del mes.
+// Las que se retuvieron suman siempre; las que no, NO suman salvo que se tilde el casillero (opIncluir → p_incluir_pagos).
+let opIncluir = [], _opPaAbierto = false;
+function _opPaToggle(el){
+  _opPaAbierto = !_opPaAbierto;
+  const t = el.closest('table'); if (!t) return;
+  t.querySelectorAll('tr.pa').forEach(r => r.style.display = _opPaAbierto ? '' : 'none');
+  el.querySelector('.fl').textContent = _opPaAbierto ? '▾' : '▸';
+  const tip = el.closest('.op-tip'); if (tip && !tip.classList.contains('abierto')){ tip.classList.add('abierto'); }
+  if (tip) _opTipPos(tip);
+}
+async function _opPaIncluir(opId, on){
+  opIncluir = opIncluir.filter(x => x !== opId); if (on) opIncluir.push(opId);
+  _opPaAbierto = true;
+  await _opCalcular();
+  const tog = document.querySelector('#op-rets .op-pa-tog'), tip = tog && tog.closest('.op-tip');
+  if (tip){ tip.classList.add('abierto'); _opTipPos(tip); }
+}
+function _opPaFilas(f, editable){
+  const P = Array.isArray(f.pagos) ? f.pagos : []; if (!P.length) return '';
+  return P.map(p => { const ret = Number(p.retenido) > 0, fs = String(p.facturas || '').split(', ').filter(Boolean);
+    const fac = fs.length > 1 ? `${fs[0]} +${fs.length - 1}` : (fs[0] || '');
+    const marca = ret ? '<span style="color:#86efac">✓</span>'
+      : editable ? `<input type="checkbox" ${p.suma ? 'checked' : ''} style="width:14px !important;height:14px !important;margin:0 !important;vertical-align:middle;accent-color:#f97316;cursor:pointer" title="Tildalo para que este pago sume en el cálculo de la retención" onclick="event.stopPropagation()" onchange="_opPaIncluir(${Number(p.op_id)}, this.checked)">`
+      : (p.suma ? '<span style="color:#86efac">✓</span>' : '<span style="opacity:.6">–</span>');
+    return `<tr class="pa${p.suma ? '' : ' no'}" style="${_opPaAbierto ? '' : 'display:none'}" title="${esc(p.orden + ' · ' + (p.facturas || ''))}">
+      <td class="op">${marca}</td><td>${_fecha(p.fecha).slice(0, 5)} · ${esc(fac)} · ${esc(String(p.orden || '').replace(/^OP \d+-0*/, 'OP '))} <span class="pa-ch ${ret ? 'r' : ''}">${ret ? 'retenido ' + plata(p.retenido) : p.suma ? 'sin retención · sumado' : 'sin retención · no suma'}</span></td>
+      <td class="num">${p.suma ? plata(p.base) : '<s>' + plata(p.base) + '</s>'}</td></tr>`; }).join('');
+}
+function _opTip(lineas, texto, editable){
   const todo = Array.isArray(lineas) ? lineas.filter(Boolean) : [];
   const ls = todo.filter(l => typeof l === 'string');
   // (v141, JP) la RPC manda como último elemento {ecuacion:[{op,rotulo,monto|pct,nota}]}: se dibuja como la tablita del Dragon
@@ -1666,8 +1704,8 @@ function _opTip(lineas, texto){
   if (!ls.length && !ec.length) return esc(texto);
   const cuerpo = ec.length
     ? `<div class="op-ec-tit">${esc(ls[0] || texto)}</div><table class="op-ec">${ec.map(f => `<tr class="${f.op === '=' ? 'ig' : ''}${f.op === '' ? ' sub' : ''}">
-        <td class="op">${esc(f.op)}</td><td>${esc(f.rotulo)}${f.nota ? ` <span class="nota">· ${esc(f.nota)}</span>` : ''}</td>
-        <td class="num">${f.pct != null ? Number(f.pct).toLocaleString('es-AR') + ' %' : f.monto != null ? plata(f.monto) : ''}</td></tr>`).join('')}</table>
+        <td class="op">${esc(f.op)}</td><td>${(f.pagos || []).length ? `<span class="op-pa-tog" onclick="event.stopPropagation();_opPaToggle(this)" title="Ver los pagos del mes a este proveedor, uno por uno">${esc(f.rotulo)} <span class="fl">${_opPaAbierto ? '▾' : '▸'}</span>${f.pagos.some(p => !p.suma) ? ` <span class="pa-ch">${f.pagos.filter(p => !p.suma).length} sin sumar</span>` : ''}</span>` : esc(f.rotulo)}${f.nota ? ` <span class="nota">· ${esc(f.nota)}</span>` : ''}</td>
+        <td class="num">${f.pct != null ? Number(f.pct).toLocaleString('es-AR') + ' %' : f.monto != null ? plata(f.monto) : ''}</td></tr>${_opPaFilas(f, editable)}`).join('')}</table>
        ${ls.filter(l => /certificado|venció|propia del proveedor/i.test(l)).map(l => `<div class="nota">${esc(l)}</div>`).join('')}`
     : ls.map(l => `<div>${esc(l)}</div>`).join('');
   // (22-sep, JP) sin title nativo: duplicaba el popover con el cartel chico del navegador
@@ -1904,7 +1942,7 @@ function _opPintarRets(){
           <br><span class="mini">calculado: ${plata(r.calculado)} · ${esc(r.motivo_edicion||'')}</span></td>
         <td class="num" style="white-space:nowrap">— <button class="act op-ico" onclick="_opRetRestaurar(${i})" title="Volver a aplicar la retención calculada">${ico('refrescar','s')}</button></td></tr>`;
         return `<tr>
-        <td style="padding-right:10px">${_opTip(r.calculo, r.codigo + ' · ' + (r.nombre||'').slice(0,42))}
+        <td style="padding-right:10px">${_opTip(r.calculo, r.codigo + ' · ' + (r.nombre||'').slice(0,42), true)}
           ${r.alicuota ? ` <span class="mini">${Number(r.alicuota)}%</span>` : ''}
           ${r.propuesto ? ` <span class="mini" title="Propuesta por el sistema según el régimen del proveedor" style="cursor:help">${ico('info','s')}</span>` : ''}
           ${r.agregada ? ' <span class="chip" style="background:#e0e7ff;color:#3730a3">agregada</span>' : ''}
@@ -2043,7 +2081,7 @@ async function emitirOP(){
       notas: (p.notas||'').trim() || null})),
     p_retenciones: opRets.map(r => ({codigo: r.codigo, importe: Number(r.importe)||0,
                                      motivo_edicion: (r.motivo_edicion||'').trim() || null})),
-    p_prueba: MODO_PRUEBA, p_descuento_pct: Number(opPrep.descuento_pct) > 0 ? Number(opPrep.descuento_pct) : null, p_importes: _opImps() });
+    p_prueba: MODO_PRUEBA, p_descuento_pct: Number(opPrep.descuento_pct) > 0 ? Number(opPrep.descuento_pct) : null, p_importes: _opImps(), p_incluir_pagos: opIncluir.length ? opIncluir : null });
   if (error){
     alert('No se pudo emitir: ' + error.message);
     if (btn){ btn.disabled = false; btn.textContent = 'Emitir orden de pago'; }
@@ -7144,6 +7182,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=131"></script>
+<script src="manual.js?v=132"></script>
 </body>
 </html>
