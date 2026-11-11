@@ -11,7 +11,7 @@ function _mEsc(s) {
 function _manualSecciones() {
   return [
     { icon: '🧭', titulo: 'La barra de arriba', desc: 'Es igual en todos los módulos: mismo lugar para cada cosa y el color de la moneda del módulo (el mismo del Hub).',
-      pasos: ['A la izquierda, la moneda y el nombre del módulo. En la computadora, tocando el nombre (Compras ▾) se abre la lista para pasar a otro módulo; al final de esa lista está «Volver al Hub».', 'Al lado van los apartados (Bandeja, Comprobantes, Órdenes de pago, Pedidos, Mercadería, Conceptos, Proveedores, Equivalencias, Listados, Retenciones): son íconos; al pasar el mouse aparece el nombre, y el apartado en el que estás queda marcado en blanco con su nombre.', 'A la derecha: 🔄 Actualizar y Salir.', 'En el celular: los apartados y Actualizar están adentro del botón ☰; a la vista quedan 🏠 Hub (volver al Hub) y Salir.', '¿Dudas? Preguntale a Clodi (el botón de abajo a la derecha): sabe todo lo que dice este manual.'] },
+      pasos: ['A la izquierda, la moneda y el nombre del módulo. En la computadora, tocando el nombre (Compras ▾) se abre la lista para pasar a otro módulo; al final de esa lista está «Volver al Hub».', 'Al lado van los apartados (Bandeja, Comprobantes, Órdenes de pago, Pedidos, Mercadería, Conceptos, Proveedores, Equivalencias, Listados, Retenciones): son íconos; al pasar el mouse aparece el nombre, y el apartado en el que estás queda marcado en blanco con su nombre.', 'A la derecha: 🔄 Actualizar.', 'En el celular: los apartados y Actualizar están adentro del botón ☰; a la vista queda 🏠 Hub (volver al Hub).', 'Para cerrar la sesión: volvé al Hub y tocá 👤 (arriba) → Salir; se cierra en todos los módulos. En los módulos no hay botón de Salir.', '¿Dudas? Preguntale a Clodi (el botón de abajo a la derecha): sabe todo lo que dice este manual.'] },
     {
       icon: '🏢', titulo: 'Proveedores',
       desc: 'La ficha de cada proveedor con los datos que el módulo necesita y Dragonfish no tiene.',
@@ -43,7 +43,7 @@ function _manualSecciones() {
         'Con eso tildado, entrás a todos los módulos de ese equipo sin volver a escribir la clave.',
         'Código del celular (doble factor): si sos admin o directora y lo activaste en el Hub (panel de sesión, "Código del celular al entrar"), en cada computadora te pide, después de la clave, el código de 6 números de la app de autenticación del celular (Google o Microsoft Authenticator), y después una vez cada 30 días. En el celular registrado con "Entrar con la cara en este equipo" no hace falta ni clave ni código: te pide la cara (o la huella) al abrir. Si cambiás o perdés el celular, avisale a JP para darlo de baja.',
         'En las computadoras de los locales, que usan varias personas, NO se tilda: cada módulo sigue pidiendo usuario y contraseña por separado.',
-        'Al salir de cualquier módulo se cierra la sesión en todos. La computadora sigue marcada como de confianza hasta que lo apagues desde el Hub.',
+        'La sesión se cierra desde el Hub (👤 → Salir) y se cierra en todos los módulos. La computadora sigue marcada como de confianza hasta que lo apagues desde el Hub.',
       ],
     },
     {
