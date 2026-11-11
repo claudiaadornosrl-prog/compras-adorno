@@ -2110,6 +2110,8 @@ async function emitirOP(){
 // Mail: mismos pasos que "Enviar al estudio" (PDF al bucket compras-estudio + cola compras_envios_estudio, origen 'op').
 // WhatsApp: no admite adjuntos desde un enlace, así que el mensaje lleva los enlaces a los PDF (sirven 30 días).
 let _opEnv = null;
+// (JP 11-nov) el mail de la orden sale con copia a administración (así queda la cadena) y las consultas van a ese mail
+const _OP_MAIL_ADMIN = 'administracion@claudiaadorno.com';
 const _opEnvIn = 'width:100%;box-sizing:border-box;padding:8px 14px;border:1px solid var(--bd);border-radius:999px;font:inherit;font-size:13px';
 async function opEnviar(opId, canal){
   const {data, error} = await sb.rpc('compras_op_detalle', {p_op: opId});
@@ -2127,14 +2129,14 @@ async function opEnviar(opId, canal){
   const nroCert = certs.length ? ' N° ' + certs.join(' y N° ') : '';
   const que = `la orden de pago N° ${nroOp}` + (hayCert ? ` y ${certs.length > 1 ? 'los certificados' : 'el certificado'} de retención${nroCert}` : '');
   const cuerpo = esMail
-    ? `Hola,\n\nLes enviamos ${que} correspondiente${hayCert ? 's' : ''} al pago por ${plata(o.neto_a_pagar)}.\n\nCualquier duda nos avisan.\n\nSaludos,\nAdministración · Claudia Adorno SRL`
+    ? `Hola,\n\nLes enviamos ${que} correspondiente${hayCert ? 's' : ''} al pago por ${plata(o.neto_a_pagar)}.\n\nCualquier consulta, escriban a ${_OP_MAIL_ADMIN}.\n\nSaludos,\nAdministración · Claudia Adorno SRL`
     : `Hola, les enviamos ${que} de Claudia Adorno SRL por el pago de ${plata(o.neto_a_pagar)}.`;
   const lbl = t => `<label class="mini" style="display:block;margin:10px 0 4px;font-weight:600">${t}</label>`;
   openModalP(`
     <h3 class="op-tit" style="margin:0 0 4px;display:flex;align-items:center;gap:8px">${ico(esMail ? 'mail' : 'chat')} Enviar por ${esMail ? 'mail' : 'WhatsApp'}</h3>
     <p class="mini" style="margin:0 0 6px">Orden ${esc(o.comprobante || '')} · ${esc(o.proveedor_nombre || pv.nombre || '')}${o.es_prueba ? ' · <b>de prueba</b>' : ''}</p>
     ${esMail ? `${lbl('Para (si son varios, separalos con coma)')}<input id="ope-para" style="${_opEnvIn}" value="${esc(mail)}" placeholder="pagos@proveedor.com">
-      ${lbl('Con copia a (opcional)')}<input id="ope-cc" style="${_opEnvIn}" value="">
+      ${lbl('Con copia a')}<input id="ope-cc" style="${_opEnvIn}" value="${_OP_MAIL_ADMIN}">
       ${lbl('Asunto')}<input id="ope-asunto" style="${_opEnvIn}" value="${esc('Claudia Adorno SRL · Orden de pago N° ' + nroOp + (hayCert ? ` · Certificado${certs.length > 1 ? 's' : ''} de retención${nroCert}` : ''))}">`
     : `${lbl('WhatsApp del proveedor (si lo dejás vacío, elegís el contacto en WhatsApp)')}<input id="ope-para" style="${_opEnvIn}" value="${esc(wa)}" placeholder="11 5555-5555">`}
     ${lbl('Mensaje')}<textarea id="ope-cuerpo" rows="${esMail ? 8 : 3}" style="${_opEnvIn};border-radius:16px;resize:vertical">${esc(cuerpo)}</textarea>
@@ -7185,6 +7187,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=135"></script>
+<script src="manual.js?v=136"></script>
 </body>
 </html>
