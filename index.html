@@ -712,6 +712,8 @@ main{padding:14px;max-width:1250px;margin:0 auto;}
 .le-pan thead th{background:#fff7ed;color:#9a3412}
 .le-pan tbody tr:nth-child(even){background:#fcfaf7}
 .le-pan tfoot tr{background:#fff7ed !important}
+/* (v218) cuenta corriente de un proveedor: fechas del filtro en un renglón */
+#prov-modal input.cc-f{width:150px !important;flex:0 0 auto;margin:0 !important}
 /* (v217) orden de pago: botones para mandarla por WhatsApp / mail */
 #prov-modal button.op-env-wa{color:#166534;border-color:#86efac;background:#f0fdf4}
 #prov-modal button.op-env-mail{color:#1e40af;border-color:#93c5fd;background:#eff6ff}
@@ -4427,18 +4429,45 @@ function _pintarCuentaCorriente(){
     </table></div>`}
   </div>`;
 }
+// (v218, JP 11-nov) cuenta corriente de UN proveedor: filtro por fecha y descarga en PDF / Excel de lo que se ve
+let _CC = null;
+const _CC_PEND = ['contabilizado_sin_controlar','controlado_sin_op','con_op_sin_pagar'];
 async function abrirCC(cuit){
   const x = (LIST_CC || []).find(y => y.cuit === cuit) || {cuit};
   const {data, error} = await sb.rpc('compras_cc_movimientos', {p_cuit: cuit, p_prueba: MODO_PRUEBA});
   if (error){ alert(error.message); return; }
   const M = data || [];
-  const pend = M.filter(m => m.clase !== 'OP' && ['contabilizado_sin_controlar','controlado_sin_op','con_op_sin_pagar'].includes(m.estado));
+  _CC = {cuit, x, M, desde: '', hasta: ''};
+  const pend = M.filter(m => m.clase !== 'OP' && _CC_PEND.includes(m.estado));
+  const inF = 'padding:6px 12px;border:1px solid var(--bd);border-radius:999px;font:inherit;font-size:12.5px';
   openModalP(`
     <h3 style="margin:0 0 4px;">💳 ${esc(x.nombre || cuit)}</h3>
     <div class="hint" style="margin-bottom:10px;">CUIT ${_cuitFmt(cuit)} · saldo <b style="color:${Number(x.saldo) > 0 ? '#991b1b' : '#166534'}">${plata(x.saldo || 0)}</b> · ${pend.length} comprobante${pend.length === 1 ? '' : 's'} sin pagar</div>
-    ${!M.length ? '<div class="vacio">Sin movimientos.</div>' : `<div style="overflow:auto;max-height:60vh"><table class="tb-band" style="font-size:12.5px">
+    ${!M.length ? '' : `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <span class="mini">Desde</span><input type="date" id="cc-desde" class="cc-f" style="${inF}" onchange="_ccFiltro()">
+      <span class="mini">hasta</span><input type="date" id="cc-hasta" class="cc-f" style="${inF}" onchange="_ccFiltro()">
+      <button class="act gh" style="padding:5px 12px" onclick="document.getElementById('cc-desde').value='';document.getElementById('cc-hasta').value='';_ccFiltro()" title="Sacar el filtro de fechas y ver todos los movimientos">Todo</button>
+      <span class="mini" id="cc-res" style="margin-right:auto"></span>
+      <button class="act gh mini-ico" onclick="ccExportar('xlsx')" title="Bajar estos movimientos (con el filtro de fechas) en Excel">${ico('excel','s')}</button>
+      <button class="act gh mini-ico" onclick="ccExportar('pdf')" title="Bajar estos movimientos (con el filtro de fechas) en PDF">${ico('pdf','s')}</button>
+    </div>`}
+    <div id="cc-movs"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn" onclick="cerrarModalP()">Cerrar</button></div>`);
+  _ccPintarMovs();
+}
+function _ccFiltro(){ if (!_CC) return; _CC.desde = document.getElementById('cc-desde').value || ''; _CC.hasta = document.getElementById('cc-hasta').value || ''; _ccPintarMovs(); }
+const _ccMovs = () => !_CC ? [] : _CC.M.filter(m => { const f = String(m.fecha || '').slice(0, 10); return (!_CC.desde || f >= _CC.desde) && (!_CC.hasta || f <= _CC.hasta); });
+const _ccEstado = m => m.clase === 'OP' ? String(m.estado || '').replace('_', ' ') : String(chipPago(m.estado) || '').replace(/<[^>]+>/g, '').trim();
+const _ccRango = () => !_CC || (!_CC.desde && !_CC.hasta) ? '' : ((_CC.desde ? 'desde ' + _fecha(_CC.desde) + ' ' : '') + (_CC.hasta ? 'hasta ' + _fecha(_CC.hasta) : '')).trim();
+function _ccPintarMovs(){
+  const c = document.getElementById('cc-movs'); if (!c || !_CC) return;
+  const M = _ccMovs(), td = M.reduce((a, m) => a + (Number(m.debe) || 0), 0), th = M.reduce((a, m) => a + (Number(m.haber) || 0), 0);
+  const res = document.getElementById('cc-res');
+  if (res) res.textContent = _ccRango() ? `${M.length} de ${_CC.M.length} movimientos` : '';
+  c.innerHTML = !M.length ? `<div class="vacio">${_CC.M.length ? 'Sin movimientos entre esas fechas.' : 'Sin movimientos.'}</div>` : `<div style="overflow:auto;max-height:56vh"><table class="tb-band" style="font-size:12.5px">
       <thead><tr><th>Fecha</th><th>Comprobante</th><th>Detalle</th><th class="num">Debe</th><th class="num">Haber</th><th>Estado</th></tr></thead>
-      <tbody>${M.map(m => { const esPend = m.clase !== 'OP' && ['contabilizado_sin_controlar','controlado_sin_op','con_op_sin_pagar'].includes(m.estado);
+      <tbody>${M.map(m => { const esPend = m.clase !== 'OP' && _CC_PEND.includes(m.estado);
         return `<tr style="${m.clase === 'OP' ? 'background:#f0fdf4' : esPend ? 'background:#fff7ed' : ''}" ${m.doc_id ? `onclick="abrirResumenDoc(${m.doc_id})" title="Abrir el comprobante"` : m.op_id ? `onclick="verOP(${m.op_id})" title="Abrir la orden de pago"` : ''}>
         <td class="mini" style="white-space:nowrap">${_fecha(m.fecha)}</td>
         <td style="white-space:nowrap">${esc(m.comprobante)}</td>
@@ -4446,9 +4475,52 @@ async function abrirCC(cuit){
         <td class="num">${Number(m.debe) ? plata(m.debe) : ''}</td>
         <td class="num">${Number(m.haber) ? plata(m.haber) : ''}</td>
         <td>${m.clase === 'OP' ? `<span class="chip" style="background:${m.estado === 'pagada' ? '#dcfce7;color:#166534' : '#fef3c7;color:#92400e'}">${esc(m.estado)}</span>` : chipPago(m.estado)}</td>
-      </tr>`; }).join('')}</tbody></table></div>`}
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
-      <button class="btn" onclick="cerrarModalP()">Cerrar</button></div>`);
+      </tr>`; }).join('')}</tbody>
+      <tfoot><tr style="font-weight:700;background:#f8fafc"><td colspan="3">Total${_ccRango() ? ' del período' : ''}</td><td class="num">${plata(td)}</td><td class="num">${plata(th)}</td><td></td></tr></tfoot></table></div>`;
+}
+async function ccExportar(formato){
+  if (!_CC) return;
+  const M = _ccMovs(); if (!M.length){ alert('No hay movimientos para exportar.'); return; }
+  const x = _CC.x, prov = x.nombre || _CC.cuit, rango = _ccRango();
+  const titulo = 'Cuenta corriente · ' + prov, sub = `CUIT ${_cuitFmt(_CC.cuit)}${rango ? ' · ' + rango : ' · todos los movimientos'} · saldo al ${_fecha(_hoyISO())}: ${plata(x.saldo || 0)}`;
+  const cols = [['Fecha', m => _fecha(m.fecha), '', 20], ['Comprobante', m => m.comprobante || '', '', 40], ['Detalle', m => m.detalle || '', '', 56],
+                ['Debe', m => Number(m.debe) || 0, 'n', 26], ['Haber', m => Number(m.haber) || 0, 'n', 26], ['Estado', m => _ccEstado(m), '', 24]];
+  const suma = c => M.reduce((a, m) => a + (Number(c[1](m)) || 0), 0);
+  const nombre = ('Cuenta corriente ' + prov + (rango ? ' ' + rango : '')).replace(/[\\/:*?"<>|·]/g, '-').replace(/\s+/g, ' ').trim() + (MODO_PRUEBA ? ' (PRUEBA)' : '');
+  try {
+    if (formato === 'xlsx'){
+      if (!window.XLSX) await _cargarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+      const aoa = [['Claudia Adorno SRL · ' + titulo + (MODO_PRUEBA ? ' — AMBIENTE DE PRUEBA' : '')], [sub], [], cols.map(c => c[0])]
+        .concat(M.map(m => cols.map(c => c[1](m))))
+        .concat([cols.map((c, i) => i === 0 ? 'TOTAL' : c[2] ? suma(c) : '')]);
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = cols.map(c => ({wch: Math.max(10, Math.round(c[3] / 1.6))}));
+      cols.forEach((c, j) => { if (c[2] !== 'n') return;
+        for (let i = 4; i < aoa.length; i++){ const cel = ws[XLSX.utils.encode_cell({r: i, c: j})]; if (cel && typeof cel.v === 'number') cel.z = '#,##0.00'; } });
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Cuenta corriente');
+      XLSX.writeFile(wb, nombre + '.xlsx');
+    } else {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({unit: 'mm', format: 'a4'});
+      const ancho = cols.reduce((a, c) => a + c[3], 0), k = 182 / ancho, n2 = v => Number(v) ? '$ ' + Number(v).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '';
+      let y = 0, pag = 0;
+      const fila = (vals, negrita) => { doc.setFont('helvetica', negrita ? 'bold' : 'normal'); doc.setFontSize(8); let px = 14;
+        cols.forEach((c, j) => { const w = c[3] * k, num = c[2];
+          let t = String(vals[j] ?? ''); const max = Math.floor(w / 1.45); if (!num && t.length > max) t = t.slice(0, max - 1) + '…';
+          if (num) doc.text(t, px + w - 1.5, y, {align: 'right'}); else doc.text(t, px, y);
+          px += w; }); y += 4.6; };
+      const cabecera = () => { pag++; doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+        let t = 'Claudia Adorno SRL · ' + titulo; if (t.length > 78) t = t.slice(0, 77) + '…'; doc.text(t, 14, 13);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.text(sub, 14, 18);
+        doc.text(`Emitido el ${_fecha(_hoyISO())}${MODO_PRUEBA ? ' · AMBIENTE DE PRUEBA' : ''} · página ${pag}`, 196, 23, {align: 'right'});
+        y = 29; fila(cols.map(c => c[0]), true); doc.line(14, y - 3.2, 196, y - 3.2); };
+      cabecera();
+      M.forEach(m => { if (y > 282){ doc.addPage(); cabecera(); } fila(cols.map(c => c[2] === 'n' ? n2(c[1](m)) : c[1](m))); });
+      doc.line(14, y - 3.2, 196, y - 3.2);
+      fila(cols.map((c, i) => i === 0 ? 'TOTAL' + (rango ? ' del período' : '') : c[2] === 'n' ? n2(suma(c)) : ''), true);
+      doc.save(nombre + '.pdf');
+    }
+  } catch (e){ alert('No se pudo armar el archivo: ' + e.message); }
 }
 
 function _listMes(delta){
@@ -7062,6 +7134,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=128"></script>
+<script src="manual.js?v=129"></script>
 </body>
 </html>
