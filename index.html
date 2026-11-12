@@ -2559,7 +2559,11 @@ function _renderRetenciones(){
   const c = document.getElementById('pf-ret'); if (!c) return;
   if (!_fRet.length){ c.innerHTML = '<div class="hint">No hay regímenes configurados (pestaña ⚙️ Retenciones).</div>'; _resP('ret', 'sin regímenes'); return; }
   const nAp = _fRet.filter(r => r.aplica && !r.exento).length, nEx = _fRet.filter(r => r.aplica && r.exento).length, nVen = _fRet.filter(r => r.cert_vencido).length;
-  _resP('ret', (nAp ? _nP(nAp, 'régimen aplica', 'regímenes aplican') : 'no se le retiene') + (nEx ? ` · ${_nP(nEx, 'excluido', 'excluidos')}` : '') + (nVen ? ` · ⚠ ${_nP(nVen, 'certificado vencido', 'certificados vencidos')}` : ''), nAp && !nVen);
+  const noRet = !!document.getElementById('pf-noret')?.checked;
+  c.style.opacity = noRet ? '.45' : ''; c.style.pointerEvents = noRet ? 'none' : '';
+  if (noRet) _resP('ret', 'no se le retiene nunca', true);
+  // sin ningún régimen tildado la orden PROPONE uno según el tipo de gasto: no es lo mismo que no retener
+  else _resP('ret', (nAp ? _nP(nAp, 'régimen aplica', 'regímenes aplican') : nEx ? 'no se le retiene' : 'sin régimen: la orden propone uno') + (nEx ? ` · ${_nP(nEx, 'excluido', 'excluidos')}` : '') + (nVen ? ` · ⚠ ${_nP(nVen, 'certificado vencido', 'certificados vencidos')}` : ''), nAp && !nVen);
   c.innerHTML = `<table style="width:100%;font-size:12.5px;"><thead><tr><th>Régimen</th><th>Aplica</th><th>Excluido</th><th>Alíc. %</th><th>Certificado</th><th>Vence</th><th>Notas</th></tr></thead><tbody>
     ${_fRet.map((r,i) => `<tr style="${r.cert_vencido ? 'background:#fef2f2;' : ''}">
       <td title="${_mEscP(r.codigo)}">${_mEscP(r.nombre)}<div class="hint">${_mEscP(r.jurisdiccion||'')}</div></td>
@@ -2712,6 +2716,10 @@ async function fichaProveedor(i){
     <div id="pf-descuentos"></div>`)}
     ${p.cuit && !p.es_exterior ? _secP('ret', 'porcentaje', 'Retenciones', 'cargando…', `
     <div class="hint" style="margin-bottom:10px;">Qué le retenemos a este proveedor cuando le pagamos (Ganancias, IIBB…). Lo que se marque acá es lo que la 💸 Orden de pago calcula sola.</div>
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 16px;border:1px solid var(--bd);border-radius:999px;background:#fafafa;margin-bottom:10px;cursor:pointer;width:fit-content;max-width:100%"
+           title="Con esto marcado, la orden de pago de este proveedor no calcula ni propone ninguna retención, tenga o no regímenes tildados abajo. Sirve para los proveedores a los que nunca se les retiene.">
+      <input type="checkbox" id="pf-noret" style="width:17px;height:17px;margin:0;flex:0 0 auto" onchange="_renderRetenciones()">
+      <span><b>No retenerle nunca</b> <span class="mini">· la orden de pago sale sin retenciones</span></span></label>
     <div id="pf-ret"><div class="hint">Cargando…</div></div>`) : ''}
     ${_secP('notas', 'hoja', 'Notas', p.notas ? 'hay notas' : 'sin notas', `
     <textarea id="pf-notas" rows="3" placeholder="Lo que conviene recordar de este proveedor: horarios, cómo manda la mercadería, con quién reclamar…">${_mEscP(p.notas||'')}</textarea>`, !!p.notas)}
@@ -2742,6 +2750,9 @@ async function fichaProveedor(i){
   if (p.cuit && !p.es_exterior){
     const { data, error } = await sb.rpc('compras_proveedor_retenciones', { p_cuit: p.cuit });
     _fRet = error ? [] : (data || []);
+    // (JP 12-nov) "No retenerle nunca": se guarda en compras_proveedor_datos.no_retener
+    const nr = await sb.from('compras_proveedor_datos').select('no_retener').eq('codigo', p.codigo).maybeSingle();
+    const chk = document.getElementById('pf-noret'); if (chk) chk.checked = !!(nr.data && nr.data.no_retener);
     _renderRetenciones();
   }
   // (v149) foto del formulario para avisar si se cierra con cambios sin guardar: recién ahora, con todo cargado
@@ -2774,6 +2785,7 @@ async function guardarFichaProveedor(codigo, cuit){
     descuentos: _fDescuentos.filter(d => d.descripcion || d.porcentaje),
     pedido_minimo: { importe: parseFloat(g('pf-min-imp')) || null, unidades: parseFloat(g('pf-min-uni')) || null,
                      modo: g('pf-min-modo') || 'cualquiera', nota: g('pf-min-nota') } };
+  const _nr = document.getElementById('pf-noret'); if (_nr) datos.no_retener = _nr.checked;
   const volMal = datos.descuentos.find(d => ['monto_minimo','cantidad_minima'].includes(d.tipo) && !(d.umbral > 0 && d.porcentaje > 0));
   if (volMal) return alert('El descuento "' + (volMal.descripcion || volMal.tipo) + '" es por volumen: necesita el "Desde" y el %.');
   // 5) CBU: 22 dígitos con sus dos dígitos verificadores; uno mal cargado se descubre cuando el banco rechaza la transferencia
@@ -7187,6 +7199,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=136"></script>
+<script src="manual.js?v=137"></script>
 </body>
 </html>
