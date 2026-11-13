@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v232-cierre-autoriza-personal';
+const CACHE_VERSION = 'compras-v233-cierre-pdf-excel';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './firma-jp.jpg', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

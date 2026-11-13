@@ -4945,22 +4945,70 @@ const _ESTUDIO_MAILS = {para: ['mepf@estudioppfu.com.ar', 'impuestos@estudioppfu
 const _ETAPA = {pre_cierre: {t: 'Pre-cierre', bg: '#fef3c7', fg: '#92400e'}, cierre: {t: 'Cierre', bg: '#dcfce7', fg: '#166534'}, rectificacion: {t: 'Rectificación', bg: '#fee2e2', fg: '#991b1b'}};
 const _PILL = 'border-radius:999px';
 const _retQ = q => (LIST_RET || []).filter(r => (+String(r.fecha || '').slice(8, 10) <= 15) === (q === 1));
-function _retBajarQ(q){
-  const todo = LIST_RET; LIST_RET = _retQ(q);
-  try { _bajarRetenciones(); } finally { LIST_RET = todo; }
-  const u = _CAPTURA && _CAPTURA[_CAPTURA.length - 1];
-  if (u) u.nombre = u.nombre.replace(/(\.[a-z]+)$/i, (q === 1 ? '_1ra_quincena' : '_2da_quincena') + '$1');
+async function _retBajarQ(q){
+  const todo = LIST_RET, desde = _CAPTURA ? _CAPTURA.length : 0; LIST_RET = _retQ(q);
+  try { _bajarRetenciones(); await _pdfRetenciones(); } finally { LIST_RET = todo; }
+  (_CAPTURA || []).slice(desde).forEach(u => { u.nombre = u.nombre.replace(/(\.[a-z]+)$/i, (q === 1 ? '_1ra_quincena' : '_2da_quincena') + '$1'); });
+}
+// (13-nov, JP) El estudio recibe PDF y Excel (no CSV): cada CSV capturado se convierte a .xlsx antes de guardarlo.
+async function _csvAXlsx(a){
+  if (!window.XLSX) await _cargarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+  const txt = (await a.blob.text()).replace(/^\uFEFF/, '');
+  const aoa = txt.split(/\r?\n/).filter(l => l.length).map((l, i) => l.split(';').map(c => (i && /^-?\d+,\d+$/.test(c)) ? Number(c.replace(',', '.')) : c));
+  return {nombre: a.nombre.replace(/\.csv$/i, '.xlsx'), blob: _xlsxBlob(aoa)};
+}
+function _xlsxBlob(aoa){
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = (aoa[0] || []).map((h, j) => ({wch: Math.min(46, Math.max(10, ...aoa.slice(0, 200).map(f => String(f[j] ?? '').length + 2)))}));
+  Object.keys(ws).forEach(k => { if (k[0] !== '!' && typeof ws[k].v === 'number') ws[k].z = '#,##0.00'; });
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Listado');
+  return new Blob([XLSX.write(wb, {bookType: 'xlsx', type: 'array'})], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+// Totales de alícuotas de IVA compras: el mismo cuadro que saca el Dragonfish (una fila por alícuota).
+function _totAlicuotas(){
+  const R = LIST_IVA || [], s = k => R.reduce((a, x) => a + (Number(x[k]) || 0), 0);
+  const F = [['No gravado / exento', s('no_gravado') + s('exento'), 0], ['10,50', s('neto_105'), s('iva_105')], ['21,00', s('neto_21'), s('iva_21')], ['27,00', s('neto_27'), s('iva_27')]];
+  if (Math.abs(s('iva_otros')) > 0.004) F.push(['IVA de ajuste', 0, s('iva_otros')]);
+  const filas = F.filter(f => Math.abs(f[1]) > 0.004 || Math.abs(f[2]) > 0.004).map(f => [f[0], f[1], f[2], f[1] + f[2]]);
+  return {filas, tot: ['Totales', filas.reduce((a, f) => a + f[1], 0), filas.reduce((a, f) => a + f[2], 0), filas.reduce((a, f) => a + f[3], 0)], n: R.length};
+}
+async function _bajarTotAlicuotas(){
+  const T = _totAlicuotas(), cols = [{t: 'Porcentaje IVA', w: 50}, {t: 'Monto gravado', num: 1}, {t: 'IVA', num: 1}, {t: 'Total', num: 1, b: 1}];
+  await _pdfListado('Totales de alícuotas de IVA compras', cols, T.filas.map(f => [f[0], _lstN(f[1]) || '0,00', _lstN(f[2]) || '0,00', _lstN(f[3]) || '0,00']),
+    {vertical: true, totales: [`Totales · ${T.n} comprobantes`, _lstN(T.tot[1]), _lstN(T.tot[2]), _lstN(T.tot[3])]});
+}
+// Retenciones y percepciones de compras: el listado conjunto que hoy recibe el estudio. Van juntas pero cada
+// renglón dice qué es (Aplicación) y el importe cae en su propia columna (Percepción / Retención).
+function _retPercFilas(){
+  const P = (LIST_PDET || []).map(p => ({f: p.fecha_emision, prov: p.proveedor, comp: p.comprobante, ap: 'Percepción', perc: Number(p.importe) || 0, ret: null, desc: p.impuesto, jur: p.jurisdiccion || '', cuit: p.cuit}));
+  const T = (LIST_RET || []).map(r => ({f: r.fecha, prov: r.proveedor, comp: 'OP ' + (r.orden_pago || ('#' + r.orden_pago_id)), ap: 'Retención', perc: null, ret: Number(r.importe) || 0, desc: r.impuesto || r.regimen_codigo || '', jur: '', cuit: r.cuit}));
+  return P.concat(T).sort((a, b) => String(a.f).localeCompare(String(b.f)) || String(a.prov).localeCompare(String(b.prov)));
+}
+async function _bajarRetPerc(){
+  const F = _retPercFilas(), tp = F.reduce((a, x) => a + (x.perc || 0), 0), tr = F.reduce((a, x) => a + (x.ret || 0), 0);
+  const cols = [{t: 'Fecha', w: 18}, {t: 'Proveedor', w: 62}, {t: 'Comprobante', w: 42}, {t: 'Aplicación', w: 22}, {t: 'Percepción', num: 1, w: 28}, {t: 'Retención', num: 1, w: 28}, {t: 'Descripción', w: 34}, {t: 'Jurisdicción', w: 28}, {t: 'CUIT', w: 24}];
+  await _pdfListado('Retenciones y percepciones de compras', cols, F.map(x => [_fecha(x.f), (x.prov || '').slice(0, 44), x.comp, x.ap, x.perc === null ? '' : _lstN(x.perc), x.ret === null ? '' : _lstN(x.ret), x.desc || '', x.jur, _cuitFmt(x.cuit)]),
+    {totales: ['Totales', `${F.length} renglones`, '', '', _lstN(tp), _lstN(tr), '', '', '']});
+  if (!window.XLSX) await _cargarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+  const aoa = [['Fecha', 'Proveedor', 'Comprobante', 'Aplicación', 'Percepción', 'Retención', 'Descripción', 'Jurisdicción', 'CUIT']]
+    .concat(F.map(x => [_fecha(x.f), x.prov || '', x.comp, x.ap, x.perc === null ? '' : x.perc, x.ret === null ? '' : x.ret, x.desc || '', x.jur, _cuitFmt(x.cuit)]))
+    .concat([['Totales', '', '', '', tp, tr, '', '', '']]);
+  _capturar(`Retenciones y percepciones de compras ${_listRotulo(true)}.xlsx`, _xlsxBlob(aoa));
 }
 // tab = pestaña donde vive · n() = renglones · armar(per) = deja los archivos en _CAPTURA
 const _CL = {
   iva:            {t: 'IVA Compras', tab: 'iva', n: () => (LIST_IVA || []).length, bloquea: true, armar: async per => {
-                    _bajarFormatoEstudio(); _bajarIvaCompras(); _libBajarCompras('cb'); _libBajarCompras('al');
+                    _bajarFormatoEstudio(); _bajarIvaCompras(); await _pdfIvaCompras(); await _bajarTotAlicuotas();
+                    _libBajarCompras('cb'); _libBajarCompras('al');
                     const v = await sb.from('libros_iva_archivos').select('archivo').eq('periodo', per);
                     for (const a of (v.data || []).map(x => x.archivo).filter(a => /^VENTAS_/.test(a))) await _libBajarVentas(per, a); }},
-  percepciones:   {t: 'Percepciones', tab: 'perc', n: () => (LIST_PDET || []).length, armar: async () => _bajarPercepciones()},
-  retenciones_q1: {t: 'Retenciones · 1ª quincena', tab: 'ret', n: () => _retQ(1).length, armar: async () => _retBajarQ(1)},
-  retenciones_q2: {t: 'Retenciones · 2ª quincena', tab: 'ret', n: () => _retQ(2).length, armar: async () => _retBajarQ(2)},
+  percepciones:   {t: 'Retenciones y percepciones de compras', tab: 'perc', n: () => (LIST_PDET || []).length + (LIST_RET || []).length, armar: async () => {
+                    await _bajarRetPerc();
+                    if (LIST_PDET && LIST_PDET.length){ _bajarPercepciones(); await _pdfPercepciones(); } }},
+  retenciones_q1: {t: 'Retenciones · 1ª quincena', tab: 'ret', n: () => _retQ(1).length, armar: () => _retBajarQ(1)},
+  retenciones_q2: {t: 'Retenciones · 2ª quincena', tab: 'ret', n: () => _retQ(2).length, armar: () => _retBajarQ(2)},
 };
+
 function _estudioMailsHTML(){
   return `<div class="mini">Mails del estudio: ${esc(_ESTUDIO_MAILS.para.join(', '))} · copia a ${esc(_ESTUDIO_MAILS.cc.join(', '))}
     <a href="#" onclick="document.getElementById('env-para').value=_ESTUDIO_MAILS.para.join(', ');document.getElementById('env-cc').value=_ESTUDIO_MAILS.cc.join(', ');return false">usar estos</a></div>`;
@@ -4990,13 +5038,13 @@ async function _pintarCierre(mesKey){
     const rot = est === 'cierre' ? 'cerrado' + ver : est === 'pre_cierre' ? 'en pre-cierre' + ver : est === 'rectificacion' ? 'en corrección' + ver : (n ? 'abierto' : 'sin movimientos');
     resumen.push(`<button type="button" class="chip" style="border:0;cursor:pointer;background:${col}1a;color:${col};font:inherit;font-size:12px;font-weight:700;padding:4px 11px" onclick="_leTab('${C.tab}')" title="Ir al listado">${esc(C.t)}: ${rot}</button>`);
     const box = document.querySelector(`#list-estudio .cierre-lst[data-l="${l}"]`); if (!box) continue;
-    const T = est === 'abierto' ? (n ? `Abierto. Cuando esté listo, dá el <b>Pre-cierre</b>: se guarda el listado para controlarlo, todavía no se manda nada.` : `Sin movimientos en ${esc(mesTxt)}: no hay nada para cerrar.`)
+    const T = est === 'abierto' ? (n ? `Abierto. Cuando esté listo, dá el <b>Pre-cierre</b>: se guarda el listado para controlarlo, todavía no se manda nada.` : `Sin movimientos en ${esc(mesTxt)}. Se puede cerrar igual: al estudio le llega el aviso de que no hay.`)
       : est === 'pre_cierre' ? `En pre-cierre${ver}: emitido el ${_fechaTs(ult.cuando)} por ${quien(ult.por)}. Controlalo y, si está bien, dá el <b>Cierre</b> para mandarlo al estudio. Si corregiste algo, repetí el pre-cierre.`
       : est === 'rectificacion' ? `En corrección${ver}: ya se le avisó al estudio. Corregí y después dá de nuevo el <b>Pre-cierre</b>.`
       : ult ? `Cerrado y enviado al estudio${ver} el ${_fechaTs(ult.cuando)} por ${quien(ult.por)}.${C.bloquea ? ' Los comprobantes del mes ya no se modifican.' : ''} Si aparece una diferencia, hay que <b>rectificar</b>.`
       : `Cerrado el ${_fechaTs(leg.cerrado_at)} por ${quien(leg.cerrado_por)}${leg.nota ? ' · ' + esc(leg.nota) : ''} (antes de que existieran las etapas). Si aparece una diferencia, hay que <b>rectificar</b>.`;
     const B = est === 'cierre' ? `<button class="act gh" style="${_PILL}" onclick="abrirRectificar('${mesKey}','${l}',${vuelta})" title="Avisarle al estudio que se está corrigiendo este listado y volverlo a pre-cierre">Rectificar</button>`
-      : !n ? ''
+      : !n ? `<button class="act" style="${_PILL}" onclick="abrirCierre('${mesKey}','${l}',${vuelta},true)" title="Cerrar el listado y avisarle al estudio que no hubo movimientos">${ico('avion','s')} Cerrar sin movimientos y avisar</button>`
       : est === 'pre_cierre' ? `<button class="act gh" style="${_PILL}" onclick="darPreCierre('${mesKey}','${l}')" title="Volver a emitir el listado después de una corrección">Repetir el pre-cierre</button>
           <button class="act" style="${_PILL}" onclick="abrirCierre('${mesKey}','${l}',${vuelta})" title="Guardar el listado definitivo y mandarlo al estudio">${ico('avion','s')} Dar el Cierre y enviar</button>`
       : `<button class="act" style="${_PILL}" onclick="darPreCierre('${mesKey}','${l}')" title="Guardar el listado para controlarlo. No se manda nada al estudio.">${ico('candado','s')} Dar el Pre-cierre</button>`;
@@ -5010,7 +5058,7 @@ async function _pintarCierre(mesKey){
     box.innerHTML = `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <div style="flex:1;min-width:240px"><b>${ico(est === 'cierre' ? 'candado' : 'avion','s')} Cierre · ${esc(C.t)} · ${esc(mesTxt)}</b><div class="mini">${T}</div></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${B}</div></div>
-      <div class="mini cierre-estado" style="margin-top:4px">${!PUEDE_CERRAR && (n || est === 'cierre') ? 'Para confirmar cada paso se pide el usuario personal y la clave de quien autoriza.' : ''}</div>${H}`;
+      <div class="mini cierre-estado" style="margin-top:4px">${!PUEDE_CERRAR ? 'Para confirmar cada paso se pide el usuario personal y la clave de quien autoriza.' : ''}</div>${H}`;
   }
   el.innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:13.5px">${ico('candado','s')} Cierres de ${esc(mesTxt)}</b>${resumen.join('')}</div><div id="envios-estudio"></div>`;
   _pintarEnviosEstudio(mesKey, (r.data || []).map(e => e.envio_id).filter(Boolean));
@@ -5037,9 +5085,16 @@ async function _cierreBajar(path){
 async function _cierreArmar(per, l){
   _CAPTURA = [];
   try { await _CL[l].armar(per); } catch (e){ _CAPTURA = null; throw e; }
-  const archivos = _CAPTURA; _CAPTURA = null;
+  let archivos = _CAPTURA; _CAPTURA = null;
   if (!archivos.length) throw new Error('no quedó ningún archivo para guardar');
+  archivos = await Promise.all(archivos.map(a => /\.csv$/i.test(a.nombre) ? _csvAXlsx(a) : a));
   return archivos;
+}
+// Listado sin movimientos: igual se le avisa al estudio. Se guarda una constancia para que el paso tenga su archivo.
+function _cierreSinMov(mesKey, l){
+  const C = _CL[l], mesTxt = _envioMesTxt(mesKey);
+  const txt = `Claudia Adorno SRL · CUIT 30-70967311-0\r\n${C.t} · ${mesTxt}\r\n\r\nSIN MOVIMIENTOS en el período.\r\nConstancia emitida el ${_fechaTs(new Date().toISOString())}.${MODO_PRUEBA ? '\r\nAMBIENTE DE PRUEBA' : ''}\r\n`;
+  return [{nombre: `Sin movimientos - ${C.t.replace(/[·ª]/g, '').replace(/\s+/g, ' ')} ${mesKey}.txt`, blob: new Blob([txt], {type: 'text/plain;charset=utf-8'})}];
 }
 async function _cierreSubir(archivos, carpeta, avisar){
   const subidos = [];
@@ -5093,9 +5148,12 @@ function _cierreCliente(queEs){
 function _cierreSoltar(cli){ if (cli && cli !== sb){ try { cli.auth.signOut({scope: 'local'}); } catch (e) {} } }
 // El mensaje del mail de cada listado. En las quincenas de retenciones dice el rango y qué impuestos no tuvieron
 // retenciones, que es lo que hoy se le aclara al estudio a mano ("retención de IVA: no hay").
-function _cierreCuerpo(mesKey, l, vuelta){
+function _cierreCuerpo(mesKey, l, vuelta, sinMov){
   const C = _CL[l], mesTxt = _envioMesTxt(mesKey), [y, m] = mesKey.split('-');
   const q = l === 'retenciones_q1' ? 1 : l === 'retenciones_q2' ? 2 : 0;
+  const pie = `${vuelta > 1 ? '\n\nEs la versión ' + vuelta + ', rectificada: reemplaza a la que mandamos antes.' : ''}\n\nCualquier duda nos avisan.\n\nSaludos,\nAdministración · Claudia Adorno SRL`;
+  if (sinMov) return q ? `Hola,\n\nEn la ${q === 1 ? '1ª' : '2ª'} quincena de ${mesTxt} (del ${q === 1 ? '01' : '16'}-${m}-${y} al ${q === 1 ? '15' : _finMes(+y, +m)}-${m}-${y}) no se practicaron retenciones en los pagos a proveedores.\n\nRetenciones de Ganancias: no hay.\nRetenciones de IVA: no hay.\nRetenciones de Ingresos Brutos: no hay.${pie}`
+    : `Hola,\n\nLes avisamos que en ${mesTxt} no hubo movimientos para el listado de ${C.t}.${pie}`;
   let det = `Adjuntamos el listado de ${C.t} de ${mesTxt}`;
   if (q){
     const R = _retQ(q), hay = re => R.filter(r => re.test(String(r.impuesto || '') + ' ' + String(r.regimen_codigo || ''))).length;
@@ -5134,13 +5192,14 @@ function _cierreOverlay(){
 }
 const _cierreAsunto = (cfg, l, mesTxt) => `Claudia Adorno SRL · ${_CL[l].t} · ${mesTxt}`;
 // El Cierre de un listado: abre la ventana del mail con los archivos de ESE listado.
-async function abrirCierre(mesKey, l, vuelta){
+async function abrirCierre(mesKey, l, vuelta, sinMov){
   const C = _CL[l], cfg = await _envioCfg(), mesTxt = _envioMesTxt(mesKey);
   let archivos;
-  try { archivos = await _cierreArmar(mesKey, l); } catch (e){ alert('No pude armar el listado: ' + e.message); return; }
+  if (sinMov) archivos = _cierreSinMov(mesKey, l);
+  else try { archivos = await _cierreArmar(mesKey, l); } catch (e){ alert('No pude armar el listado: ' + e.message); return; }
   const ov = _cierreOverlay(), R = 'width:100%;box-sizing:border-box;border-radius:999px';
   ov.innerHTML = `<div class="c-box" style="max-width:640px;width:100%">
-    <div class="c-head"><div style="flex:1"><div style="font-weight:700;font-size:15px">${ico('candado','s')} Dar el Cierre y enviar · ${esc(C.t)} · ${esc(mesTxt)}${vuelta > 1 ? ' · rectificado, versión ' + vuelta : ''}${MODO_PRUEBA ? ' · 🧪 PRUEBA' : ''}</div>
+    <div class="c-head"><div style="flex:1"><div style="font-weight:700;font-size:15px">${ico('candado','s')} ${sinMov ? 'Cerrar sin movimientos y avisar' : 'Dar el Cierre y enviar'} · ${esc(C.t)} · ${esc(mesTxt)}${vuelta > 1 ? ' · rectificado, versión ' + vuelta : ''}${MODO_PRUEBA ? ' · 🧪 PRUEBA' : ''}</div>
       <div style="font-size:12.5px;opacity:.9">Sale desde claudiaadornosrl@gmail.com, desde la PC de JP, en unos 5 minutos.${C.bloquea ? ' Los comprobantes del mes quedan bloqueados.' : ''}</div></div>
       <button class="m-x" onclick="document.getElementById('nota-overlay').remove()">✕</button></div>
     <div class="c-body" style="display:grid;gap:8px">
@@ -5148,7 +5207,7 @@ async function abrirCierre(mesKey, l, vuelta){
       <label class="mini">Con copia<input id="env-cc" style="${R}" value="${esc((cfg.cc || []).join(', '))}"></label>
       ${_estudioMailsHTML()}
       <label class="mini">Asunto<input id="env-asunto" style="${R}" value="${esc(_cierreAsunto(cfg, l, mesTxt) + (vuelta > 1 ? ' · RECTIFICADO (versión ' + vuelta + ')' : ''))}"></label>
-      <label class="mini">Mensaje<textarea id="env-cuerpo" rows="5" style="width:100%;box-sizing:border-box;font:inherit;font-size:13px;border-radius:14px">${esc(_cierreCuerpo(mesKey, l, vuelta))}</textarea></label>
+      <label class="mini">Mensaje<textarea id="env-cuerpo" rows="5" style="width:100%;box-sizing:border-box;font:inherit;font-size:13px;border-radius:14px">${esc(_cierreCuerpo(mesKey, l, vuelta, sinMov))}</textarea></label>
       <div class="mini" style="font-weight:600;margin-top:4px">Adjuntos de este listado</div>
       ${archivos.map((a, i) => `<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:2px 0"><input type="checkbox" class="env-adj" data-i="${i}" checked> ${esc(a.nombre)}</label>`).join('')}
       <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-top:6px"><input type="checkbox" id="env-guardar" checked> Recordar los destinatarios para la próxima vez</label>
@@ -5156,7 +5215,7 @@ async function abrirCierre(mesKey, l, vuelta){
     <div class="c-pie"><div style="flex:1" id="env-estado" class="mini"></div>
       <button class="act gh" style="${_PILL}" onclick="document.getElementById('nota-overlay').remove()">Cancelar</button>
       <button class="act" style="${_PILL}" id="env-btn" onclick="darCierre('${mesKey}','${l}',${vuelta})">${ico('avion','s')} Dar el Cierre y enviar</button></div></div>`;
-  ov._archivos = archivos;
+  ov._archivos = archivos; ov._sinMov = !!sinMov;
 }
 function _cierreMails(){
   const lista = t => String(document.getElementById(t)?.value || '').split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
@@ -5175,8 +5234,12 @@ async function darCierre(mesKey, l, vuelta){
   const btn = document.getElementById('env-btn'), est = document.getElementById('env-estado'); btn.disabled = true;
   try {
     const subidos = await _cierreSubir(archivos, _cierreCarpeta(mesKey, l, 'cierre-v' + vuelta), t => { est.textContent = t; });
+    if (ov._sinMov){   // sin movimientos no hay nada que controlar: el pre-cierre se registra en el mismo acto
+      const p0 = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'pre_cierre', p_es_prueba: MODO_PRUEBA, p_nota: 'Sin movimientos', p_archivos: subidos, p_envio: null});
+      if (p0.error) throw new Error(p0.error.message);
+    }
     est.textContent = 'Registrando el cierre…';
-    const r = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'cierre', p_es_prueba: MODO_PRUEBA, p_nota: null, p_archivos: subidos, p_envio: m});
+    const r = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'cierre', p_es_prueba: MODO_PRUEBA, p_nota: ov._sinMov ? 'Sin movimientos' : null, p_archivos: subidos, p_envio: m});
     if (r.error) throw new Error(r.error.message);
   } catch (e){ btn.disabled = false; est.textContent = ''; alert('No se pudo dar el cierre: ' + e.message); return; }
   finally { _cierreSoltar(cli); }
@@ -5316,7 +5379,9 @@ async function _pdfListado(titulo, columnas, filas, opts = {}){
   const n = doc.internal.getNumberOfPages();
   for (let i = 1; i <= n; i++){ doc.setPage(i); doc.setFontSize(7); doc.setTextColor(100,116,139);
     doc.text(`${titulo} · ${periodo} · generado ${_fechaTs(new Date().toISOString())} · página ${i} de ${n}`, W / 2, H - 5, {align: 'center'}); }
-  doc.save(`${titulo} ${_listRotulo(true)}.pdf`);
+  const nombrePdf = `${opts.archivo || titulo} ${_listRotulo(true)}.pdf`;
+  if (_capturar(nombrePdf, doc.output('blob'))) return;
+  doc.save(nombrePdf);
 }
 const _lstN = v => Number(v) ? Number(v).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '';
 function _pdfIvaCompras(){
@@ -5330,13 +5395,13 @@ function _pdfIvaCompras(){
     _lstN(x.iva_otros), _lstN(Number(x.percep_iva)+Number(x.percep_iibb_caba)+Number(x.percep_iibb_ba)+Number(x.otros_tributos)), _lstN(x.total)]);
   const tot = ['Totales', `${R.length} comprobantes`, '', '', '', _lstN(s('neto_21')), _lstN(s('neto_105')), _lstN(s('neto_27')), _lstN(s('no_gravado')+s('exento')),
     _lstN(s('iva_21')), _lstN(s('iva_105')), _lstN(s('iva_27')), _lstN(s('iva_otros')), _lstN(s('percep_iva')+s('percep_iibb_caba')+s('percep_iibb_ba')+s('otros_tributos')), _lstN(s('total'))];
-  _pdfListado('IVA Compras', cols, filas, {totales: tot, filaRoja: x => x && R[filas.indexOf(x)] && R[filas.indexOf(x)].es_nc});
+  return _pdfListado('IVA Compras', cols, filas, {totales: tot, filaRoja: x => x && R[filas.indexOf(x)] && R[filas.indexOf(x)].es_nc});
 }
 function _pdfPercepciones(){
   if (!LIST_PDET || !LIST_PDET.length){ alert('No hay percepciones en el período.'); return; }
   const cols = [{t:'Fecha', w:20}, {t:'Comprobante', w:40}, {t:'CUIT', w:28}, {t:'Proveedor'}, {t:'Impuesto', w:34}, {t:'Jurisdicción', w:34}, {t:'Percepción', num:1, b:1, w:28}];
   const filas = LIST_PDET.map(p => [_fecha(p.fecha_emision), p.comprobante, _cuitFmt(p.cuit), (p.proveedor||'').slice(0,45), p.impuesto, p.jurisdiccion || '—', _lstN(p.importe)]);
-  _pdfListado('Percepciones sufridas', cols, filas, {vertical: true, totales: ['Total', `${LIST_PDET.length} renglones`, '', '', '', '', _lstN(LIST_PDET.reduce((a, p) => a + Number(p.importe || 0), 0))]});
+  return _pdfListado('Percepciones sufridas', cols, filas, {vertical: true, totales: ['Total', `${LIST_PDET.length} renglones`, '', '', '', '', _lstN(LIST_PDET.reduce((a, p) => a + Number(p.importe || 0), 0))]});
 }
 function _pdfRetenciones(){
   if (!LIST_RET || !LIST_RET.length){ alert('No hay retenciones en el período.'); return; }
@@ -5344,7 +5409,7 @@ function _pdfRetenciones(){
     {t:'Base', num:1}, {t:'Alíc.', num:1, w:11}, {t:'Retenido', num:1, b:1}, {t:'Certificado', w:22}, {t:'A mano / motivo', w:32}];
   const filas = LIST_RET.map(r => [r.quincena, _fecha(r.fecha), r.orden_pago || ('#' + r.orden_pago_id), _cuitFmt(r.cuit), (r.proveedor||'').slice(0,40),
     `${r.regimen_codigo || ''} ${r.regimen_nombre || ''}`.trim(), _lstN(r.base_calculo), Number(r.alicuota || 0) + ' %', _lstN(r.importe), r.certificado_nro || '—', r.editado ? 'SÍ · ' + (r.motivo_edicion || '') : '']);
-  _pdfListado('Retenciones practicadas', cols, filas, {totales: ['Total', '', '', '', '', `${LIST_RET.length} retenciones`, _lstN(LIST_RET.reduce((a, r) => a + Number(r.base_calculo || 0), 0)), '', _lstN(LIST_RET.reduce((a, r) => a + Number(r.importe || 0), 0)), '', '']});
+  return _pdfListado('Retenciones practicadas', cols, filas, {totales: ['Total', '', '', '', '', `${LIST_RET.length} retenciones`, _lstN(LIST_RET.reduce((a, r) => a + Number(r.base_calculo || 0), 0)), '', _lstN(LIST_RET.reduce((a, r) => a + Number(r.importe || 0), 0)), '', '']});
 }
 
 function _bajarPercepciones(){
@@ -7419,6 +7484,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=141"></script>
+<script src="manual.js?v=142"></script>
 </body>
 </html>
