@@ -922,7 +922,7 @@ const _AUT_CONSULTAS = new Set(('compras_bandeja,compras_cc_cliente_movs,compras
   'compras_listado_iva,compras_listado_percepciones,compras_listado_percepciones_detalle,compras_listado_retenciones,compras_mercaderia_resumen,compras_op_candidatos,compras_op_detalle,' +
   'compras_op_nc_candidatas,compras_op_preparar,compras_op_proveedores,compras_ordenes_listar,compras_pedido_catalogo,compras_pedido_condiciones,compras_pedido_detalle,' +
   'compras_proveedor_retenciones,compras_proveedores_listar,compras_proveedores_mercaderia,compras_puede_cerrar,compras_remito_detalle,compras_remitos_estado,compras_remitos_importados,' +
-  'compras_resolver_articulo,compras_rg830_ultima,compras_soy_admin,compras_sugerir_pendientes,hub_puede_ver,stock_desgloses_pendientes,stock_juegos_listar,' +
+  'compras_resolver_articulo,compras_rg830_ultima,compras_soy_admin,compras_sugerir_pendientes,hub_puede_ver,hub_puedo,hub_mis_locales,hub_modulos,stock_desgloses_pendientes,stock_juegos_listar,' +
   // escriben algo interno pero son consultas para quien las usa: constatación en ARCA, pedirle al motor que lea, numerar el certificado al abrir su PDF, textos y listas
   'compras_arca_estado,compras_arca_pedir,compras_pedir_motor,compras_op_certificados,compras_poliza_pendientes,compras_proveedor_equiv_desc,compras_proveedor_factura_lista,compras_remito_txt,' +
   'compras_cierre_registrar').split(','));
@@ -940,6 +940,37 @@ const _AUT_NOMBRES = {compras_contabilizar: 'Contabilizar el comprobante', compr
   compras_equiv_ignorados: 'Modificar las equivalencias', compras_conceptos: 'Modificar el concepto', compras_remitos: 'Modificar el remito', compras_meses_cerrados: 'Cerrar o reabrir el mes',
   compras_envios_estudio: 'Enviar por mail', compras_op_envios: 'Anotar el envío de la orden de pago', compras_proveedor_datos: 'Guardar los datos del proveedor',
   compras_motor_feedback: 'Avisar un problema de lectura', compras_sucursales: 'Modificar las sucursales'};
+// (13-nov, JP) Permisos por función desde el Hub (ícono de persona → Permisos). Cada operación pertenece a una función
+// de hub_funciones; hub_puedo(id) dice cómo está para el perfil de la sesión: 'h' habilitada (no pide nada),
+// 'a' pide permiso (la ventana de usuario y clave), 'o' oculta (no se puede). Lo que no está en este mapa, o si
+// hub_puedo no contesta, se trata como 'a': ante la duda, pide. Clave = función de la base, tabla, o tabla.método.
+const _HUB_FUNC = {
+  compras_contabilizar: 'compras.contabilizar', compras_corregir_importes: 'compras.contabilizar', compras_renglones_guardar: 'compras.contabilizar',
+  compras_cargar_sin_factura: 'compras.contabilizar', compras_documentos: 'compras.contabilizar', 'compras_motor_feedback.insert': 'compras.contabilizar',
+  compras_rechazar: 'compras.rechazar',
+  compras_op_emitir: 'compras.emitir_op', compras_op_anular: 'compras.emitir_op', compras_op_vincular_nc: 'compras.emitir_op', compras_envios_estudio: 'compras.emitir_op', compras_op_envios: 'compras.emitir_op',
+  compras_proveedor_alta: 'compras.proveedores_editar', compras_proveedor_guardar: 'compras.proveedores_editar', compras_proveedor_retenciones_guardar: 'compras.proveedores_editar', compras_proveedor_datos: 'compras.proveedores_editar',
+  compras_regimenes: 'compras.retenciones_config',
+  compras_pedido_guardar: 'compras.pedidos', compras_pedido_accion: 'compras.pedidos', compras_pedido_recibir: 'compras.pedidos',
+  compras_cargar_remito: 'compras.mercaderia', compras_asociar_remito: 'compras.mercaderia', compras_remito_confirmar: 'compras.mercaderia', compras_remito_desglosar: 'compras.mercaderia',
+  compras_remito_deshacer_desglose: 'compras.mercaderia', compras_remito_set_local: 'compras.mercaderia', compras_remitos: 'compras.mercaderia', compras_sucursales: 'compras.mercaderia',
+  stock_juego_guardar: 'compras.mercaderia', stock_juego_confirmar: 'compras.mercaderia',
+  compras_guardar_equivalencia: 'compras.conceptos_equiv', compras_equivalencias_importar: 'compras.conceptos_equiv', compras_crear_concepto: 'compras.conceptos_equiv',
+  compras_equivalencias: 'compras.conceptos_equiv', compras_equiv_ignorados: 'compras.conceptos_equiv',
+  compras_concepto_renombrar: 'compras.ajustes_admin', compras_conceptos: 'compras.ajustes_admin', compras_motor_feedback: 'compras.ajustes_admin',
+  compras_meses_cerrados: 'compras.cerrar_mes'};
+const _HUB_NOMBRE = {'compras.contabilizar': 'Contabilizar, corregir importes, cargar gasto sin factura', 'compras.rechazar': 'Rechazar una factura', 'compras.emitir_op': 'Emitir o anular una orden de pago',
+  'compras.proveedores_editar': 'Dar de alta o editar un proveedor', 'compras.retenciones_config': 'Configurar los regímenes de retención', 'compras.pedidos': 'Armar, enviar y recibir pedidos a proveedores',
+  'compras.mercaderia': 'Remitos y TXT para el Dragonfish', 'compras.conceptos_equiv': 'Crear conceptos y equivalencias de códigos', 'compras.ajustes_admin': 'Renombrar conceptos, RG 830, avisos del motor',
+  'compras.cerrar_mes': 'Cerrar o reabrir el mes enviado al estudio'};
+let _HUB = {};
+async function _hubCargar(){
+  const ids = [...new Set(Object.values(_HUB_FUNC))], r = await Promise.all(ids.map(id => _AUT_RPC0('hub_puedo', {p_funcion: id})));
+  const H = {}; ids.forEach((id, i) => { if (!r[i].error && ['h', 'a', 'o'].includes(r[i].data)) H[id] = r[i].data; });
+  _HUB = H;
+}
+const _hubEstado = (clave, metodo) => { const f = _HUB_FUNC[clave + '.' + metodo] || _HUB_FUNC[clave]; return {f, e: (f && _HUB[f]) || 'a'}; };
+const _hubOculta = f => ({data: null, error: {message: `tu perfil no tiene habilitada la función "${_HUB_NOMBRE[f] || f}". Los permisos se manejan desde el Hub.`, code: 'HUB_OCULTA'}, count: null, status: 0, statusText: ''});
 let _AUT_HASTA = 0, _AUT_PEND = null, _AUT_ADMIN = false;
 const _AUT_CANCELADA = {data: null, error: {message: 'falta la autorización (se canceló el pedido de usuario y clave).', code: 'AUT_CANCELADA'}, count: null, status: 0, statusText: ''};
 function _autOperacion(queEs){
@@ -984,13 +1015,15 @@ function _autOperacion(queEs){
   return _AUT_PEND;
 }
 // Devuelve algo que se usa igual que la consulta de Supabase (.eq().select()… y await), pero que antes de mandarla pide la autorización.
-function _autPuerta(armar, clave){
+function _autPuerta(armar, clave, metodo){
   const pasos = [];
-  const correr = () => _autOperacion(_AUT_NOMBRES[clave] || 'Operación de Compras').then(ok => {
+  const correr = () => { const E = _hubEstado(clave, metodo);
+   return (E.e === 'o' ? Promise.resolve('o') : E.e === 'h' ? Promise.resolve(true) : _autOperacion(_AUT_NOMBRES[clave] || 'Operación de Compras')).then(ok => {
+    if (ok === 'o') return _hubOculta(E.f);
     if (!ok) return _AUT_CANCELADA;
     let q = armar(); for (const [m, a] of pasos) q = q[m](...a);
-    return Promise.resolve(q).then(r => { _AUT_HASTA = Math.max(_AUT_HASTA, Date.now() + _AUT_SEGUNDOS * 1000); return r; });
-  });
+    return Promise.resolve(q).then(r => { if (E.e === 'a') _AUT_HASTA = Math.max(_AUT_HASTA, Date.now() + _AUT_SEGUNDOS * 1000); return r; });
+   }); };
   const p = new Proxy({}, {get(_, k){
     if (k === 'then') return (a, b) => correr().then(a, b);
     if (k === 'catch') return b => correr().catch(b);
@@ -1007,7 +1040,7 @@ sb.from = tabla => {
   if (_AUT_TABLAS_LIBRES.has(tabla)) return q;
   for (const m of ['insert', 'update', 'delete', 'upsert']){
     const f = q[m].bind(q);
-    q[m] = (...a) => _AUT_ADMIN ? f(...a) : _autPuerta(() => f(...a), tabla);
+    q[m] = (...a) => _AUT_ADMIN ? f(...a) : _autPuerta(() => f(...a), tabla, m);
   }
   return q;
 };
@@ -1143,6 +1176,7 @@ async function cargarMesesCerrados(){
   const pc = await sb.rpc('compras_puede_cerrar');
   MESES_CERRADOS = new Map((m.data || []).map(x => [String(x.periodo).slice(0,7), x]));
   SOY_ADMIN = a.data === true; _AUT_ADMIN = SOY_ADMIN;
+  if (!SOY_ADMIN) await _hubCargar().catch(() => {});
   PUEDE_CERRAR = pc.error ? SOY_ADMIN : pc.data === true;
 }
 const _mesDoc = d => String(d.fecha_ingreso || d.fecha_emision || '').slice(0,7);
@@ -7640,6 +7674,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=146"></script>
+<script src="manual.js?v=147"></script>
 </body>
 </html>
