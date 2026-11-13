@@ -4995,8 +4995,7 @@ async function _pintarCierre(mesKey){
       : est === 'rectificacion' ? `En corrección${ver}: ya se le avisó al estudio. Corregí y después dá de nuevo el <b>Pre-cierre</b>.`
       : ult ? `Cerrado y enviado al estudio${ver} el ${_fechaTs(ult.cuando)} por ${quien(ult.por)}.${C.bloquea ? ' Los comprobantes del mes ya no se modifican.' : ''} Si aparece una diferencia, hay que <b>rectificar</b>.`
       : `Cerrado el ${_fechaTs(leg.cerrado_at)} por ${quien(leg.cerrado_por)}${leg.nota ? ' · ' + esc(leg.nota) : ''} (antes de que existieran las etapas). Si aparece una diferencia, hay que <b>rectificar</b>.`;
-    const B = !PUEDE_CERRAR ? `<span class="mini">Lo dan Contreras o JP.</span>`
-      : est === 'cierre' ? `<button class="act gh" style="${_PILL}" onclick="abrirRectificar('${mesKey}','${l}',${vuelta})" title="Avisarle al estudio que se está corrigiendo este listado y volverlo a pre-cierre">Rectificar</button>`
+    const B = est === 'cierre' ? `<button class="act gh" style="${_PILL}" onclick="abrirRectificar('${mesKey}','${l}',${vuelta})" title="Avisarle al estudio que se está corrigiendo este listado y volverlo a pre-cierre">Rectificar</button>`
       : !n ? ''
       : est === 'pre_cierre' ? `<button class="act gh" style="${_PILL}" onclick="darPreCierre('${mesKey}','${l}')" title="Volver a emitir el listado después de una corrección">Repetir el pre-cierre</button>
           <button class="act" style="${_PILL}" onclick="abrirCierre('${mesKey}','${l}',${vuelta})" title="Guardar el listado definitivo y mandarlo al estudio">${ico('avion','s')} Dar el Cierre y enviar</button>`
@@ -5011,7 +5010,7 @@ async function _pintarCierre(mesKey){
     box.innerHTML = `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <div style="flex:1;min-width:240px"><b>${ico(est === 'cierre' ? 'candado' : 'avion','s')} Cierre · ${esc(C.t)} · ${esc(mesTxt)}</b><div class="mini">${T}</div></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${B}</div></div>
-      <div class="mini cierre-estado" style="margin-top:4px"></div>${H}`;
+      <div class="mini cierre-estado" style="margin-top:4px">${!PUEDE_CERRAR && (n || est === 'cierre') ? 'Para confirmar cada paso se pide el usuario personal y la clave de quien autoriza.' : ''}</div>${H}`;
   }
   el.innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:13.5px">${ico('candado','s')} Cierres de ${esc(mesTxt)}</b>${resumen.join('')}</div><div id="envios-estudio"></div>`;
   _pintarEnviosEstudio(mesKey, (r.data || []).map(e => e.envio_id).filter(Boolean));
@@ -5053,20 +5052,77 @@ async function _cierreSubir(archivos, carpeta, avisar){
   }
   return subidos;
 }
+// (13-nov, JP) Contreras entra al módulo con el usuario genérico de la oficina; para dar un pre-cierre, un cierre o
+// una rectificación tiene que autorizar con su usuario PERSONAL. Igual que el respaldo "usuario y clave" del POS:
+// un cliente aparte, sin guardar sesión, que solo se usa para registrar el paso (queda a su nombre) y se cierra.
+// Devuelve el cliente con el que llamar a compras_cierre_registrar, o null si se canceló.
+function _cierreCliente(queEs){
+  if (PUEDE_CERRAR) return Promise.resolve(sb);
+  return new Promise(res => {
+    const ov = document.createElement('div'); ov.id = 'aut-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10060;display:flex;align-items:center;justify-content:center;padding:16px;';
+    let ultimo = ''; try { ultimo = localStorage.getItem('compras_cierre_autoriza') || ''; } catch (e) {}
+    const R = 'width:100%;box-sizing:border-box;border-radius:999px;padding:8px 14px';
+    ov.innerHTML = `<div style="background:#fff;border-radius:18px;max-width:420px;width:100%;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:grid;gap:10px">
+      <div style="font-weight:700;font-size:15px">${ico('candado','s')} Autorizar · ${esc(queEs)}</div>
+      <div class="mini">Este paso lo autoriza una persona con su usuario personal (no el genérico de la oficina). Queda registrado a su nombre.</div>
+      <label class="mini">Usuario personal (mail)<input id="aut-mail" type="email" autocomplete="off" style="${R}" value="${esc(ultimo)}"></label>
+      <label class="mini">Clave<input id="aut-pass" type="password" autocomplete="off" style="${R}"></label>
+      <div id="aut-msg" class="mini" style="color:#b91c1c;min-height:16px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end"><button class="act gh" style="${_PILL}" id="aut-no">Cancelar</button><button class="act" style="${_PILL}" id="aut-si">Autorizar</button></div></div>`;
+    document.body.appendChild(ov);
+    const fin = v => { ov.remove(); res(v); }, msg = t => { ov.querySelector('#aut-msg').textContent = t; };
+    ov.querySelector('#aut-no').onclick = () => fin(null);
+    const ok = async () => {
+      const mail = ov.querySelector('#aut-mail').value.trim(), pass = ov.querySelector('#aut-pass').value, bt = ov.querySelector('#aut-si');
+      if (!mail || !pass){ msg('Cargá el usuario y la clave de quien autoriza.'); return; }
+      bt.disabled = true; msg('');
+      const sb2 = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {auth: {persistSession: false, autoRefreshToken: false, storageKey: 'compras-cierre-autoriza'}});
+      const {error} = await sb2.auth.signInWithPassword({email: mail, password: pass});
+      if (error){ bt.disabled = false; ov.querySelector('#aut-pass').value = ''; msg('Usuario o clave incorrectos.'); return; }
+      const pc = await sb2.rpc('compras_puede_cerrar');
+      if (pc.error || pc.data !== true){ _cierreSoltar(sb2); bt.disabled = false; ov.querySelector('#aut-pass').value = ''; msg('Ese usuario no está autorizado a dar los cierres.'); return; }
+      try { localStorage.setItem('compras_cierre_autoriza', mail); } catch (e) {}
+      fin(sb2);
+    };
+    ov.querySelector('#aut-si').onclick = ok;
+    ov.querySelector('#aut-pass').onkeydown = e => { if (e.key === 'Enter') ok(); };
+    setTimeout(() => ov.querySelector(ultimo ? '#aut-pass' : '#aut-mail').focus(), 50);
+  });
+}
+function _cierreSoltar(cli){ if (cli && cli !== sb){ try { cli.auth.signOut({scope: 'local'}); } catch (e) {} } }
+// El mensaje del mail de cada listado. En las quincenas de retenciones dice el rango y qué impuestos no tuvieron
+// retenciones, que es lo que hoy se le aclara al estudio a mano ("retención de IVA: no hay").
+function _cierreCuerpo(mesKey, l, vuelta){
+  const C = _CL[l], mesTxt = _envioMesTxt(mesKey), [y, m] = mesKey.split('-');
+  const q = l === 'retenciones_q1' ? 1 : l === 'retenciones_q2' ? 2 : 0;
+  let det = `Adjuntamos el listado de ${C.t} de ${mesTxt}`;
+  if (q){
+    const R = _retQ(q), hay = re => R.filter(r => re.test(String(r.impuesto || '') + ' ' + String(r.regimen_codigo || ''))).length;
+    const g = hay(/gan|rtn-g/i), i = hay(/iva|rtn-i/i), b = hay(/iibb|brutos|rtn-b/i);
+    const lin = (t, n) => `${t}: ${n ? n + (n === 1 ? ' retención' : ' retenciones') : 'no hay'}.`;
+    det = `Adjuntamos las retenciones practicadas en los pagos de la ${q === 1 ? '1ª' : '2ª'} quincena (del ${q === 1 ? '01' : '16'}-${m}-${y} al ${q === 1 ? '15' : _finMes(+y, +m)}-${m}-${y}), con CUIT.\n\n${lin('Retenciones de Ganancias', g)}\n${lin('Retenciones de IVA', i)}\n${lin('Retenciones de Ingresos Brutos', b)}\n\nListado`;
+    det = det.replace(/\n\nListado$/, '');
+    return `Hola,\n\n${det}${vuelta > 1 ? '\n\nEs la versión ' + vuelta + ', rectificada: reemplaza a la que mandamos antes.' : ''}\n\nCualquier duda nos avisan.\n\nSaludos,\nAdministración · Claudia Adorno SRL`;
+  }
+  return `Hola,\n\n${det}${vuelta > 1 ? ', rectificado (versión ' + vuelta + '). Reemplaza al que mandamos antes' : ''}.\n\nCualquier duda nos avisan.\n\nSaludos,\nAdministración · Claudia Adorno SRL`;
+}
 const _cierreCarpeta = (per, l, paso) => `${MODO_PRUEBA ? 'prueba/' : ''}${per}/etapas/${l}/${Date.now()}-${paso}`;
 async function darPreCierre(mesKey, l){
   const C = _CL[l], mesTxt = _envioMesTxt(mesKey);
   if (!C.n()){ alert('No hay movimientos en ese listado: no hay nada para emitir.'); return; }
   const nota = prompt(`Dar el PRE-CIERRE de ${C.t} · ${mesTxt}.\n\nSe guarda el listado tal como está ahora, para controlarlo. No se manda nada al estudio.\n\nPodés dejar una nota (opcional):`, '');
   if (nota === null) return;
+  const cli = await _cierreCliente(`Pre-cierre de ${C.t} · ${mesTxt}`); if (!cli) return;
   const est = document.querySelector(`.cierre-lst[data-l="${l}"] .cierre-estado`), avisar = t => { if (est) est.textContent = t; };
   try {
     avisar('Armando el listado…');
     const subidos = await _cierreSubir(await _cierreArmar(mesKey, l), _cierreCarpeta(mesKey, l, 'pre_cierre'), avisar);
     avisar('Registrando el pre-cierre…');
-    const r = await sb.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'pre_cierre', p_es_prueba: MODO_PRUEBA, p_nota: nota.trim() || null, p_archivos: subidos, p_envio: null});
+    const r = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'pre_cierre', p_es_prueba: MODO_PRUEBA, p_nota: nota.trim() || null, p_archivos: subidos, p_envio: null});
     if (r.error) throw new Error(r.error.message);
   } catch (e){ avisar(''); alert('No se pudo dar el pre-cierre: ' + e.message); return; }
+  finally { _cierreSoltar(cli); }
   _pintarCierre(mesKey);
 }
 function _cierreOverlay(){
@@ -5092,7 +5148,7 @@ async function abrirCierre(mesKey, l, vuelta){
       <label class="mini">Con copia<input id="env-cc" style="${R}" value="${esc((cfg.cc || []).join(', '))}"></label>
       ${_estudioMailsHTML()}
       <label class="mini">Asunto<input id="env-asunto" style="${R}" value="${esc(_cierreAsunto(cfg, l, mesTxt) + (vuelta > 1 ? ' · RECTIFICADO (versión ' + vuelta + ')' : ''))}"></label>
-      <label class="mini">Mensaje<textarea id="env-cuerpo" rows="5" style="width:100%;box-sizing:border-box;font:inherit;font-size:13px;border-radius:14px">${esc(`Hola,\n\nAdjuntamos el listado de ${C.t} de ${mesTxt}${vuelta > 1 ? ', rectificado (versión ' + vuelta + '). Reemplaza al que mandamos antes' : ''}.\n\nCualquier duda nos avisan.\n\nSaludos,\nAdministración · Claudia Adorno SRL`)}</textarea></label>
+      <label class="mini">Mensaje<textarea id="env-cuerpo" rows="5" style="width:100%;box-sizing:border-box;font:inherit;font-size:13px;border-radius:14px">${esc(_cierreCuerpo(mesKey, l, vuelta))}</textarea></label>
       <div class="mini" style="font-weight:600;margin-top:4px">Adjuntos de este listado</div>
       ${archivos.map((a, i) => `<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:2px 0"><input type="checkbox" class="env-adj" data-i="${i}" checked> ${esc(a.nombre)}</label>`).join('')}
       <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-top:6px"><input type="checkbox" id="env-guardar" checked> Recordar los destinatarios para la próxima vez</label>
@@ -5115,13 +5171,15 @@ async function darCierre(mesKey, l, vuelta){
   const ov = document.getElementById('nota-overlay'), m = _cierreMails(); if (!m || !ov) return;
   const archivos = (ov._archivos || []).filter((a, i) => ov.querySelector(`.env-adj[data-i="${i}"]`)?.checked);
   if (!archivos.length){ alert('Tiene que ir al menos un adjunto.'); return; }
+  const cli = await _cierreCliente(`Cierre de ${_CL[l].t} · ${_envioMesTxt(mesKey)}`); if (!cli) return;
   const btn = document.getElementById('env-btn'), est = document.getElementById('env-estado'); btn.disabled = true;
   try {
     const subidos = await _cierreSubir(archivos, _cierreCarpeta(mesKey, l, 'cierre-v' + vuelta), t => { est.textContent = t; });
     est.textContent = 'Registrando el cierre…';
-    const r = await sb.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'cierre', p_es_prueba: MODO_PRUEBA, p_nota: null, p_archivos: subidos, p_envio: m});
+    const r = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'cierre', p_es_prueba: MODO_PRUEBA, p_nota: null, p_archivos: subidos, p_envio: m});
     if (r.error) throw new Error(r.error.message);
   } catch (e){ btn.disabled = false; est.textContent = ''; alert('No se pudo dar el cierre: ' + e.message); return; }
+  finally { _cierreSoltar(cli); }
   if (document.getElementById('env-guardar')?.checked){
     const cfg = await _envioCfg();
     const valor = {...cfg, para: m.para, cc: m.cc};
@@ -5156,8 +5214,10 @@ async function rectificarListado(mesKey, l){
   if (!motivo){ alert('Poné el motivo de la rectificación.'); return; }
   const m = _cierreMails(); if (!m) return;
   if (!m.cuerpo){ alert('Falta el mensaje.'); return; }
+  const cli = await _cierreCliente(`Rectificación de ${_CL[l].t} · ${_envioMesTxt(mesKey)}`); if (!cli) return;
   const btn = document.getElementById('env-btn'); btn.disabled = true;
-  const r = await sb.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'rectificacion', p_es_prueba: MODO_PRUEBA, p_nota: motivo, p_archivos: [], p_envio: m});
+  const r = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'rectificacion', p_es_prueba: MODO_PRUEBA, p_nota: motivo, p_archivos: [], p_envio: m});
+  _cierreSoltar(cli);
   if (r.error){ btn.disabled = false; alert('No se pudo rectificar: ' + r.error.message); return; }
   document.getElementById('nota-overlay')?.remove();
   alert(`${_CL[l].t} volvió a pre-cierre. El aviso sale por mail a ${m.para.join(', ')} en unos 5 minutos.`);
@@ -7359,6 +7419,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=140"></script>
+<script src="manual.js?v=141"></script>
 </body>
 </html>
