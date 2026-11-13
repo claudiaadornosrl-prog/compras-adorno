@@ -5016,7 +5016,7 @@ function _estudioMailsHTML(){
 async function _pintarCierre(mesKey){
   const el = document.getElementById('cierre-etapas'); if (!el || el.dataset.mes !== mesKey) return;
   const mesTxt = _envioMesTxt(mesKey), legado = MESES_CERRADOS.get ? MESES_CERRADOS.get(mesKey) : null;
-  const r = await sb.from('compras_cierre_etapas').select('id,listado,etapa,vuelta,por,cuando,nota,archivos,envio_id,envio:compras_envios_estudio(estado,para,cc,enviado_at,error_msg,intentos)')
+  const r = await sb.from('compras_cierre_etapas').select('id,numero,listado,etapa,vuelta,por,cuando,nota,archivos,envio_id,envio:compras_envios_estudio(estado,para,cc,enviado_at,error_msg,intentos)')
     .eq('periodo', mesKey + '-01').eq('es_prueba', MODO_PRUEBA).order('id');
   if (document.getElementById('cierre-etapas') !== el || el.dataset.mes !== mesKey) return;
   if (r.error){
@@ -5051,7 +5051,7 @@ async function _pintarCierre(mesKey){
     const H = !L.length ? '' : `<details style="margin-top:6px"><summary class="mini" style="cursor:pointer;font-weight:700">Historial · ${L.length} ${L.length === 1 ? 'paso' : 'pasos'} (queda guardado lo que se emitió en cada uno)</summary>
       ${L.slice().reverse().map(e => { const k = _ETAPA[e.etapa] || _ETAPA.pre_cierre, A = e.archivos || [];
         return `<div class="mini" style="padding:6px 0;border-bottom:1px dashed #e5e7eb">
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="chip" style="background:${k.bg};color:${k.fg}">${k.t}${e.vuelta > 1 ? ' · versión ' + e.vuelta : ''}</span>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="chip" style="background:${k.bg};color:${k.fg}">${k.t}${e.vuelta > 1 ? ' · versión ' + e.vuelta : ''}</span>${e.numero ? `<b title="Número de emisión: único para cada paso de cierre">${_nroEm(e.numero)}</b>` : ''}
             <span>${_fechaTs(e.cuando)} · ${quien(e.por)}</span>${chipEnv(e.envio)}${e.nota ? `<span style="opacity:.85">· ${esc(e.nota)}</span>` : ''}</div>
           ${A.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${A.map(a => `<a href="#" class="chip" style="background:#f1f5f9;color:#334155;font-weight:600;text-decoration:none" title="Bajar el archivo tal como se emitió en ese paso" data-path="${esc(a.path)}" onclick="_cierreBajar(this.dataset.path);return false">${esc(a.nombre)}</a>`).join('')}</div>` : ''}</div>`; }).join('')}</details>`;
     box.style.cssText = `border:1px solid #e5e7eb;border-left:4px solid ${col};border-radius:16px;padding:10px 14px;margin-bottom:12px;background:#fff`;
@@ -5083,14 +5083,23 @@ async function _cierreBajar(path){
 }
 // (JP 13-nov) El nombre de cada archivo dice qué listado es, de qué mes y de qué cierre (por si hay más de uno):
 // "Retenciones Ganancias - 1ra quincena - Octubre 2026 - Cierre 1.pdf". En pre-cierre dice "Pre-cierre N".
-function _cierreNombres(archivos, mesKey, l, etapa, vuelta){
+// (JP 13-nov) Número de emisión: correlativo único de todos los pasos de cierre (lo asigna compras_cierre_registrar).
+// Acá se mira cuál sigue para que el archivo ya salga con su número; si otro paso lo ocupa antes, la base frena.
+let _CIERRE_SELLO = '';
+const _nroEm = n => 'N° ' + String(n).padStart(6, '0');
+async function _cierreProximo(){
+  const r = await sb.from('compras_cierre_etapas').select('numero').eq('es_prueba', MODO_PRUEBA).not('numero', 'is', null).order('numero', {ascending: false}).limit(1);
+  if (r.error) throw new Error('no pude leer el número de emisión: ' + r.error.message);
+  return ((r.data && r.data[0] && r.data[0].numero) || 0) + 1;
+}
+function _cierreNombres(archivos, mesKey, l, etapa, vuelta, numero){
   const q = l === 'retenciones_q1' ? 1 : l === 'retenciones_q2' ? 2 : 0, rot = ' ' + _listRotulo(true);
   let imp = '';
   if (q){
     const R = _retQ(q), hay = re => R.some(r => re.test(String(r.impuesto || '') + ' ' + String(r.regimen_codigo || '')));
     imp = [hay(/gan|rtn-g/i) && 'Ganancias', hay(/iva|rtn-i/i) && 'IVA', hay(/iibb|brutos|rtn-b/i) && 'Ingresos Brutos'].filter(Boolean).join(' + ');
   }
-  const cola = `${q ? ` - ${q === 1 ? '1ra' : '2da'} quincena` : ''} - ${_envioMesTxt(mesKey)} - ${etapa === 'cierre' ? 'Cierre' : 'Pre-cierre'} ${vuelta || 1}${MODO_PRUEBA ? ' (PRUEBA)' : ''}`;
+  const cola = `${q ? ` - ${q === 1 ? '1ra' : '2da'} quincena` : ''} - ${_envioMesTxt(mesKey)} - ${etapa === 'cierre' ? 'Cierre' : 'Pre-cierre'} ${vuelta || 1}${numero ? ' - ' + _nroEm(numero) : ''}${MODO_PRUEBA ? ' (PRUEBA)' : ''}`;
   const usados = {};
   return archivos.map(a => {
     const m = a.nombre.match(/^(.*?)(\.[A-Za-z0-9]+)?$/), ext = m[2] || '';
@@ -5104,20 +5113,20 @@ function _cierreNombres(archivos, mesKey, l, etapa, vuelta){
   });
 }
 // Arma los archivos de UN listado (los mismos que se bajan a mano), sin subirlos.
-async function _cierreArmar(per, l, etapa, vuelta){
-  _CAPTURA = [];
-  try { await _CL[l].armar(per); } catch (e){ _CAPTURA = null; throw e; }
+async function _cierreArmar(per, l, etapa, vuelta, numero){
+  _CAPTURA = []; _CIERRE_SELLO = `${etapa === 'cierre' ? 'Cierre' : 'Pre-cierre'} ${vuelta || 1}${numero ? ' · ' + _nroEm(numero) : ''}`;
+  try { await _CL[l].armar(per); } catch (e){ _CAPTURA = null; throw e; } finally { _CIERRE_SELLO = ''; }
   let archivos = _CAPTURA; _CAPTURA = null;
   if (!archivos.length) throw new Error('no quedó ningún archivo para guardar');
   archivos = await Promise.all(archivos.map(a => /\.csv$/i.test(a.nombre) ? _csvAXlsx(a) : a));
-  return _cierreNombres(archivos, per, l, etapa, vuelta);
+  return _cierreNombres(archivos, per, l, etapa, vuelta, numero);
 }
 // Listado sin movimientos: igual se le avisa al estudio. Se guarda una constancia para que el paso tenga su archivo.
-function _cierreSinMov(mesKey, l, vuelta){
+function _cierreSinMov(mesKey, l, vuelta, numero){
   const C = _CL[l], mesTxt = _envioMesTxt(mesKey);
-  const txt = `Claudia Adorno SRL · CUIT 30-70967311-0\r\n${C.t} · ${mesTxt}\r\n\r\nSIN MOVIMIENTOS en el período.\r\nConstancia emitida el ${_fechaTs(new Date().toISOString())}.${MODO_PRUEBA ? '\r\nAMBIENTE DE PRUEBA' : ''}\r\n`;
+  const txt = `Claudia Adorno SRL · CUIT 30-70967311-0\r\n${C.t} · ${mesTxt}\r\n\r\nSIN MOVIMIENTOS en el período.\r\nCierre ${vuelta || 1}${numero ? ' · ' + _nroEm(numero) : ''}\r\nConstancia emitida el ${_fechaTs(new Date().toISOString())}.${MODO_PRUEBA ? '\r\nAMBIENTE DE PRUEBA' : ''}\r\n`;
   const q = l === 'retenciones_q1' ? ' - 1ra quincena' : l === 'retenciones_q2' ? ' - 2da quincena' : '';
-  return [{nombre: `${q ? 'Retenciones' : C.t}${q} - SIN MOVIMIENTOS - ${mesTxt} - Cierre ${vuelta || 1}${MODO_PRUEBA ? ' (PRUEBA)' : ''}.txt`, blob: new Blob([txt], {type: 'text/plain;charset=utf-8'})}];
+  return [{nombre: `${q ? 'Retenciones' : C.t}${q} - SIN MOVIMIENTOS - ${mesTxt} - Cierre ${vuelta || 1}${numero ? ' - ' + _nroEm(numero) : ''}${MODO_PRUEBA ? ' (PRUEBA)' : ''}.txt`, blob: new Blob([txt], {type: 'text/plain;charset=utf-8'})}];
 }
 async function _cierreSubir(archivos, carpeta, avisar){
   const subidos = [];
@@ -5198,9 +5207,10 @@ async function darPreCierre(mesKey, l, vuelta){
   const est = document.querySelector(`.cierre-lst[data-l="${l}"] .cierre-estado`), avisar = t => { if (est) est.textContent = t; };
   try {
     avisar('Armando el listado…');
-    const subidos = await _cierreSubir(await _cierreArmar(mesKey, l, 'pre_cierre', vuelta), _cierreCarpeta(mesKey, l, 'pre_cierre'), avisar);
+    const nro = await _cierreProximo();
+    const subidos = await _cierreSubir(await _cierreArmar(mesKey, l, 'pre_cierre', vuelta, nro), _cierreCarpeta(mesKey, l, 'pre_cierre'), avisar);
     avisar('Registrando el pre-cierre…');
-    const r = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'pre_cierre', p_es_prueba: MODO_PRUEBA, p_nota: nota.trim() || null, p_archivos: subidos, p_envio: null});
+    const r = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'pre_cierre', p_es_prueba: MODO_PRUEBA, p_nota: nota.trim() || null, p_archivos: subidos, p_envio: null, p_numero: nro});
     if (r.error) throw new Error(r.error.message);
   } catch (e){ avisar(''); alert('No se pudo dar el pre-cierre: ' + e.message); return; }
   finally { _cierreSoltar(cli); }
@@ -5217,9 +5227,11 @@ const _cierreAsunto = (cfg, l, mesTxt) => `Claudia Adorno SRL · ${_CL[l].t} · 
 // El Cierre de un listado: abre la ventana del mail con los archivos de ESE listado.
 async function abrirCierre(mesKey, l, vuelta, sinMov){
   const C = _CL[l], cfg = await _envioCfg(), mesTxt = _envioMesTxt(mesKey);
-  let archivos;
-  if (sinMov) archivos = _cierreSinMov(mesKey, l, vuelta);
-  else try { archivos = await _cierreArmar(mesKey, l, 'cierre', vuelta); } catch (e){ alert('No pude armar el listado: ' + e.message); return; }
+  let archivos, nro;
+  // sin movimientos se registran dos pasos juntos (pre-cierre y cierre): el archivo lleva el número del cierre
+  try { nro = await _cierreProximo() + (sinMov ? 1 : 0); } catch (e){ alert('No pude preparar el cierre: ' + e.message); return; }
+  if (sinMov) archivos = _cierreSinMov(mesKey, l, vuelta, nro);
+  else try { archivos = await _cierreArmar(mesKey, l, 'cierre', vuelta, nro); } catch (e){ alert('No pude armar el listado: ' + e.message); return; }
   const ov = _cierreOverlay(), R = 'width:100%;box-sizing:border-box;border-radius:999px';
   ov.innerHTML = `<div class="c-box" style="max-width:640px;width:100%">
     <div class="c-head"><div style="flex:1"><div style="font-weight:700;font-size:15px">${ico('candado','s')} ${sinMov ? 'Cerrar sin movimientos y avisar' : 'Dar el Cierre y enviar'} · ${esc(C.t)} · ${esc(mesTxt)}${vuelta > 1 ? ' · rectificado, versión ' + vuelta : ''}${MODO_PRUEBA ? ' · 🧪 PRUEBA' : ''}</div>
@@ -5229,7 +5241,7 @@ async function abrirCierre(mesKey, l, vuelta, sinMov){
       <label class="mini">Para (separados por coma)<input id="env-para" style="${R}" value="${esc((cfg.para || []).join(', '))}" placeholder="mail del estudio"></label>
       <label class="mini">Con copia<input id="env-cc" style="${R}" value="${esc((cfg.cc || []).join(', '))}"></label>
       ${_estudioMailsHTML()}
-      <label class="mini">Asunto<input id="env-asunto" style="${R}" value="${esc(_cierreAsunto(cfg, l, mesTxt) + (vuelta > 1 ? ' · RECTIFICADO (versión ' + vuelta + ')' : ''))}"></label>
+      <label class="mini">Asunto<input id="env-asunto" style="${R}" value="${esc(_cierreAsunto(cfg, l, mesTxt) + (vuelta > 1 ? ' · RECTIFICADO (versión ' + vuelta + ')' : '') + ` · Cierre ${vuelta} · ${_nroEm(nro)}`)}"></label>
       <label class="mini">Mensaje<textarea id="env-cuerpo" rows="5" style="width:100%;box-sizing:border-box;font:inherit;font-size:13px;border-radius:14px">${esc(_cierreCuerpo(mesKey, l, vuelta, sinMov))}</textarea></label>
       <div class="mini" style="font-weight:600;margin-top:4px">Adjuntos de este listado</div>
       ${archivos.map((a, i) => `<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:2px 0"><input type="checkbox" class="env-adj" data-i="${i}" checked> ${esc(a.nombre)}</label>`).join('')}
@@ -5238,7 +5250,7 @@ async function abrirCierre(mesKey, l, vuelta, sinMov){
     <div class="c-pie"><div style="flex:1" id="env-estado" class="mini"></div>
       <button class="act gh" style="${_PILL}" onclick="document.getElementById('nota-overlay').remove()">Cancelar</button>
       <button class="act" style="${_PILL}" id="env-btn" onclick="darCierre('${mesKey}','${l}',${vuelta})">${ico('avion','s')} Dar el Cierre y enviar</button></div></div>`;
-  ov._archivos = archivos; ov._sinMov = !!sinMov;
+  ov._archivos = archivos; ov._sinMov = !!sinMov; ov._nro = nro;
 }
 function _cierreMails(){
   const lista = t => String(document.getElementById(t)?.value || '').split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
@@ -5258,11 +5270,11 @@ async function darCierre(mesKey, l, vuelta){
   try {
     const subidos = await _cierreSubir(archivos, _cierreCarpeta(mesKey, l, 'cierre-v' + vuelta), t => { est.textContent = t; });
     if (ov._sinMov){   // sin movimientos no hay nada que controlar: el pre-cierre se registra en el mismo acto
-      const p0 = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'pre_cierre', p_es_prueba: MODO_PRUEBA, p_nota: 'Sin movimientos', p_archivos: subidos, p_envio: null});
+      const p0 = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'pre_cierre', p_es_prueba: MODO_PRUEBA, p_nota: 'Sin movimientos', p_archivos: subidos, p_envio: null, p_numero: ov._nro - 1});
       if (p0.error) throw new Error(p0.error.message);
     }
     est.textContent = 'Registrando el cierre…';
-    const r = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'cierre', p_es_prueba: MODO_PRUEBA, p_nota: ov._sinMov ? 'Sin movimientos' : null, p_archivos: subidos, p_envio: m});
+    const r = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'cierre', p_es_prueba: MODO_PRUEBA, p_nota: ov._sinMov ? 'Sin movimientos' : null, p_archivos: subidos, p_envio: m, p_numero: ov._nro});
     if (r.error) throw new Error(r.error.message);
   } catch (e){ btn.disabled = false; est.textContent = ''; alert('No se pudo dar el cierre: ' + e.message); return; }
   finally { _cierreSoltar(cli); }
@@ -5278,7 +5290,8 @@ async function darCierre(mesKey, l, vuelta){
 }
 async function abrirRectificar(mesKey, l, vuelta){
   const C = _CL[l], cfg = await _envioCfg(), mesTxt = _envioMesTxt(mesKey);
-  const ov = _cierreOverlay(), R = 'width:100%;box-sizing:border-box;border-radius:999px';
+  let nro; try { nro = await _cierreProximo(); } catch (e){ alert('No pude preparar la rectificación: ' + e.message); return; }
+  const ov = _cierreOverlay(), R = 'width:100%;box-sizing:border-box;border-radius:999px'; ov._nro = nro;
   ov.innerHTML = `<div class="c-box" style="max-width:640px;width:100%">
     <div class="c-head"><div style="flex:1"><div style="font-weight:700;font-size:15px">${ico('candado','s')} Rectificar · ${esc(C.t)} · ${esc(mesTxt)}${MODO_PRUEBA ? ' · 🧪 PRUEBA' : ''}</div>
       <div style="font-size:12.5px;opacity:.9">Sale un aviso al estudio y el listado vuelve a pre-cierre (versión ${vuelta + 1}).${C.bloquea ? ' Los comprobantes del mes se desbloquean.' : ''} Lo que ya se emitió queda guardado en el historial.</div></div>
@@ -5288,7 +5301,7 @@ async function abrirRectificar(mesKey, l, vuelta){
       <label class="mini">Para (separados por coma)<input id="env-para" style="${R}" value="${esc((cfg.para || []).join(', '))}" placeholder="mail del estudio"></label>
       <label class="mini">Con copia<input id="env-cc" style="${R}" value="${esc((cfg.cc || []).join(', '))}"></label>
       ${_estudioMailsHTML()}
-      <label class="mini">Asunto<input id="env-asunto" style="${R}" value="${esc(_cierreAsunto(cfg, l, mesTxt) + ' · EN CORRECCIÓN')}"></label>
+      <label class="mini">Asunto<input id="env-asunto" style="${R}" value="${esc(_cierreAsunto(cfg, l, mesTxt) + ' · EN CORRECCIÓN · ' + _nroEm(nro))}"></label>
       <label class="mini">Mensaje<textarea id="env-cuerpo" rows="5" style="width:100%;box-sizing:border-box;font:inherit;font-size:13px;border-radius:14px">Estamos corrigiendo el listado de ${esc(C.t)} del mes ${esc(mesTxt)} porque encontramos unas diferencias, en breve mandamos las correcciones.</textarea></label>
     </div>
     <div class="c-pie"><div style="flex:1" id="env-estado" class="mini"></div>
@@ -5302,7 +5315,7 @@ async function rectificarListado(mesKey, l){
   if (!m.cuerpo){ alert('Falta el mensaje.'); return; }
   const cli = await _cierreCliente(`Rectificación de ${_CL[l].t} · ${_envioMesTxt(mesKey)}`); if (!cli) return;
   const btn = document.getElementById('env-btn'); btn.disabled = true;
-  const r = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'rectificacion', p_es_prueba: MODO_PRUEBA, p_nota: motivo, p_archivos: [], p_envio: m});
+  const r = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'rectificacion', p_es_prueba: MODO_PRUEBA, p_nota: motivo, p_archivos: [], p_envio: m, p_numero: document.getElementById('nota-overlay')?._nro ?? null});
   _cierreSoltar(cli);
   if (r.error){ btn.disabled = false; alert('No se pudo rectificar: ' + r.error.message); return; }
   document.getElementById('nota-overlay')?.remove();
@@ -5401,7 +5414,7 @@ async function _pdfListado(titulo, columnas, filas, opts = {}){
   });
   const n = doc.internal.getNumberOfPages();
   for (let i = 1; i <= n; i++){ doc.setPage(i); doc.setFontSize(7); doc.setTextColor(100,116,139);
-    doc.text(`${titulo} · ${periodo} · generado ${_fechaTs(new Date().toISOString())} · página ${i} de ${n}`, W / 2, H - 5, {align: 'center'}); }
+    doc.text(`${titulo} · ${periodo}${_CIERRE_SELLO ? ' · ' + _CIERRE_SELLO : ''} · generado ${_fechaTs(new Date().toISOString())} · página ${i} de ${n}`, W / 2, H - 5, {align: 'center'}); }
   const nombrePdf = `${opts.archivo || titulo} ${_listRotulo(true)}.pdf`;
   if (_capturar(nombrePdf, doc.output('blob'))) return;
   doc.save(nombrePdf);
@@ -7507,6 +7520,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=143"></script>
+<script src="manual.js?v=144"></script>
 </body>
 </html>

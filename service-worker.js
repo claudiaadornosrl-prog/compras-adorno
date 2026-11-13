@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v234-nombres-listados-cierre';
+const CACHE_VERSION = 'compras-v235-numero-de-emision';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './firma-jp.jpg', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
