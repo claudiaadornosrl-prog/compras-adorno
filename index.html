@@ -563,6 +563,8 @@ button.act.ico-btn{display:inline-flex;align-items:center;gap:7px}
 /* Tabla de la Bandeja: la fila es el botón */
 table.tb-band tbody tr{cursor:pointer}
 table.tb-band tbody tr:hover td{background:#fff7ed}
+tr.le-clic{cursor:pointer}
+.le-pan table tbody tr.le-clic:hover td{background:#fff7ed !important}
 table.tb-band td.oculta-mov{white-space:nowrap}
 table.tb-band td.prov{max-width:260px}
 table.tb-band .prov-nom{display:inline-block;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
@@ -1028,11 +1030,13 @@ document.addEventListener('keypress', e => { if (e.key === 'Enter' && document.g
 // ── Arranque ────────────────────────────────────────────────────────────
 // (v147, JP) Mes enviado al estudio = cerrado: la base rechaza cambios a los comprobantes de ese mes
 // salvo para el administrador. Acá solo se avisa y se bloquea el botón; el candado real es el trigger.
-let MESES_CERRADOS = new Set(), SOY_ADMIN = false;
+let MESES_CERRADOS = new Set(), SOY_ADMIN = false, PUEDE_CERRAR = false;
 async function cargarMesesCerrados(){
   const [m, a] = await Promise.all([sb.from('compras_meses_cerrados').select('periodo,cerrado_por,cerrado_at,nota').order('periodo'), sb.rpc('compras_soy_admin')]);
+  const pc = await sb.rpc('compras_puede_cerrar');
   MESES_CERRADOS = new Map((m.data || []).map(x => [String(x.periodo).slice(0,7), x]));
   SOY_ADMIN = a.data === true;
+  PUEDE_CERRAR = pc.error ? SOY_ADMIN : pc.data === true;
 }
 const _mesDoc = d => String(d.fecha_ingreso || d.fecha_emision || '').slice(0,7);
 const docCerrado = d => !!(d && MESES_CERRADOS.get && MESES_CERRADOS.get(_mesDoc(d)));
@@ -4680,7 +4684,7 @@ async function cargarListadosEstudio(){
   // Los que NO van al Libro IVA se muestran aparte: si un comprobante del
   // período no está en el listado, tiene que verse POR QUÉ, no desaparecer.
   let q = sb.from('compras_documentos')
-    .select('tipo,letra,punto_venta,numero,proveedor_nombre,fecha_emision,fecha_ingreso,total,moneda')
+    .select('id,tipo,letra,punto_venta,numero,proveedor_nombre,fecha_emision,fecha_ingreso,total,moneda')
     .eq('es_prueba', MODO_PRUEBA).eq('computa_formal', false);
   if (listPer.emi.desde) q = q.gte('fecha_emision', listPer.emi.desde);
   if (listPer.emi.hasta) q = q.lte('fecha_emision', listPer.emi.hasta);
@@ -4701,20 +4705,15 @@ function _pintarEstudio(){
   const perc = s('percep_iva') + s('percep_iibb_caba') + s('percep_iibb_ba') + s('otros_tributos');
   const malos = R.filter(x => Math.abs(Number(x.descuadre)||0) > 1);
   const avisos = R.filter(x => x.alerta);
+  _LE_ROWS = {iva: R, mirar: avisos, fuera: LIST_FUERA || [], perc: LIST_PDET || []};
   const mesTxt = _listRotulo();
   // (v147) cierre del mes: solo cuando el selector es un mes calendario entero (por fecha de ingreso)
   const mesEntero = _listEsMesEntero() && listPor === 'ingreso', mesKey = mesEntero ? listPer.ing.desde.slice(0,7) : null;
   const cerrado = mesKey ? MESES_CERRADOS.get(mesKey) : null;
-  const cierreHTML = !mesEntero ? '' : `<div class="card" style="border-left:4px solid ${cerrado ? '#166534' : '#d97706'};display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-      <div style="flex:1;min-width:240px"><b>${ico(cerrado ? 'candado' : 'avion','s')} ${cerrado ? 'Mes enviado al estudio' : 'Mes todavía abierto'}</b>
-        <div class="mini">${cerrado ? `Cerrado el ${_fechaTs(cerrado.cerrado_at)} por ${esc(String(cerrado.cerrado_por||'').split('@')[0])}${cerrado.nota ? ' · ' + esc(cerrado.nota) : ''}. Los comprobantes de ${esc(mesTxt)} ya no se modifican (solo el administrador).`
-          : `Cuando le mandes los listados de ${esc(mesTxt)} al estudio, marcalo acá: desde ese momento los comprobantes del mes quedan bloqueados y solo el administrador puede tocarlos.`}</div></div>
-      <button class="act" onclick="abrirEnvioEstudio('${mesKey}')" title="Armar el mail para el estudio con los listados de ${esc(mesTxt)} (Subdiario, IVA completo, percepciones, retenciones y Libro IVA Digital). Sale desde claudiaadornosrl@gmail.com, desde la PC de JP, en unos 5 minutos.">${ico('mail','s')} Enviar al estudio</button>
-      ${SOY_ADMIN ? (cerrado ? `<button class="act gh" onclick="reabrirMes('${mesKey}')" title="Volver a permitir cambios en este mes">${ico('candado','s')} Reabrir el mes</button>`
-                             : `<button class="act" onclick="cerrarMes('${mesKey}')" title="Marcar que los listados de este mes ya se enviaron al estudio">${ico('avion','s')} Enviado al estudio · cerrar ${esc(mesTxt)}</button>`)
-                 : `<span class="mini">${cerrado ? '' : 'Lo cierra JP.'}</span>`}
-      <div id="envios-estudio" style="flex-basis:100%"></div>${(setTimeout(() => _pintarEnviosEstudio(mesKey), 0), '')}
-    </div>`;
+  // (13-nov, JP) Pre-cierre → Cierre → Rectificación POR LISTADO (no hay cierre del mes entero).
+  // Arriba va el resumen; el circuito de cada listado está dentro de su pestaña (.cierre-lst). Los pinta _pintarCierre.
+  const cierreHTML = !mesEntero ? '' : `<div class="card" id="cierre-etapas" data-mes="${mesKey}" style="border-radius:16px;padding:10px 14px"><span class="mini">Cargando el estado de los cierres…</span></div>${(setTimeout(() => _pintarCierre(mesKey), 0), '')}`;
+  const cierreLst = l => mesEntero ? `<div class="cierre-lst" data-l="${l}"></div>` : '';
   const fila = listPer[_listFila()];
 
   c.innerHTML = `
@@ -4784,7 +4783,7 @@ function _pintarEstudio(){
       <p class="mini" style="margin-bottom:8px">El libro cierra igual, pero estos tienen algo raro: un IVA de ajuste
         (la reconstrucción metió un tapón para que cuadre) o una imputación contable que no coincide con el neto.</p>
       <div style="overflow-x:auto;max-height:230px"><table><tbody>
-        ${avisos.map(x=>`<tr><td class="mini">${_fecha(x.fecha_emision)}</td>
+        ${avisos.map((x,i)=>`<tr class="le-clic" onclick="_leVer('mirar',${i})" title="Abrir el comprobante"><td class="mini">${_fecha(x.fecha_emision)}</td>
           <td>${esc(x.comprobante)}</td><td>${esc(x.proveedor_nombre||'')}</td>
           <td class="num">${plata(x.total)}</td>
           <td><span class="chip" style="background:#fef3c7;color:#92400e">${esc(x.alerta)}</span></td></tr>`).join('')}
@@ -4795,7 +4794,7 @@ function _pintarEstudio(){
       <p class="mini" style="margin-bottom:8px">No están marcados "computa en el Libro IVA", así que no entran en los
         listados de arriba. Están acá para que se vea que existen y por qué no figuran — típicamente proveedores del
         exterior o gastos que no se contabilizan formalmente. Si alguno tendría que estar, se corrige en su ficha.</p>
-      <table><tbody>${LIST_FUERA.map(d => `<tr>
+      <table><tbody>${LIST_FUERA.map((d,i) => `<tr class="le-clic" onclick="_leVer('fuera',${i})" title="Abrir el comprobante">
         <td class="mini">${_fecha(d.fecha_emision)}</td>
         <td>${esc(d.tipo + ' ' + (d.letra||'') + ' ' + String(d.punto_venta??0).padStart(4,'0') + '-' + String(d.numero??0).padStart(8,'0'))}</td>
         <td>${esc(d.proveedor_nombre||'')}</td>
@@ -4804,6 +4803,7 @@ function _pintarEstudio(){
     </div>` : ''}
 
     <div class="card le-pan" data-k="iva">
+      ${cierreLst('iva')}
       <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('factura','s')} IVA Compras · ${esc(mesTxt)}
         ${ayuda('Un renglón por comprobante, con el neto abierto por alícuota. Es lo que va al Libro IVA Compras. Descargas: Excel completo (una columna por alícuota, descuadre y alertas), Formato estudio (las mismas columnas del Subdiario que se manda hoy) y PDF.')}
         ${R.length ? `<span class="list-dl">
@@ -4815,7 +4815,7 @@ function _pintarEstudio(){
           <th class="num">Neto 21%</th><th class="num">Neto 10,5%</th><th class="num">Neto 27%</th>
           <th class="num">No grav./ex.</th><th class="num">IVA 21%</th><th class="num">IVA 10,5%</th>
           <th class="num">IVA 27%</th><th class="num">Ajuste</th><th class="num">Percep.</th><th class="num">Total</th></tr></thead>
-        <tbody>${R.map(x => `<tr${x.es_nc ? ' style="background:#fef2f2"' : ''}>
+        <tbody>${R.map((x,i) => `<tr class="le-clic" onclick="_leVer('iva',${i})" title="Abrir el comprobante"${x.es_nc ? ' style="background:#fef2f2"' : ''}>
           <td class="mini">${_fecha(x.fecha_emision)}</td>
           <td>${esc(x.comprobante)}</td>
           <td class="mini">${esc(x.cuit_emisor||'')}</td>
@@ -4840,6 +4840,7 @@ function _pintarEstudio(){
     </div>
 
     <div class="card le-pan" data-k="perc">
+      ${cierreLst('percepciones')}
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
         <div><h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('inbox','s')} Percepciones sufridas
           ${ayuda('Lo que los proveedores le percibieron a la empresa. Son crédito contra el impuesto correspondiente, igual que el IVA. Abajo, el detalle por comprobante y jurisdicción: el mismo corte del listado que se manda hoy.')}
@@ -4857,7 +4858,7 @@ function _pintarEstudio(){
         <div style="overflow-x:auto;max-height:300px;margin-top:12px"><table style="font-size:12.5px">
           <thead><tr><th>Fecha</th><th>Comprobante</th><th>Proveedor</th><th>Impuesto</th>
             <th>Jurisdicción</th><th class="num">Percepción</th></tr></thead>
-          <tbody>${LIST_PDET.map(p=>`<tr><td class="mini">${_fecha(p.fecha_emision)}</td>
+          <tbody>${LIST_PDET.map((p,i)=>`<tr class="le-clic" onclick="_leVer('perc',${i})" title="Abrir el comprobante"><td class="mini">${_fecha(p.fecha_emision)}</td>
             <td>${esc(p.comprobante)}</td><td>${esc((p.proveedor||'').slice(0,32))}</td>
             <td class="mini">${esc(p.impuesto)}</td><td class="mini">${esc(p.jurisdiccion||'—')}</td>
             <td class="num">${plata(p.importe)}</td></tr>`).join('')}</tbody>
@@ -4865,6 +4866,7 @@ function _pintarEstudio(){
     </div>
 
     <div class="card le-pan" data-k="ret">
+      ${cierreLst('retenciones_q1')}${cierreLst('retenciones_q2')}
       <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('porcentaje','s')} Retenciones practicadas
         ${ayuda('Lo que la empresa le retuvo a sus proveedores al pagarles, agrupado por quincena (que es como se declara). Se llena solo con las órdenes de pago que emita el módulo.')}
         ${LIST_RET && LIST_RET.length ? `<span class="list-dl">
@@ -4873,7 +4875,7 @@ function _pintarEstudio(){
       ${LIST_RET && LIST_RET.length ? `<div style="overflow-x:auto"><table>
         <thead><tr><th>Quincena</th><th>Fecha</th><th>OP</th><th>Proveedor</th><th>Régimen</th>
           <th class="num">Base</th><th class="num">Alíc.</th><th class="num">Retenido</th><th>Certificado</th></tr></thead>
-        <tbody>${LIST_RET.map(r=>`<tr${r.editado ? ' style="background:#fff7ed"' : ''}>
+        <tbody>${LIST_RET.map(r=>`<tr${r.orden_pago_id ? ` class="le-clic" onclick="verOP(${Number(r.orden_pago_id)})" title="Abrir la orden de pago"` : ''}${r.editado ? ' style="background:#fff7ed"' : ''}>
           <td class="mini">${esc(r.quincena)}</td><td class="mini">${_fecha(r.fecha)}</td>
           <td>${esc(r.orden_pago || ('#'+r.orden_pago_id))}</td><td>${esc(r.proveedor||'')}</td>
           <td class="mini">${esc(r.regimen_codigo||'')} ${esc(r.regimen_nombre||'')}
@@ -4921,11 +4923,11 @@ async function _envioCfg(){
   return ENVIO_CFG;
 }
 function _envioMesTxt(mesKey){ const [y, m] = mesKey.split('-'); return `${MESES[+m-1]} ${y}`; }
-async function _pintarEnviosEstudio(mesKey){
+async function _pintarEnviosEstudio(mesKey, yaEnEtapas){
   const el = document.getElementById('envios-estudio'); if (!el || !mesKey) return;
   const r = await sb.from('compras_envios_estudio').select('id,estado,para,cc,archivos,pedido_por,pedido_at,enviado_at,error_msg,intentos')
     .eq('periodo', mesKey + '-01').eq('es_prueba', MODO_PRUEBA).is('origen', null).order('id', {ascending: false}).limit(5);
-  const L = (r.data || []);
+  const L = (r.data || []).filter(e => !(yaEnEtapas || []).includes(e.id));
   if (!L.length){ el.innerHTML = ''; return; }
   const chip = e => e.estado === 'enviado' ? `<span class="chip" style="background:#dcfce7;color:#166534">enviado ${_fechaTs(e.enviado_at)}</span>`
     : e.estado === 'error' ? `<span class="chip" style="background:#fee2e2;color:#991b1b" title="${esc(e.error_msg || '')}">no salió (${e.intentos} intentos)</span>`
@@ -4934,88 +4936,88 @@ async function _pintarEnviosEstudio(mesKey){
       ${chip(e)} <span>a ${esc((e.para || []).join(', '))}${e.cc && e.cc.length ? ' · cc ' + esc(e.cc.join(', ')) : ''}</span>
       <span style="opacity:.75">· ${(e.archivos || []).length} adjuntos · pedido ${_fechaTs(e.pedido_at)} por ${esc(String(e.pedido_por || '').split('@')[0])}</span></div>`).join('')}</div>`;
 }
-async function abrirEnvioEstudio(mesKey){
-  if (!LIST_IVA || !LIST_IVA.length){ alert('No hay comprobantes en el mes: no hay nada para mandar.'); return; }
-  const cfg = await _envioCfg(), per = mesKey, mesTxt = _envioMesTxt(mesKey);
-  const v = await sb.from('libros_iva_archivos').select('archivo').eq('periodo', per);
-  const ventas = (v.data || []).map(x => x.archivo).filter(a => /^VENTAS_/.test(a));
-  const rep = t => String(t || '').replace(/\{periodo\}/g, mesTxt);
-  let ov = document.getElementById('nota-overlay');
-  if (!ov){ ov = document.createElement('div'); ov.id = 'nota-overlay';
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:10040;display:flex;align-items:center;justify-content:center;padding:16px;';
-    document.body.appendChild(ov); }
-  const chk = (id, txt, on, extra) => `<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:3px 0"><input type="checkbox" id="${id}" ${on ? 'checked' : ''} ${extra || ''}> ${txt}</label>`;
-  const hayP = !!(LIST_PDET && LIST_PDET.length), hayR = !!(LIST_RET && LIST_RET.length);
-  ov.innerHTML = `<div class="c-box" style="max-width:640px;width:100%">
-    <div class="c-head"><div style="flex:1"><div style="font-weight:700;font-size:15px">${ico('mail','s')} Enviar al estudio · ${esc(mesTxt)}${MODO_PRUEBA ? ' · 🧪 PRUEBA' : ''}</div>
-      <div style="font-size:12.5px;opacity:.9">Sale desde claudiaadornosrl@gmail.com, desde la PC de JP, en unos 5 minutos.</div></div>
-      <button class="m-x" onclick="document.getElementById('nota-overlay').remove()">✕</button></div>
-    <div class="c-body" style="display:grid;gap:8px">
-      <label class="mini">Para (separados por coma)<input id="env-para" style="width:100%;box-sizing:border-box" value="${esc((cfg.para || []).join(', '))}" placeholder="mail del estudio"></label>
-      <label class="mini">Con copia<input id="env-cc" style="width:100%;box-sizing:border-box" value="${esc((cfg.cc || []).join(', '))}"></label>
-      <label class="mini">Asunto<input id="env-asunto" style="width:100%;box-sizing:border-box" value="${esc(rep(cfg.asunto))}"></label>
-      <label class="mini">Mensaje<textarea id="env-cuerpo" rows="6" style="width:100%;box-sizing:border-box;font:inherit;font-size:13px">${esc(rep(cfg.cuerpo))}</textarea></label>
-      <div class="mini" style="font-weight:600;margin-top:4px">Adjuntos</div>
-      ${chk('env-a-estudio', 'Subdiario IVA Compras · formato estudio (CSV, las 13 columnas de siempre)', true)}
-      ${chk('env-a-iva', 'IVA Compras completo (CSV, una columna por alícuota, descuadre y alertas)', true)}
-      ${chk('env-a-perc', 'Detalle de percepciones (CSV)' + (hayP ? '' : ' — no hay en el mes'), hayP, hayP ? '' : 'disabled')}
-      ${chk('env-a-ret', 'Retenciones por quincena (CSV)' + (hayR ? '' : ' — no hay en el mes'), hayR, hayR ? '' : 'disabled')}
-      ${chk('env-a-libro', 'Libro IVA Digital · COMPRAS (TXT CBTE + ALICUOTAS, formato ARCA)', true)}
-      ${chk('env-a-ventas', 'Libro IVA Digital · VENTAS (' + (ventas.length ? esc(ventas.join(' + ')) : 'todavía no publicado para este mes') + ')', ventas.length > 0, ventas.length ? '' : 'disabled')}
-      <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-top:6px"><input type="checkbox" id="env-guardar" checked> Recordar destinatarios y textos para la próxima vez</label>
-    </div>
-    <div class="c-pie"><div style="flex:1" id="env-estado" class="mini"></div>
-      <button class="act gh" onclick="document.getElementById('nota-overlay').remove()">Cancelar</button>
-      <button class="act" id="env-btn" onclick="enviarEstudio('${per}')">${ico('avion','s')} Encolar el envío</button></div></div>`;
-  ov._ventas = ventas;
+// ── Etapas de cierre para el estudio, POR LISTADO (13-nov, JP) ────────────────────────────────
+// Cada listado del mes lleva su circuito: Pre-cierre (se emite para controlar) → Cierre (se manda al estudio) →
+// Rectificación (aviso al estudio, vuelve a pre-cierre). Puede haber varias vueltas. No hay cierre del mes entero.
+// Solo el cierre de IVA Compras bloquea los comprobantes del mes. Cada paso queda en compras_cierre_etapas con
+// los archivos que se emitieron (bucket compras-estudio): no se pisa nada.
+const _ESTUDIO_MAILS = {para: ['mepf@estudioppfu.com.ar', 'impuestos@estudioppfu.com.ar'], cc: ['administracion@claudiaadorno.com']};
+const _ETAPA = {pre_cierre: {t: 'Pre-cierre', bg: '#fef3c7', fg: '#92400e'}, cierre: {t: 'Cierre', bg: '#dcfce7', fg: '#166534'}, rectificacion: {t: 'Rectificación', bg: '#fee2e2', fg: '#991b1b'}};
+const _PILL = 'border-radius:999px';
+const _retQ = q => (LIST_RET || []).filter(r => (+String(r.fecha || '').slice(8, 10) <= 15) === (q === 1));
+function _retBajarQ(q){
+  const todo = LIST_RET; LIST_RET = _retQ(q);
+  try { _bajarRetenciones(); } finally { LIST_RET = todo; }
+  const u = _CAPTURA && _CAPTURA[_CAPTURA.length - 1];
+  if (u) u.nombre = u.nombre.replace(/(\.[a-z]+)$/i, (q === 1 ? '_1ra_quincena' : '_2da_quincena') + '$1');
 }
-async function enviarEstudio(per){
-  const ventas = (document.getElementById('nota-overlay') || {})._ventas || [];
-  const lista = t => String(document.getElementById(t)?.value || '').split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
-  const para = lista('env-para'), cc = lista('env-cc');
-  const asunto = (document.getElementById('env-asunto')?.value || '').trim(), cuerpo = (document.getElementById('env-cuerpo')?.value || '').trim();
-  const malos = para.concat(cc).filter(m => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m));
-  if (!para.length){ alert('Falta el mail del estudio (Para).'); return; }
-  if (malos.length){ alert('Estos mails no parecen válidos: ' + malos.join(', ')); return; }
-  if (!asunto){ alert('Falta el asunto.'); return; }
-  const on = id => !!document.getElementById(id)?.checked;
-  const btn = document.getElementById('env-btn'), est = document.getElementById('env-estado');
-  btn.disabled = true; est.textContent = 'Armando los archivos…';
-  _CAPTURA = [];
-  try {
-    if (on('env-a-estudio')) _bajarFormatoEstudio();
-    if (on('env-a-iva')) _bajarIvaCompras();
-    if (on('env-a-perc')) _bajarPercepciones();
-    if (on('env-a-ret')) _bajarRetenciones();
-    if (on('env-a-libro')){ _libBajarCompras('cb'); _libBajarCompras('al'); }
-    if (on('env-a-ventas')) for (const a of ventas) await _libBajarVentas(per, a);
-  } catch (e){ _CAPTURA = null; btn.disabled = false; est.textContent = ''; alert('No pude armar los archivos: ' + e.message); return; }
-  const archivos = _CAPTURA; _CAPTURA = null;
-  if (!archivos.length){ btn.disabled = false; est.textContent = ''; alert('No quedó ningún adjunto para mandar.'); return; }
-  const carpeta = `${MODO_PRUEBA ? 'prueba/' : ''}${per}/${Date.now()}`, subidos = [];
-  for (const a of archivos){
-    est.textContent = `Subiendo ${a.nombre}…`;
-    const path = `${carpeta}/${a.nombre}`;
-    const r = await sb.storage.from('compras-estudio').upload(path, a.blob, {upsert: true, contentType: a.blob.type || 'application/octet-stream'});
-    if (r.error){ btn.disabled = false; est.textContent = ''; alert(`No se pudo subir ${a.nombre}: ` + r.error.message); return; }
-    subidos.push({path, nombre: a.nombre, bytes: a.blob.size});
+// tab = pestaña donde vive · n() = renglones · armar(per) = deja los archivos en _CAPTURA
+const _CL = {
+  iva:            {t: 'IVA Compras', tab: 'iva', n: () => (LIST_IVA || []).length, bloquea: true, armar: async per => {
+                    _bajarFormatoEstudio(); _bajarIvaCompras(); _libBajarCompras('cb'); _libBajarCompras('al');
+                    const v = await sb.from('libros_iva_archivos').select('archivo').eq('periodo', per);
+                    for (const a of (v.data || []).map(x => x.archivo).filter(a => /^VENTAS_/.test(a))) await _libBajarVentas(per, a); }},
+  percepciones:   {t: 'Percepciones', tab: 'perc', n: () => (LIST_PDET || []).length, armar: async () => _bajarPercepciones()},
+  retenciones_q1: {t: 'Retenciones · 1ª quincena', tab: 'ret', n: () => _retQ(1).length, armar: async () => _retBajarQ(1)},
+  retenciones_q2: {t: 'Retenciones · 2ª quincena', tab: 'ret', n: () => _retQ(2).length, armar: async () => _retBajarQ(2)},
+};
+function _estudioMailsHTML(){
+  return `<div class="mini">Mails del estudio: ${esc(_ESTUDIO_MAILS.para.join(', '))} · copia a ${esc(_ESTUDIO_MAILS.cc.join(', '))}
+    <a href="#" onclick="document.getElementById('env-para').value=_ESTUDIO_MAILS.para.join(', ');document.getElementById('env-cc').value=_ESTUDIO_MAILS.cc.join(', ');return false">usar estos</a></div>`;
+}
+async function _pintarCierre(mesKey){
+  const el = document.getElementById('cierre-etapas'); if (!el || el.dataset.mes !== mesKey) return;
+  const mesTxt = _envioMesTxt(mesKey), legado = MESES_CERRADOS.get ? MESES_CERRADOS.get(mesKey) : null;
+  const r = await sb.from('compras_cierre_etapas').select('id,listado,etapa,vuelta,por,cuando,nota,archivos,envio_id,envio:compras_envios_estudio(estado,para,cc,enviado_at,error_msg,intentos)')
+    .eq('periodo', mesKey + '-01').eq('es_prueba', MODO_PRUEBA).order('id');
+  if (document.getElementById('cierre-etapas') !== el || el.dataset.mes !== mesKey) return;
+  if (r.error){
+    // Red de seguridad: si esta versión se publica antes de aplicar la migración de etapas (la tabla no existe),
+    // el mes se sigue pudiendo cerrar y reabrir como antes.
+    el.innerHTML = `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:240px"><b>${ico('candado','s')} ${legado ? 'Mes enviado al estudio' : 'Mes todavía abierto'}</b>
+      <div class="mini">Las etapas de cierre por listado todavía no están activas (${esc(r.error.message)}).${legado ? ` Cerrado el ${_fechaTs(legado.cerrado_at)}.` : ''}</div></div>
+      ${SOY_ADMIN ? (legado ? `<button class="act gh" style="${_PILL}" onclick="reabrirMes('${mesKey}')">Reabrir el mes</button>` : `<button class="act" style="${_PILL}" onclick="cerrarMes('${mesKey}')">Enviado al estudio · cerrar ${esc(mesTxt)}</button>`) : ''}</div>`;
+    return; }
+  const quien = x => esc(String(x || '').split('@')[0]);
+  const chipEnv = e => !e ? '' : e.estado === 'enviado' ? `<span class="chip" style="background:#dcfce7;color:#166534" title="a ${esc((e.para || []).join(', '))}${e.cc && e.cc.length ? ' · copia a ' + esc(e.cc.join(', ')) : ''}">mail enviado ${_fechaTs(e.enviado_at)}</span>`
+    : e.estado === 'error' ? `<span class="chip" style="background:#fee2e2;color:#991b1b" title="${esc(e.error_msg || '')}">el mail no salió (${e.intentos} intentos)</span>`
+    : `<span class="chip" style="background:#fef3c7;color:#92400e" title="Lo manda la PC de JP en los próximos 5 minutos">mail por salir</span>`;
+  const resumen = [];
+  for (const l of Object.keys(_CL)){
+    const C = _CL[l], L = (r.data || []).filter(e => e.listado === l), ult = L[L.length - 1], leg = l === 'iva' ? legado : null;
+    const est = ult ? ult.etapa : (leg ? 'cierre' : 'abierto'), vuelta = ult ? ult.vuelta : 1, n = C.n(), ver = vuelta > 1 ? ' · versión ' + vuelta : '';
+    const col = est === 'cierre' ? '#166534' : est === 'rectificacion' ? '#b91c1c' : est === 'pre_cierre' ? '#d97706' : '#94a3b8';
+    const rot = est === 'cierre' ? 'cerrado' + ver : est === 'pre_cierre' ? 'en pre-cierre' + ver : est === 'rectificacion' ? 'en corrección' + ver : (n ? 'abierto' : 'sin movimientos');
+    resumen.push(`<button type="button" class="chip" style="border:0;cursor:pointer;background:${col}1a;color:${col};font:inherit;font-size:12px;font-weight:700;padding:4px 11px" onclick="_leTab('${C.tab}')" title="Ir al listado">${esc(C.t)}: ${rot}</button>`);
+    const box = document.querySelector(`#list-estudio .cierre-lst[data-l="${l}"]`); if (!box) continue;
+    const T = est === 'abierto' ? (n ? `Abierto. Cuando esté listo, dá el <b>Pre-cierre</b>: se guarda el listado para controlarlo, todavía no se manda nada.` : `Sin movimientos en ${esc(mesTxt)}: no hay nada para cerrar.`)
+      : est === 'pre_cierre' ? `En pre-cierre${ver}: emitido el ${_fechaTs(ult.cuando)} por ${quien(ult.por)}. Controlalo y, si está bien, dá el <b>Cierre</b> para mandarlo al estudio. Si corregiste algo, repetí el pre-cierre.`
+      : est === 'rectificacion' ? `En corrección${ver}: ya se le avisó al estudio. Corregí y después dá de nuevo el <b>Pre-cierre</b>.`
+      : ult ? `Cerrado y enviado al estudio${ver} el ${_fechaTs(ult.cuando)} por ${quien(ult.por)}.${C.bloquea ? ' Los comprobantes del mes ya no se modifican.' : ''} Si aparece una diferencia, hay que <b>rectificar</b>.`
+      : `Cerrado el ${_fechaTs(leg.cerrado_at)} por ${quien(leg.cerrado_por)}${leg.nota ? ' · ' + esc(leg.nota) : ''} (antes de que existieran las etapas). Si aparece una diferencia, hay que <b>rectificar</b>.`;
+    const B = !PUEDE_CERRAR ? `<span class="mini">Lo dan Contreras o JP.</span>`
+      : est === 'cierre' ? `<button class="act gh" style="${_PILL}" onclick="abrirRectificar('${mesKey}','${l}',${vuelta})" title="Avisarle al estudio que se está corrigiendo este listado y volverlo a pre-cierre">Rectificar</button>`
+      : !n ? ''
+      : est === 'pre_cierre' ? `<button class="act gh" style="${_PILL}" onclick="darPreCierre('${mesKey}','${l}')" title="Volver a emitir el listado después de una corrección">Repetir el pre-cierre</button>
+          <button class="act" style="${_PILL}" onclick="abrirCierre('${mesKey}','${l}',${vuelta})" title="Guardar el listado definitivo y mandarlo al estudio">${ico('avion','s')} Dar el Cierre y enviar</button>`
+      : `<button class="act" style="${_PILL}" onclick="darPreCierre('${mesKey}','${l}')" title="Guardar el listado para controlarlo. No se manda nada al estudio.">${ico('candado','s')} Dar el Pre-cierre</button>`;
+    const H = !L.length ? '' : `<details style="margin-top:6px"><summary class="mini" style="cursor:pointer;font-weight:700">Historial · ${L.length} ${L.length === 1 ? 'paso' : 'pasos'} (queda guardado lo que se emitió en cada uno)</summary>
+      ${L.slice().reverse().map(e => { const k = _ETAPA[e.etapa] || _ETAPA.pre_cierre, A = e.archivos || [];
+        return `<div class="mini" style="padding:6px 0;border-bottom:1px dashed #e5e7eb">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="chip" style="background:${k.bg};color:${k.fg}">${k.t}${e.vuelta > 1 ? ' · versión ' + e.vuelta : ''}</span>
+            <span>${_fechaTs(e.cuando)} · ${quien(e.por)}</span>${chipEnv(e.envio)}${e.nota ? `<span style="opacity:.85">· ${esc(e.nota)}</span>` : ''}</div>
+          ${A.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${A.map(a => `<a href="#" class="chip" style="background:#f1f5f9;color:#334155;font-weight:600;text-decoration:none" title="Bajar el archivo tal como se emitió en ese paso" data-path="${esc(a.path)}" onclick="_cierreBajar(this.dataset.path);return false">${esc(a.nombre)}</a>`).join('')}</div>` : ''}</div>`; }).join('')}</details>`;
+    box.style.cssText = `border:1px solid #e5e7eb;border-left:4px solid ${col};border-radius:16px;padding:10px 14px;margin-bottom:12px;background:#fff`;
+    box.innerHTML = `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <div style="flex:1;min-width:240px"><b>${ico(est === 'cierre' ? 'candado' : 'avion','s')} Cierre · ${esc(C.t)} · ${esc(mesTxt)}</b><div class="mini">${T}</div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${B}</div></div>
+      <div class="mini cierre-estado" style="margin-top:4px"></div>${H}`;
   }
-  const ins = await sb.from('compras_envios_estudio').insert({periodo: per + '-01', es_prueba: MODO_PRUEBA, para, cc, asunto, cuerpo, archivos: subidos, pedido_por: session.email || null});
-  if (ins.error){ btn.disabled = false; est.textContent = ''; alert('No se pudo encolar el envío: ' + ins.error.message); return; }
-  if (on('env-guardar')){
-    const cfg = await _envioCfg();
-    const mesTxt = _envioMesTxt(per), des = t => String(t || '').split(mesTxt).join('{periodo}');
-    const valor = {...cfg, para, cc, asunto: des(asunto), cuerpo: des(cuerpo)};
-    const up = await sb.from('compras_config').upsert({clave: 'estudio_envio', valor, actualizado_por: session.email || null, actualizado_at: new Date().toISOString()});
-    if (!up.error) ENVIO_CFG = valor;
-  }
-  document.getElementById('nota-overlay')?.remove();
-  alert(`Envío encolado: ${subidos.length} adjuntos a ${para.join(', ')}. Sale desde la PC de JP en unos 5 minutos; en la tarjeta del mes vas a ver cuando salió.`);
-  _pintarEnviosEstudio(per);
+  el.innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:13.5px">${ico('candado','s')} Cierres de ${esc(mesTxt)}</b>${resumen.join('')}</div><div id="envios-estudio"></div>`;
+  _pintarEnviosEstudio(mesKey, (r.data || []).map(e => e.envio_id).filter(Boolean));
 }
 async function cerrarMes(mesKey){
-  const [y, m] = mesKey.split('-');
-  const nota = prompt(`Marcar ${MESES[+m-1]} ${y} como ENVIADO AL ESTUDIO.\n\nDesde ahora los comprobantes de ese mes no se pueden modificar (solo vos). Podés dejar una nota (opcional):`, '');
+  const nota = prompt(`Marcar ${_envioMesTxt(mesKey)} como ENVIADO AL ESTUDIO.\n\nDesde ahora los comprobantes de ese mes no se pueden modificar (solo vos). Podés dejar una nota (opcional):`, '');
   if (nota === null) return;
   const {error} = await sb.from('compras_meses_cerrados').insert({periodo: mesKey + '-01', nota: nota.trim() || null});
   if (error){ alert('No se pudo cerrar: ' + error.message); return; }
@@ -5025,6 +5027,140 @@ async function reabrirMes(mesKey){
   if (!confirm('¿Reabrir el mes? Los comprobantes se van a poder modificar de nuevo, y el listado que recibió el estudio puede dejar de coincidir.')) return;
   const {error} = await sb.from('compras_meses_cerrados').delete().eq('periodo', mesKey + '-01');
   if (error){ alert('No se pudo reabrir: ' + error.message); return; }
+  await cargarMesesCerrados(); cargarListadosEstudio();
+}
+async function _cierreBajar(path){
+  const su = await sb.storage.from('compras-estudio').createSignedUrl(path, 120, {download: true});
+  if (su.error || !su.data){ alert('No se pudo bajar: ' + ((su.error && su.error.message) || 'sin enlace')); return; }
+  const a = document.createElement('a'); a.href = su.data.signedUrl; a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove();
+}
+// Arma los archivos de UN listado (los mismos que se bajan a mano), sin subirlos.
+async function _cierreArmar(per, l){
+  _CAPTURA = [];
+  try { await _CL[l].armar(per); } catch (e){ _CAPTURA = null; throw e; }
+  const archivos = _CAPTURA; _CAPTURA = null;
+  if (!archivos.length) throw new Error('no quedó ningún archivo para guardar');
+  return archivos;
+}
+async function _cierreSubir(archivos, carpeta, avisar){
+  const subidos = [];
+  for (const a of archivos){
+    avisar(`Guardando ${a.nombre}…`);
+    const path = `${carpeta}/${a.nombre}`;
+    const r = await sb.storage.from('compras-estudio').upload(path, a.blob, {upsert: true, contentType: a.blob.type || 'application/octet-stream'});
+    if (r.error) throw new Error(`no se pudo guardar ${a.nombre}: ${r.error.message}`);
+    subidos.push({path, nombre: a.nombre, bytes: a.blob.size});
+  }
+  return subidos;
+}
+const _cierreCarpeta = (per, l, paso) => `${MODO_PRUEBA ? 'prueba/' : ''}${per}/etapas/${l}/${Date.now()}-${paso}`;
+async function darPreCierre(mesKey, l){
+  const C = _CL[l], mesTxt = _envioMesTxt(mesKey);
+  if (!C.n()){ alert('No hay movimientos en ese listado: no hay nada para emitir.'); return; }
+  const nota = prompt(`Dar el PRE-CIERRE de ${C.t} · ${mesTxt}.\n\nSe guarda el listado tal como está ahora, para controlarlo. No se manda nada al estudio.\n\nPodés dejar una nota (opcional):`, '');
+  if (nota === null) return;
+  const est = document.querySelector(`.cierre-lst[data-l="${l}"] .cierre-estado`), avisar = t => { if (est) est.textContent = t; };
+  try {
+    avisar('Armando el listado…');
+    const subidos = await _cierreSubir(await _cierreArmar(mesKey, l), _cierreCarpeta(mesKey, l, 'pre_cierre'), avisar);
+    avisar('Registrando el pre-cierre…');
+    const r = await sb.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'pre_cierre', p_es_prueba: MODO_PRUEBA, p_nota: nota.trim() || null, p_archivos: subidos, p_envio: null});
+    if (r.error) throw new Error(r.error.message);
+  } catch (e){ avisar(''); alert('No se pudo dar el pre-cierre: ' + e.message); return; }
+  _pintarCierre(mesKey);
+}
+function _cierreOverlay(){
+  let ov = document.getElementById('nota-overlay');
+  if (!ov){ ov = document.createElement('div'); ov.id = 'nota-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:10040;display:flex;align-items:center;justify-content:center;padding:16px;';
+    document.body.appendChild(ov); }
+  return ov;
+}
+const _cierreAsunto = (cfg, l, mesTxt) => `Claudia Adorno SRL · ${_CL[l].t} · ${mesTxt}`;
+// El Cierre de un listado: abre la ventana del mail con los archivos de ESE listado.
+async function abrirCierre(mesKey, l, vuelta){
+  const C = _CL[l], cfg = await _envioCfg(), mesTxt = _envioMesTxt(mesKey);
+  let archivos;
+  try { archivos = await _cierreArmar(mesKey, l); } catch (e){ alert('No pude armar el listado: ' + e.message); return; }
+  const ov = _cierreOverlay(), R = 'width:100%;box-sizing:border-box;border-radius:999px';
+  ov.innerHTML = `<div class="c-box" style="max-width:640px;width:100%">
+    <div class="c-head"><div style="flex:1"><div style="font-weight:700;font-size:15px">${ico('candado','s')} Dar el Cierre y enviar · ${esc(C.t)} · ${esc(mesTxt)}${vuelta > 1 ? ' · rectificado, versión ' + vuelta : ''}${MODO_PRUEBA ? ' · 🧪 PRUEBA' : ''}</div>
+      <div style="font-size:12.5px;opacity:.9">Sale desde claudiaadornosrl@gmail.com, desde la PC de JP, en unos 5 minutos.${C.bloquea ? ' Los comprobantes del mes quedan bloqueados.' : ''}</div></div>
+      <button class="m-x" onclick="document.getElementById('nota-overlay').remove()">✕</button></div>
+    <div class="c-body" style="display:grid;gap:8px">
+      <label class="mini">Para (separados por coma)<input id="env-para" style="${R}" value="${esc((cfg.para || []).join(', '))}" placeholder="mail del estudio"></label>
+      <label class="mini">Con copia<input id="env-cc" style="${R}" value="${esc((cfg.cc || []).join(', '))}"></label>
+      ${_estudioMailsHTML()}
+      <label class="mini">Asunto<input id="env-asunto" style="${R}" value="${esc(_cierreAsunto(cfg, l, mesTxt) + (vuelta > 1 ? ' · RECTIFICADO (versión ' + vuelta + ')' : ''))}"></label>
+      <label class="mini">Mensaje<textarea id="env-cuerpo" rows="5" style="width:100%;box-sizing:border-box;font:inherit;font-size:13px;border-radius:14px">${esc(`Hola,\n\nAdjuntamos el listado de ${C.t} de ${mesTxt}${vuelta > 1 ? ', rectificado (versión ' + vuelta + '). Reemplaza al que mandamos antes' : ''}.\n\nCualquier duda nos avisan.\n\nSaludos,\nAdministración · Claudia Adorno SRL`)}</textarea></label>
+      <div class="mini" style="font-weight:600;margin-top:4px">Adjuntos de este listado</div>
+      ${archivos.map((a, i) => `<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:2px 0"><input type="checkbox" class="env-adj" data-i="${i}" checked> ${esc(a.nombre)}</label>`).join('')}
+      <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-top:6px"><input type="checkbox" id="env-guardar" checked> Recordar los destinatarios para la próxima vez</label>
+    </div>
+    <div class="c-pie"><div style="flex:1" id="env-estado" class="mini"></div>
+      <button class="act gh" style="${_PILL}" onclick="document.getElementById('nota-overlay').remove()">Cancelar</button>
+      <button class="act" style="${_PILL}" id="env-btn" onclick="darCierre('${mesKey}','${l}',${vuelta})">${ico('avion','s')} Dar el Cierre y enviar</button></div></div>`;
+  ov._archivos = archivos;
+}
+function _cierreMails(){
+  const lista = t => String(document.getElementById(t)?.value || '').split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
+  const para = lista('env-para'), cc = lista('env-cc'), val = id => (document.getElementById(id)?.value || '').trim();
+  const malos = para.concat(cc).filter(m => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m));
+  if (!para.length){ alert('Falta el mail del estudio (Para).'); return null; }
+  if (malos.length){ alert('Estos mails no parecen válidos: ' + malos.join(', ')); return null; }
+  if (!val('env-asunto')){ alert('Falta el asunto.'); return null; }
+  return {para, cc, asunto: val('env-asunto'), cuerpo: val('env-cuerpo')};
+}
+async function darCierre(mesKey, l, vuelta){
+  const ov = document.getElementById('nota-overlay'), m = _cierreMails(); if (!m || !ov) return;
+  const archivos = (ov._archivos || []).filter((a, i) => ov.querySelector(`.env-adj[data-i="${i}"]`)?.checked);
+  if (!archivos.length){ alert('Tiene que ir al menos un adjunto.'); return; }
+  const btn = document.getElementById('env-btn'), est = document.getElementById('env-estado'); btn.disabled = true;
+  try {
+    const subidos = await _cierreSubir(archivos, _cierreCarpeta(mesKey, l, 'cierre-v' + vuelta), t => { est.textContent = t; });
+    est.textContent = 'Registrando el cierre…';
+    const r = await sb.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'cierre', p_es_prueba: MODO_PRUEBA, p_nota: null, p_archivos: subidos, p_envio: m});
+    if (r.error) throw new Error(r.error.message);
+  } catch (e){ btn.disabled = false; est.textContent = ''; alert('No se pudo dar el cierre: ' + e.message); return; }
+  if (document.getElementById('env-guardar')?.checked){
+    const cfg = await _envioCfg();
+    const valor = {...cfg, para: m.para, cc: m.cc};
+    const up = await sb.from('compras_config').upsert({clave: 'estudio_envio', valor, actualizado_por: session.email || null, actualizado_at: new Date().toISOString()});
+    if (!up.error) ENVIO_CFG = valor;
+  }
+  ov.remove();
+  alert(`Cierre dado: ${_CL[l].t}. Sale por mail a ${m.para.join(', ')} desde la PC de JP en unos 5 minutos; en el historial del listado vas a ver cuando salió.`);
+  await cargarMesesCerrados(); cargarListadosEstudio();
+}
+async function abrirRectificar(mesKey, l, vuelta){
+  const C = _CL[l], cfg = await _envioCfg(), mesTxt = _envioMesTxt(mesKey);
+  const ov = _cierreOverlay(), R = 'width:100%;box-sizing:border-box;border-radius:999px';
+  ov.innerHTML = `<div class="c-box" style="max-width:640px;width:100%">
+    <div class="c-head"><div style="flex:1"><div style="font-weight:700;font-size:15px">${ico('candado','s')} Rectificar · ${esc(C.t)} · ${esc(mesTxt)}${MODO_PRUEBA ? ' · 🧪 PRUEBA' : ''}</div>
+      <div style="font-size:12.5px;opacity:.9">Sale un aviso al estudio y el listado vuelve a pre-cierre (versión ${vuelta + 1}).${C.bloquea ? ' Los comprobantes del mes se desbloquean.' : ''} Lo que ya se emitió queda guardado en el historial.</div></div>
+      <button class="m-x" onclick="document.getElementById('nota-overlay').remove()">✕</button></div>
+    <div class="c-body" style="display:grid;gap:8px">
+      <label class="mini">Motivo de la rectificación (queda en el historial, no va en el mail)<input id="rec-motivo" style="${R}" placeholder="qué diferencia se encontró"></label>
+      <label class="mini">Para (separados por coma)<input id="env-para" style="${R}" value="${esc((cfg.para || []).join(', '))}" placeholder="mail del estudio"></label>
+      <label class="mini">Con copia<input id="env-cc" style="${R}" value="${esc((cfg.cc || []).join(', '))}"></label>
+      ${_estudioMailsHTML()}
+      <label class="mini">Asunto<input id="env-asunto" style="${R}" value="${esc(_cierreAsunto(cfg, l, mesTxt) + ' · EN CORRECCIÓN')}"></label>
+      <label class="mini">Mensaje<textarea id="env-cuerpo" rows="5" style="width:100%;box-sizing:border-box;font:inherit;font-size:13px;border-radius:14px">Estamos corrigiendo el listado de ${esc(C.t)} del mes ${esc(mesTxt)} porque encontramos unas diferencias, en breve mandamos las correcciones.</textarea></label>
+    </div>
+    <div class="c-pie"><div style="flex:1" id="env-estado" class="mini"></div>
+      <button class="act gh" style="${_PILL}" onclick="document.getElementById('nota-overlay').remove()">Cancelar</button>
+      <button class="act" style="${_PILL}" id="env-btn" onclick="rectificarListado('${mesKey}','${l}')">${ico('avion','s')} Rectificar y avisar al estudio</button></div></div>`;
+}
+async function rectificarListado(mesKey, l){
+  const motivo = (document.getElementById('rec-motivo')?.value || '').trim();
+  if (!motivo){ alert('Poné el motivo de la rectificación.'); return; }
+  const m = _cierreMails(); if (!m) return;
+  if (!m.cuerpo){ alert('Falta el mensaje.'); return; }
+  const btn = document.getElementById('env-btn'); btn.disabled = true;
+  const r = await sb.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'rectificacion', p_es_prueba: MODO_PRUEBA, p_nota: motivo, p_archivos: [], p_envio: m});
+  if (r.error){ btn.disabled = false; alert('No se pudo rectificar: ' + r.error.message); return; }
+  document.getElementById('nota-overlay')?.remove();
+  alert(`${_CL[l].t} volvió a pre-cierre. El aviso sale por mail a ${m.para.join(', ')} en unos 5 minutos.`);
   await cargarMesesCerrados(); cargarListadosEstudio();
 }
 const _n0 = v => Number(v) ? Number(v).toLocaleString('es-AR', {maximumFractionDigits:0}) : '—';
@@ -6983,6 +7119,30 @@ async function guardarNotaDoc(docId, desde, borrar){
   if (r && !txt) r.innerHTML = _notaDocHTML(dd);
 }
 
+// (JP 13-nov) Listados › Para el estudio: clic en un renglón abre el comprobante en una ventana encima, sin salir del listado.
+// El renglón puede traer el id del comprobante o no: si no lo trae se busca por tipo, letra, punto de venta y número.
+let _LE_ROWS = {};
+async function _leVer(cual, i){
+  const x = (_LE_ROWS[cual] || [])[i]; if (!x) return;
+  let id = x.documento_id ?? x.doc_id ?? (cual === 'perc' ? null : x.id) ?? null;
+  if (id != null && !DOCS.find(d => d.id === Number(id))){
+    const r = await sb.from('compras_documentos').select('*').eq('id', id).maybeSingle();
+    if (r.data && (x.numero == null || Number(r.data.numero) === Number(x.numero) || !('numero' in x))) DOCS.push(r.data); else id = null;
+  }
+  if (id == null){
+    const m = String(x.comprobante || '').match(/^([A-Za-z]+)\s+([A-Za-z])?\s*(\d+)-(\d+)/);
+    const tipo = x.tipo || (m && m[1]), letra = x.letra ?? (m && m[2]) ?? null, pv = x.punto_venta ?? (m && Number(m[3])), nro = x.numero ?? (m && Number(m[4]));
+    if (!tipo || nro == null){ alert('No pude ubicar este comprobante para abrirlo.'); return; }
+    let q = sb.from('compras_documentos').select('*').eq('es_prueba', MODO_PRUEBA).eq('tipo', tipo).eq('punto_venta', pv).eq('numero', nro);
+    if (letra) q = q.eq('letra', letra);
+    if (x.cuit_emisor) q = q.eq('cuit_emisor', x.cuit_emisor);
+    if (x.fecha_emision) q = q.eq('fecha_emision', x.fecha_emision);
+    const r = await q.limit(2);
+    if (r.error || !(r.data || []).length){ alert('No pude ubicar este comprobante para abrirlo.'); return; }
+    id = r.data[0].id; if (!DOCS.find(d => d.id === id)) DOCS.push(r.data[0]);
+  }
+  abrirResumenDoc(Number(id));
+}
 async function abrirResumenDoc(docId){
   const d = DOCS.find(x => x.id === docId);
   if (!d) return;
@@ -7199,6 +7359,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=137"></script>
+<script src="manual.js?v=140"></script>
 </body>
 </html>
