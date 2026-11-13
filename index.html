@@ -2246,7 +2246,7 @@ async function opEnviar(opId, canal){
   openModalP(`
     <h3 class="op-tit" style="margin:0 0 4px;display:flex;align-items:center;gap:8px">${ico(esMail ? 'mail' : 'chat')} Enviar por ${esMail ? 'mail' : 'WhatsApp'}</h3>
     <p class="mini" style="margin:0 0 6px">Orden ${esc(o.comprobante || '')} · ${esc(o.proveedor_nombre || pv.nombre || '')}${o.es_prueba ? ' · <b>de prueba</b>' : ''}</p>
-    ${esMail ? `${lbl('Para (si son varios, separalos con coma)')}<input id="ope-para" style="${_opEnvIn}" value="${esc(mail)}" placeholder="pagos@proveedor.com">
+    ${esMail ? `${lbl('Para (si son varios, separalos con punto y coma)')}<input id="ope-para" style="${_opEnvIn}" value="${esc(mail)}" placeholder="pagos@proveedor.com">
       ${lbl('Con copia a')}<input id="ope-cc" style="${_opEnvIn}" value="${_OP_MAIL_ADMIN}">
       ${lbl('Asunto')}<input id="ope-asunto" style="${_opEnvIn}" value="${esc('Claudia Adorno SRL · Orden de pago N° ' + nroOp + (hayCert ? ` · Certificado${certs.length > 1 ? 's' : ''} de retención${nroCert}` : ''))}">`
     : `${lbl('WhatsApp del proveedor (si lo dejás vacío, elegís el contacto en WhatsApp)')}<input id="ope-para" style="${_opEnvIn}" value="${esc(wa)}" placeholder="11 5555-5555">`}
@@ -2320,9 +2320,9 @@ async function opEnviarOk(){
   }
   const reg = await sb.from('compras_op_envios').insert({orden_pago_id: E.opId, canal: E.canal, destino, incluye, envio_id: envioId, enviado_por: session.email || null});
   if (reg.error) console.warn('compras_op_envios', reg.error.message);
-  if (g('ope-guardar') && g('ope-guardar').checked && E.pv.codigo && (esMail ? para[0] : tel)){
+  if (g('ope-guardar') && g('ope-guardar').checked && E.pv.codigo && (esMail ? para.length : tel)){
     const fila = {codigo: E.pv.codigo, actualizado_por: session.email || null, actualizado_at: new Date().toISOString()};
-    if (esMail) fila.email_op = para[0]; else fila.whatsapp = tel;
+    if (esMail) fila.email_op = para.join('; '); else fila.whatsapp = tel;
     const up = await sb.from('compras_proveedor_datos').upsert(fila, {onConflict: 'codigo'});
     if (up.error) console.warn('ficha proveedor', up.error.message);
   }
@@ -2568,6 +2568,13 @@ document.addEventListener('pointerdown', ev => {
 }, true);
 
 // ── Helpers de contacto: links directos a WhatsApp y mail ──
+// (JP 13-nov) Toda casilla de mail acepta varios, separados con punto y coma (también coma o espacio).
+// Se guardan prolijos como "a@x.com; b@y.com". _mailsDe devuelve la lista y los que no parecen un mail.
+function _mailsDe(t){
+  const lista = [...new Set(String(t || '').split(/[;,\s]+/).map(x => x.trim()).filter(Boolean))];
+  return {lista, malos: lista.filter(m => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m)), texto: lista.join('; ')};
+}
+const _mailto = t => 'mailto:' + _mailsDe(t).lista.map(encodeURIComponent).join(',');
 function _waLink(tel){
   let d = String(tel||'').replace(/\D/g,''); if (!d) return '';
   if (d.startsWith('0')) d = d.slice(1);
@@ -2579,14 +2586,14 @@ function _waLink(tel){
 function _contactoIcos(c){
   const out = [];
   if (c.whatsapp) out.push(`<a class="eico" style="background:#dcfce7;color:#166534;cursor:pointer" target="_blank" rel="noopener" href="${_waLink(c.whatsapp)}" title="WhatsApp ${_mEscP(c.whatsapp)}">${ico('chat','s')}</a>`);
-  if (c.email) out.push(`<a class="eico" style="background:#eff6ff;color:#1e40af;cursor:pointer" href="mailto:${_mEscP(c.email)}" title="Mail ${_mEscP(c.email)}">${ico('mail','s')}</a>`);
+  if (c.email) out.push(`<a class="eico" style="background:#eff6ff;color:#1e40af;cursor:pointer" href="${_mailto(c.email)}" title="Mail ${_mEscP(c.email)}">${ico('mail','s')}</a>`);
   return out.join('') || '<span class="mini">—</span>';
 }
 function _contactoLinks(c){
   const out = [];
   if (c.whatsapp) out.push(`<a class="btn" style="padding:3px 8px;font-size:12px;background:#dcfce7;border-color:#86efac;" target="_blank" href="${_waLink(c.whatsapp)}" title="Abrir chat de WhatsApp">💬 WhatsApp</a>`);
   if (c.telefono) out.push(`<a class="btn" style="padding:3px 8px;font-size:12px;" href="tel:${_mEscP(String(c.telefono).replace(/\s/g,''))}">📞 ${_mEscP(c.telefono)}</a>`);
-  if (c.email) out.push(`<a class="btn" style="padding:3px 8px;font-size:12px;background:#eff6ff;border-color:#93c5fd;" href="mailto:${_mEscP(c.email)}" title="Escribir mail">✉ ${_mEscP(c.email)}</a>`);
+  if (c.email) out.push(`<a class="btn" style="padding:3px 8px;font-size:12px;background:#eff6ff;border-color:#93c5fd;" href="${_mailto(c.email)}" title="Escribir mail">✉ ${_mEscP(c.email)}</a>`);
   return out.join(' ');
 }
 let _fContactos = [], _fDescuentos = [], _fRet = [];
@@ -2643,7 +2650,7 @@ function _renderContactos(){
       <label>Cargo<input value="${_mEscP(x.cargo||'')}" placeholder="ventas, cobranzas…" onchange="_fContactos[${i}].cargo=this.value"></label>
       <label>Teléfono<input value="${_mEscP(x.telefono||'')}" onchange="_fContactos[${i}].telefono=this.value"></label>
       <label>WhatsApp<input value="${_mEscP(x.whatsapp||'')}" placeholder="11 5555 5555" onchange="_fContactos[${i}].whatsapp=this.value;_renderContactos()"></label>
-      <label>Mail<input value="${_mEscP(x.email||'')}" onchange="_fContactos[${i}].email=this.value;_renderContactos()"></label>
+      <label>Mail<input title="Podés cargar más de un mail separándolos con punto y coma (;)" placeholder="uno o varios, separados con ;" value="${_mEscP(x.email||'')}" onchange="_fContactos[${i}].email=this.value;_renderContactos()"></label>
       <div style="display:flex;gap:4px;padding-bottom:1px;">${_contactoIcos(x)}</div>
       <button class="btn ico" type="button" title="Quitar este contacto" onclick="_fContactos.splice(${i},1);_renderContactos()">${ico('basura','s')}</button>
     </div>`).join('') : '<div class="hint" style="margin-bottom:8px;">Todavía no hay personas cargadas.</div>')
@@ -2796,8 +2803,8 @@ async function fichaProveedor(i){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <label>Teléfono<input id="pf-tel" value="${_mEscP(p.telefono||'')}" placeholder="${_mEscP(p.df_telefono||'')}"></label>
       <label>WhatsApp<input id="pf-wa" value="${_mEscP(p.whatsapp||'')}" placeholder="11 5555 5555"></label>
-      <label>Mail general<input id="pf-email" value="${_mEscP(p.email||'')}" placeholder="${_mEscP(p.df_email||'')}"></label>
-      <label>Mail para la orden de pago<input id="pf-mail" value="${_mEscP(p.email_op||'')}" placeholder="pagos@proveedor.com"></label>
+      <label>Mail general<input id="pf-email" title="Podés cargar más de un mail separándolos con punto y coma (;)" value="${_mEscP(p.email||'')}" placeholder="${_mEscP(p.df_email||'uno o varios, separados con ;')}"></label>
+      <label>Mail para la orden de pago<input id="pf-mail" title="Podés cargar más de un mail separándolos con punto y coma (;)" value="${_mEscP(p.email_op||'')}" placeholder="pagos@proveedor.com; otro@proveedor.com"></label>
       <label style="grid-column:1/-1;">Web / Instagram<input id="pf-web" value="${_mEscP(p.web||'')}" placeholder="https://…"></label>
     </div>`)}
 
@@ -2897,6 +2904,12 @@ async function guardarFichaProveedor(codigo, cuit){
     pedido_minimo: { importe: parseFloat(g('pf-min-imp')) || null, unidades: parseFloat(g('pf-min-uni')) || null,
                      modo: g('pf-min-modo') || 'cualquiera', nota: g('pf-min-nota') } };
   const _nr = document.getElementById('pf-noret'); if (_nr) datos.no_retener = _nr.checked;
+  // (JP 13-nov) varios mails por casilla, separados con punto y coma: se revisa cada uno y se guardan prolijos
+  for (const [donde, o, k] of [['Mail para la orden de pago', datos, 'email_op'], ['Mail general', datos, 'email']].concat(datos.contactos.map(c => ['Mail del contacto ' + (c.nombre || ''), c, 'email']))){
+    const M = _mailsDe(o[k]);
+    if (M.malos.length){ alert(`${donde.trim()}: "${M.malos[0]}" no parece un mail válido.\n\nSi son varios, separalos con punto y coma (;).`); return; }
+    o[k] = M.texto;
+  }
   const volMal = datos.descuentos.find(d => ['monto_minimo','cantidad_minima'].includes(d.tipo) && !(d.umbral > 0 && d.porcentaje > 0));
   if (volMal) return alert('El descuento "' + (volMal.descripcion || volMal.tipo) + '" es por volumen: necesita el "Desde" y el %.');
   // 5) CBU: 22 dígitos con sus dos dígitos verificadores; uno mal cargado se descubre cuando el banco rechaza la transferencia
@@ -7627,6 +7640,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=145"></script>
+<script src="manual.js?v=146"></script>
 </body>
 </html>

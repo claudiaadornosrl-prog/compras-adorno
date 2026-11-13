@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v236-autorizar-operaciones';
+const CACHE_VERSION = 'compras-v237-varios-mails';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './firma-jp.jpg', './pedidos.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
