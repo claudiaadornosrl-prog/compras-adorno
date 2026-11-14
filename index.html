@@ -897,6 +897,7 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js" integrity="sha384-UagCvVPT5XXA0Hx+nJYUAGBFseHT9zBgpJMSebsAxl9lciTwbT+39j5VfRjdP5Tp" crossorigin="anonymous"></script>
 <script src="/hub/seguridad.js?v=1"></script>
+<script src="/hub/caras.js?v=4" defer></script>
 <script>
 const SUPABASE_URL  = 'https://jfwtiagteuwmyvblgwms.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_udSPma98Sw9eskeeLCgdCw_S2vIX0Fk';
@@ -971,7 +972,50 @@ async function _hubCargar(){
 }
 const _hubEstado = (clave, metodo) => { const f = _HUB_FUNC[clave + '.' + metodo] || _HUB_FUNC[clave]; return {f, e: (f && _HUB[f]) || 'a'}; };
 const _hubOculta = f => ({data: null, error: {message: `tu perfil no tiene habilitada la función "${_HUB_NOMBRE[f] || f}". Los permisos se manejan desde el Hub.`, code: 'HUB_OCULTA'}, count: null, status: 0, statusText: ''});
-let _AUT_HASTA = 0, _AUT_PEND = null, _AUT_ADMIN = false;
+let _AUT_HASTA = 0, _AUT_PEND = null, _AUT_ADMIN = false, _AUT_QUIEN = '';
+// (14-nov, JP) "📷 Registra quién": en el Hub cada función puede estar marcada para anotar quién la hizo. Si lo está,
+// antes de grabar (y después de la autorización) /hub/caras.js pregunta quién es (cara, o su nombre en la lista; con
+// usuario personal se anota solo) y lo deja en hub_registros. Si se cancela o falla, la operación NO se hace.
+// Las marcas se leen al abrir y se refrescan cada minuto. Una operación de varias escrituras pregunta una sola vez:
+// la persona queda recordada _AUT_SEGUNDOS y las escrituras que siguen se anotan a su nombre sin volver a preguntar.
+let _REG = {}, _REG_T = 0, _REG_EMP = null, _REG_HASTA = 0, _REG_PEND = null;
+async function _regCargar(){
+  _REG_T = Date.now();
+  const ids = [...new Set(Object.values(_HUB_FUNC))], r = await Promise.all(ids.map(id => _AUT_RPC0('hub_registra_quien', {p_funcion: id})));
+  const M = {..._REG}; ids.forEach((id, i) => { if (!r[i].error && r[i].data) M[id] = r[i].data.registra === true; });
+  _REG = M;
+}
+const _regMarcada = (clave, metodo) => {
+  if (Date.now() - _REG_T > 60000) _regCargar().catch(() => {});
+  const f = _HUB_FUNC[clave + '.' + metodo] || _HUB_FUNC[clave]; return !!(f && _REG[f]);
+};
+function _regDetalle(clave, metodo, datos, pasos){
+  const d = {operacion: _AUT_NOMBRES[clave] || clave, donde: clave + (metodo ? '.' + metodo : '')};
+  const corto = v => typeof v === 'number' || typeof v === 'boolean' || (typeof v === 'string' && v.length <= 80);
+  let n = 0;
+  if (Array.isArray(datos)) d.filas = datos.length;
+  else if (datos && typeof datos === 'object') for (const k in datos){
+    if (n >= 12) break;
+    if (datos[k] != null && corto(datos[k]) && !/cbu|alias|clave|pass|token/i.test(k)){ d[k.replace(/^p_/, '')] = datos[k]; n++; }
+  }
+  for (const [m, a] of pasos) if ((m === 'eq' || m === 'in') && n < 16){ d[a[0]] = Array.isArray(a[1]) ? a[1].slice(0, 10) : a[1]; n++; }
+  if (_AUT_QUIEN && Date.now() < _AUT_HASTA) d.autorizo = _AUT_QUIEN;
+  return d;
+}
+async function _regQuien(f, detalle){
+  if (_REG_PEND) await _REG_PEND.catch(() => {});
+  if (_REG_EMP !== null && Date.now() < _REG_HASTA){
+    const r = await _AUT_RPC0('hub_registrar', {p_funcion: f, p_local: 'oficina', p_empleado_id: _REG_EMP || null, p_detalle: detalle});
+    if (r.error) return {ok: false, motivo: 'error', error: r.error.message};
+    _REG_HASTA = Date.now() + _AUT_SEGUNDOS * 1000; return {ok: true};
+  }
+  if (!window.ADORNO_CARAS || !ADORNO_CARAS.registrar) return {ok: false, motivo: 'error', error: 'no cargó el registro del Hub. Recargá la página.'};
+  _REG_PEND = ADORNO_CARAS.registrar({cli: {rpc: _AUT_RPC0}, funcion: f, local: 'oficina', detalle});
+  let r; try { r = await _REG_PEND; } finally { _REG_PEND = null; }
+  if (r.ok && !r.omitido){ _REG_EMP = r.empleado_id || 0; _REG_HASTA = Date.now() + _AUT_SEGUNDOS * 1000; }
+  return r;
+}
+const _regError = m => ({data: null, error: {message: m, code: 'REG_QUIEN'}, count: null, status: 0, statusText: ''});
 const _AUT_CANCELADA = {data: null, error: {message: 'falta la autorización (se canceló el pedido de usuario y clave).', code: 'AUT_CANCELADA'}, count: null, status: 0, statusText: ''};
 function _autOperacion(queEs){
   if (_AUT_ADMIN || Date.now() < _AUT_HASTA) return Promise.resolve(true);
@@ -1004,7 +1048,7 @@ function _autOperacion(queEs){
       if (pv.error || !pv.data || pv.data.ok !== true){ bt.disabled = false; ov.querySelector('#auo-pass').value = '';
         msg((pv.data && pv.data.motivo) || 'Ese usuario no puede autorizar operaciones de Compras.'); return; }
       try { localStorage.setItem('compras_operar_autoriza', mail); } catch (e) {}
-      _AUT_HASTA = Date.now() + _AUT_SEGUNDOS * 1000;
+      _AUT_HASTA = Date.now() + _AUT_SEGUNDOS * 1000; _AUT_QUIEN = pv.data.nombre || mail;
       _AUT_FROM0('compras_eventos').insert({usuario: pv.data.email || mail, accion: 'autorizacion', detalle: {operacion: queEs, autorizo: pv.data.nombre || mail}}).then(() => {}, () => {});
       fin(true);
     };
@@ -1015,12 +1059,17 @@ function _autOperacion(queEs){
   return _AUT_PEND;
 }
 // Devuelve algo que se usa igual que la consulta de Supabase (.eq().select()… y await), pero que antes de mandarla pide la autorización.
-function _autPuerta(armar, clave, metodo){
+function _autPuerta(armar, clave, metodo, datos){
   const pasos = [];
-  const correr = () => { const E = _hubEstado(clave, metodo);
-   return (E.e === 'o' ? Promise.resolve('o') : E.e === 'h' ? Promise.resolve(true) : _autOperacion(_AUT_NOMBRES[clave] || 'Operación de Compras')).then(ok => {
+  const correr = () => { const E = _hubEstado(clave, metodo); if (_AUT_ADMIN) E.e = 'h';
+   return (E.e === 'o' ? Promise.resolve('o') : E.e === 'h' ? Promise.resolve(true) : _autOperacion(_AUT_NOMBRES[clave] || 'Operación de Compras')).then(async ok => {
     if (ok === 'o') return _hubOculta(E.f);
     if (!ok) return _AUT_CANCELADA;
+    if (_regMarcada(clave, metodo)){
+      const g = await _regQuien(E.f, _regDetalle(clave, metodo, datos, pasos));
+      if (!g.ok) return _regError(g.motivo === 'error' ? 'no se pudo anotar quién lo hace: ' + g.error : 'no quedó anotado quién lo hace (se canceló).');
+      if (E.e === 'a') _AUT_HASTA = Math.max(_AUT_HASTA, Date.now() + _AUT_SEGUNDOS * 1000);
+    }
     let q = armar(); for (const [m, a] of pasos) q = q[m](...a);
     return Promise.resolve(q).then(r => { if (E.e === 'a') _AUT_HASTA = Math.max(_AUT_HASTA, Date.now() + _AUT_SEGUNDOS * 1000); return r; });
    }); };
@@ -1034,13 +1083,13 @@ function _autPuerta(armar, clave, metodo){
   return p;
 }
 const _AUT_RPC0 = sb.rpc.bind(sb), _AUT_FROM0 = sb.from.bind(sb);
-sb.rpc = (fn, args, opts) => (_AUT_ADMIN || _AUT_CONSULTAS.has(fn)) ? _AUT_RPC0(fn, args, opts) : _autPuerta(() => _AUT_RPC0(fn, args, opts), fn);
+sb.rpc = (fn, args, opts) => (_AUT_CONSULTAS.has(fn) || (_AUT_ADMIN && !_regMarcada(fn))) ? _AUT_RPC0(fn, args, opts) : _autPuerta(() => _AUT_RPC0(fn, args, opts), fn, undefined, args);
 sb.from = tabla => {
   const q = _AUT_FROM0(tabla);
   if (_AUT_TABLAS_LIBRES.has(tabla)) return q;
   for (const m of ['insert', 'update', 'delete', 'upsert']){
     const f = q[m].bind(q);
-    q[m] = (...a) => _AUT_ADMIN ? f(...a) : _autPuerta(() => f(...a), tabla, m);
+    q[m] = (...a) => (_AUT_ADMIN && !_regMarcada(tabla, m)) ? f(...a) : _autPuerta(() => f(...a), tabla, m, a[0]);
   }
   return q;
 };
@@ -1177,6 +1226,7 @@ async function cargarMesesCerrados(){
   MESES_CERRADOS = new Map((m.data || []).map(x => [String(x.periodo).slice(0,7), x]));
   SOY_ADMIN = a.data === true; _AUT_ADMIN = SOY_ADMIN;
   if (!SOY_ADMIN) await _hubCargar().catch(() => {});
+  await _regCargar().catch(() => {});
   PUEDE_CERRAR = pc.error ? SOY_ADMIN : pc.data === true;
 }
 const _mesDoc = d => String(d.fecha_ingreso || d.fecha_emision || '').slice(0,7);
@@ -7674,6 +7724,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=147"></script>
+<script src="manual.js?v=148"></script>
 </body>
 </html>
