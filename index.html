@@ -1085,7 +1085,7 @@ function _autOperacionClave(queEs){
 // Devuelve algo que se usa igual que la consulta de Supabase (.eq().select()… y await), pero que antes de mandarla pide la autorización.
 function _autPuerta(armar, clave, metodo, datos){
   const pasos = [];
-  const correr = () => { const E = _hubEstado(clave, metodo); if (_AUT_ADMIN) E.e = 'h';
+  const correr = () => { const E = _hubEstado(clave, metodo); if (_AUT_ADMIN && E.e !== 'o') E.e = 'h';
    return (E.e === 'o' ? Promise.resolve('o') : E.e === 'h' ? Promise.resolve(true) : _autOperacion(_AUT_NOMBRES[clave] || 'Operación de Compras', E.f, _regDetalle(clave, metodo, datos, pasos))).then(async ok => {
     if (ok === 'o') return _hubOculta(E.f);
     if (ok === 'sin') return _regError('no cargó la ventana de autorización del Hub. Recargá la página.');
@@ -1109,13 +1109,13 @@ function _autPuerta(armar, clave, metodo, datos){
   return p;
 }
 const _AUT_RPC0 = sb.rpc.bind(sb), _AUT_FROM0 = sb.from.bind(sb);
-sb.rpc = (fn, args, opts) => (_AUT_CONSULTAS.has(fn) || (_AUT_ADMIN && !_regMarcada(fn))) ? _AUT_RPC0(fn, args, opts) : _autPuerta(() => _AUT_RPC0(fn, args, opts), fn, undefined, args);
+sb.rpc = (fn, args, opts) => (_AUT_CONSULTAS.has(fn) || (_AUT_ADMIN && !_regMarcada(fn) && _hubEstado(fn).e !== 'o')) ? _AUT_RPC0(fn, args, opts) : _autPuerta(() => _AUT_RPC0(fn, args, opts), fn, undefined, args);
 sb.from = tabla => {
   const q = _AUT_FROM0(tabla);
   if (_AUT_TABLAS_LIBRES.has(tabla)) return q;
   for (const m of ['insert', 'update', 'delete', 'upsert']){
     const f = q[m].bind(q);
-    q[m] = (...a) => (_AUT_ADMIN && !_regMarcada(tabla, m)) ? f(...a) : _autPuerta(() => f(...a), tabla, m, a[0]);
+    q[m] = (...a) => (_AUT_ADMIN && !_regMarcada(tabla, m) && _hubEstado(tabla, m).e !== 'o') ? f(...a) : _autPuerta(() => f(...a), tabla, m, a[0]);
   }
   return q;
 };
@@ -1251,8 +1251,10 @@ async function cargarMesesCerrados(){
   const pc = await sb.rpc('compras_puede_cerrar');
   MESES_CERRADOS = new Map((m.data || []).map(x => [String(x.periodo).slice(0,7), x]));
   SOY_ADMIN = a.data === true; _AUT_ADMIN = SOY_ADMIN;
-  if (!SOY_ADMIN) await _hubCargar().catch(() => {});
+  await _hubCargar().catch(() => {});   // también para el administrador: uno "con vista" tiene en 'o' lo de sus apartados ocultos
   await _regCargar().catch(() => {});
+  await _apCargar().catch(() => {});
+  if (_AP_OCULTOS.size){ renderTabs(); render(); }
   PUEDE_CERRAR = pc.error ? SOY_ADMIN : pc.data === true;
 }
 const _mesDoc = d => String(d.fecha_ingreso || d.fecha_emision || '').slice(0,7);
@@ -1335,13 +1337,25 @@ const TABS = [['bandeja','Bandeja','inbox'],['facturas','Comprobantes','factura'
               ['pedidos','Pedidos','pedido'],['mercaderia','Mercadería','camion'],
               ['conceptos','Conceptos','etiquetas'],['proveedores','Proveedores','edificio'],
               ['equivalencias','Equivalencias','link'],['listados','Listados','barras'],['config','Retenciones','porcentaje']];
+// (15-nov, JP) En el Hub → Permisos → Perfiles cada APARTADO de un módulo tiene su interruptor: si el perfil de la sesión
+// lo tiene apagado, acá no se muestra la solapa. Vale también para un administrador "con vista" (Clau): puede hacer y
+// autorizar todo, pero ve solo lo que JP le deje. JP ve todo. hub_apartados_ocultos() → [{modulo, apartado}].
+const _TAB_AP = {bandeja: 'Facturas', facturas: 'Facturas', ordenes: 'Pagos', pedidos: 'Pedidos y mercadería', mercaderia: 'Pedidos y mercadería',
+  conceptos: 'Pedidos y mercadería', equivalencias: 'Pedidos y mercadería', proveedores: 'Proveedores', config: 'Proveedores', listados: 'Estudio contable'};
+let _AP_OCULTOS = new Set();
+const _tabVisible = k => !_AP_OCULTOS.has(_TAB_AP[k]);
+async function _apCargar(){
+  const r = await _AUT_RPC0('hub_apartados_ocultos');
+  if (r.error || !Array.isArray(r.data)) return;
+  _AP_OCULTOS = new Set(r.data.filter(x => x.modulo === 'compras').map(x => x.apartado));
+}
 function renderTabs(){
   // (8-oct, JP) la navegación vive en la cabecera: solo íconos, el nombre se despliega al pasar el mouse
   const chip = document.getElementById('chip-prueba');
   if (chip) chip.innerHTML = MODO_PRUEBA ? `<span class="hchip" title="Ambiente de prueba: se muestran solo los comprobantes y remitos de test. El histórico real está guardado pero oculto.">${ico('frasco','s')} prueba</span>` : '';
   // (11-nov, banner común) los apartados se re-dibujan con cada cambio; los botones de la derecha se dibujan una vez
   //   (banner.js les agrega el ☰ del celular y el Manual)
-  document.getElementById('hnav').innerHTML = TABS.map(([k,t,i]) =>
+  document.getElementById('hnav').innerHTML = TABS.filter(([k]) => _tabVisible(k)).map(([k,t,i]) =>
     `<button class="${k===tabActual?'on':''}" onclick="irA('${k}')" title="${t}" aria-label="${t}">${ico(i)}<span class="lb">${t}</span></button>`).join('');
   const hder = document.getElementById('hder');
   if (hder && !hder.dataset.listo) {
@@ -1502,6 +1516,11 @@ function barraFiltros(){
 // ── Render principal ────────────────────────────────────────────────────
 function render(){
   const c = document.getElementById('cont');
+  if (!_tabVisible(tabActual)){   // el apartado está oculto para este perfil: va al primero que sí ve
+    const v = TABS.find(t => _tabVisible(t[0]));
+    if (!v){ c.innerHTML = '<div class="vacio">Tu perfil no tiene ningún apartado de Compras a la vista. Los permisos se manejan desde el Hub.</div>'; return; }
+    tabActual = v[0]; renderTabs();
+  }
   if (tabActual === 'bandeja')  c.innerHTML = vistaBandeja();
   if (tabActual === 'facturas') c.innerHTML = vistaFacturas();
   if (tabActual === 'listados') c.innerHTML = vistaListados();
@@ -7750,6 +7769,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=149"></script>
+<script src="manual.js?v=150"></script>
 </body>
 </html>
