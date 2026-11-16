@@ -897,8 +897,8 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js" integrity="sha384-UagCvVPT5XXA0Hx+nJYUAGBFseHT9zBgpJMSebsAxl9lciTwbT+39j5VfRjdP5Tp" crossorigin="anonymous"></script>
 <script src="/hub/seguridad.js?v=1"></script>
-<script src="/hub/caras.js?v=7" defer></script>
-<script src="/hub/autorizar.js?v=3" defer></script>
+<script src="/hub/caras.js?v=8" defer></script>
+<script src="/hub/autorizar.js?v=5" defer></script>
 <script>
 const SUPABASE_URL  = 'https://jfwtiagteuwmyvblgwms.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_udSPma98Sw9eskeeLCgdCw_S2vIX0Fk';
@@ -1030,9 +1030,11 @@ function _autOperacion(queEs, f, detalle){
   if (!window.ADORNO_AUTORIZAR || !ADORNO_AUTORIZAR.pedir) return Promise.resolve('sin');
   _AUT_PEND = (async () => {
     try {
-      const a = await ADORNO_AUTORIZAR.pedir({funcion: f, local: 'oficina', que: queEs.charAt(0).toLowerCase() + queEs.slice(1), resumen: queEs, detalle});
+      // la sesión de ESTE módulo: en la compu puede haber otra cuenta abierta en el Hub y el pedido saldría con esa
+      const S = ((await sb.auth.getSession()).data || {}).session, sesion = S ? {email: (S.user && S.user.email) || '', token: S.access_token} : undefined;
+      const a = await ADORNO_AUTORIZAR.pedir({funcion: f, local: 'oficina', que: queEs.charAt(0).toLowerCase() + queEs.slice(1), resumen: queEs, detalle, sesion});
       if (!a) return false;
-      await ADORNO_AUTORIZAR.usar(a.id, {funcion: f, local: 'oficina', usado_en: queEs});
+      await ADORNO_AUTORIZAR.usar(a.id, {funcion: f, local: 'oficina', usado_en: queEs, sesion});
       _AUT_HASTA = Date.now() + _AUT_SEGUNDOS * 1000; _AUT_QUIEN = a.nombre || '';
       _AUT_FROM0('compras_eventos').insert({usuario: a.nombre || '', accion: 'autorizacion', detalle: {operacion: queEs, autorizo: a.nombre, modo: a.modo, funcion: f, aut_id: a.id}}).then(() => {}, () => {});
       return true;
