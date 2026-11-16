@@ -5060,6 +5060,7 @@ function _pintarEstudio(){
 
     </div>
     <div class="le-tabs">${[['iva','factura','IVA Compras',R.length], ['perc','inbox','Percepciones',(LIST_PDET||[]).length], ['ret','porcentaje','Retenciones',(LIST_RET||[]).length],
+        ...(mesEntero ? [['vyb','edificio','Ventas y bancos',Object.keys(_CL).filter(l => _CL[l].tab === 'vyb').length]] : []),
         ...(avisos.length ? [['mirar','alerta','Para mirar',avisos.length]] : []), ...(LIST_FUERA && LIST_FUERA.length ? [['fuera','hoja','Fuera del Libro IVA',LIST_FUERA.length]] : [])]
         .map(([k,i,t,n]) => `<button type="button" data-k="${k}" class="${k==='mirar' ? 'av' : ''}" onclick="_leTab('${k}')">${ico(i,'s')} ${t} <i>${n}</i></button>`).join('')}
       <input type="search" id="le-q" class="op-q le-q" placeholder="Buscar en este listado: proveedor, CUIT, comprobante o importe…" oninput="_leBuscar(this.value)" title="Filtra los renglones del listado que estás viendo. Los totales de abajo siguen siendo los del período completo.">
@@ -5089,6 +5090,12 @@ function _pintarEstudio(){
       </tr>`).join('')}</tbody></table>
     </div>` : ''}
 
+    ${mesEntero ? `<div class="card le-pan" data-k="vyb">
+      <h3 style="font-size:15px;margin-bottom:4px;display:flex;align-items:center;gap:8px">${ico('edificio','s')} Ventas y bancos · ${esc(mesTxt)}
+        ${ayuda('Lo que se le manda al estudio todos los meses y no sale de Compras. Tiene el mismo circuito que los demás listados: pre-cierre, cierre con mail y rectificación, con su historial. Los que el sistema todavía no genera se suben como archivo.')}</h3>
+      <p class="mini" style="margin:0 0 12px">Cada listado se cierra por separado. Los que dicen "se sube" son archivos que hoy salen del Dragonfish, del banco o de Mercado Pago: se eligen desde la compu y quedan guardados en el historial.</p>
+      ${Object.keys(_CL).filter(l => _CL[l].tab === 'vyb').map(cierreLst).join('')}
+    </div>` : ''}
     <div class="card le-pan" data-k="iva">
       ${cierreLst('iva')}
       <h3 style="font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px">${ico('factura','s')} IVA Compras · ${esc(mesTxt)}
@@ -5286,15 +5293,41 @@ async function _bajarRetPerc(){
 const _CL = {
   iva:            {t: 'IVA Compras', tab: 'iva', n: () => (LIST_IVA || []).length, bloquea: true, armar: async per => {
                     _bajarFormatoEstudio(); _bajarIvaCompras(); await _pdfIvaCompras(); await _bajarTotAlicuotas();
-                    _libBajarCompras('cb'); _libBajarCompras('al');
-                    const v = await sb.from('libros_iva_archivos').select('archivo').eq('periodo', per);
-                    for (const a of (v.data || []).map(x => x.archivo).filter(a => /^VENTAS_/.test(a))) await _libBajarVentas(per, a); }},
+                    _libBajarCompras('cb'); _libBajarCompras('al'); }},
   percepciones:   {t: 'Retenciones y percepciones de compras', tab: 'perc', n: () => (LIST_PDET || []).length + (LIST_RET || []).length, armar: async () => {
                     await _bajarRetPerc();
                     if (LIST_PDET && LIST_PDET.length){ _bajarPercepciones(); await _pdfPercepciones(); } }},
   retenciones_q1: {t: 'Retenciones · 1ª quincena', tab: 'ret', n: () => _retQ(1).length, armar: () => _retBajarQ(1)},
   retenciones_q2: {t: 'Retenciones · 2ª quincena', tab: 'ret', n: () => _retQ(2).length, armar: () => _retBajarQ(2)},
+  // (16-nov, JP) Ventas, banco y Mercado Libre: lo que va al estudio y no sale de Compras. Mismo circuito.
+  // sube = el archivo no lo genera el sistema: se elige desde la compu en el pre-cierre (qué = qué hay que subir).
+  ventas_libro:     {t: 'Libro IVA Digital de ventas', tab: 'vyb', n: () => _VENTAS_ARCH.length, sinAviso: 'Todavía no está publicado el Libro IVA Digital de ventas de este mes. Cuando se publique, aparece acá para cerrarlo.',
+                     armar: async per => { for (const a of _VENTAS_ARCH) await _libBajarVentas(per, a); }},
+  ventas_subdiario: {t: 'Subdiario de ventas y totales', tab: 'vyb', n: () => 1, sube: true, que: 'el subdiario de ventas de todas las sucursales juntas (Excel y PDF), el de cada sucursal (PDF) y los totales de alícuotas de IVA ventas'},
+  ventas_valores:   {t: 'Ventas por valores por sucursal', tab: 'vyb', n: () => 1, sube: true, que: 'el listado de ventas por valores de cada sucursal (un PDF por sucursal)'},
+  recibos_clientes: {t: 'Recibos de retenciones de clientes', tab: 'vyb', n: () => 1, sube: true, que: 'los comprobantes de recibo con retenciones de clientes (Excel y PDF)'},
+  banco_galicia:    {t: 'Última hoja del Banco Galicia', tab: 'vyb', n: () => 1, sube: true, que: 'la última hoja del resumen mensual del Galicia, con los totales de impuestos'},
+  ml_retenciones:   {t: 'Certificados de retenciones de Mercado Libre', tab: 'vyb', n: () => 1, sube: true, que: 'los certificados de retenciones de cada cuenta de Mercado Pago (un zip por cuenta)',
+                     pideNota: 'Poné el total retenido de cada cuenta (va en el mail al estudio). Por ejemplo:\nCuenta ventas online: $ …\nCuenta locales: $ …'},
 };
+let _VENTAS_ARCH = [], _CIERRE_ULT = {};
+// Archivos subidos: en el cierre se vuelven a tomar los del último pre-cierre (con su nombre original).
+async function _cierreArmarSubidos(l){
+  const A = (_CIERRE_ULT[l] && _CIERRE_ULT[l].etapa === 'pre_cierre' && _CIERRE_ULT[l].archivos) || [];
+  for (const a of A){
+    const d = await sb.storage.from('compras-estudio').download(a.path);
+    if (d.error) throw new Error(`no pude leer ${a.nombre}: ${d.error.message}`);
+    _CAPTURA.push({nombre: a.orig || a.nombre, blob: d.data, orig: a.orig || a.nombre});
+  }
+}
+function _cierreElegirArchivos(){
+  return new Promise(res => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.style.display = 'none';
+    inp.onchange = () => { const F = [...inp.files]; inp.remove(); res(F); };
+    inp.addEventListener('cancel', () => { inp.remove(); res([]); });
+    document.body.appendChild(inp); inp.click();
+  });
+}
 
 function _estudioMailsHTML(){
   return `<div class="mini">Mails del estudio: ${esc(_ESTUDIO_MAILS.para.join(', '))} · copia a ${esc(_ESTUDIO_MAILS.cc.join(', '))}
@@ -5318,19 +5351,31 @@ async function _pintarCierre(mesKey){
     : e.estado === 'error' ? `<span class="chip" style="background:#fee2e2;color:#991b1b" title="${esc(e.error_msg || '')}">el mail no salió (${e.intentos} intentos)</span>`
     : `<span class="chip" style="background:#fef3c7;color:#92400e" title="Lo manda la PC de JP en los próximos 5 minutos">mail por salir</span>`;
   const resumen = [];
+  const lv = await sb.from('libros_iva_archivos').select('archivo').eq('periodo', mesKey);
+  if (document.getElementById('cierre-etapas') !== el || el.dataset.mes !== mesKey) return;
+  _VENTAS_ARCH = (lv.data || []).map(x => x.archivo).filter(a => /^VENTAS_/.test(a)); _CIERRE_ULT = {};
   for (const l of Object.keys(_CL)){
     const C = _CL[l], L = (r.data || []).filter(e => e.listado === l), ult = L[L.length - 1], leg = l === 'iva' ? legado : null;
+    _CIERRE_ULT[l] = ult || null;
     const est = ult ? ult.etapa : (leg ? 'cierre' : 'abierto'), vuelta = ult ? ult.vuelta : 1, n = C.n(), ver = vuelta > 1 ? ' · versión ' + vuelta : '';
     const col = est === 'cierre' ? '#166534' : est === 'rectificacion' ? '#b91c1c' : est === 'pre_cierre' ? '#d97706' : '#94a3b8';
-    const rot = est === 'cierre' ? 'cerrado' + ver : est === 'pre_cierre' ? 'en pre-cierre' + ver : est === 'rectificacion' ? 'en corrección' + ver : (n ? 'abierto' : 'sin movimientos');
+    const rot = est === 'cierre' ? 'cerrado' + ver : est === 'pre_cierre' ? 'en pre-cierre' + ver : est === 'rectificacion' ? 'en corrección' + ver : (n ? 'abierto' : C.sinAviso ? 'sin publicar' : 'sin movimientos');
     resumen.push(`<button type="button" class="chip" style="border:0;cursor:pointer;background:${col}1a;color:${col};font:inherit;font-size:12px;font-weight:700;padding:4px 11px" onclick="_leTab('${C.tab}')" title="Ir al listado">${esc(C.t)}: ${rot}</button>`);
     const box = document.querySelector(`#list-estudio .cierre-lst[data-l="${l}"]`); if (!box) continue;
-    const T = est === 'abierto' ? (n ? `Abierto. Cuando esté listo, dá el <b>Pre-cierre</b>: se guarda el listado para controlarlo, todavía no se manda nada.` : `Sin movimientos en ${esc(mesTxt)}. Se puede cerrar igual: al estudio le llega el aviso de que no hay.`)
+    const T = C.sube && est === 'abierto' ? `Abierto. Se sube: ${esc(C.que)}. Al subirlos se da el <b>Pre-cierre</b> (quedan guardados para controlarlos, todavía no se manda nada).`
+      : C.sube && est === 'pre_cierre' ? `En pre-cierre${ver}: ${(ult.archivos || []).length} ${(ult.archivos || []).length === 1 ? 'archivo subido' : 'archivos subidos'} el ${_fechaTs(ult.cuando)} por ${quien(ult.por)}. Controlalos (están en el historial) y, si están bien, dá el <b>Cierre</b> para mandarlos al estudio. Si hay que cambiar alguno, volvé a subirlos.`
+      : C.sube && est === 'rectificacion' ? `En corrección${ver}: ya se le avisó al estudio. Volvé a subir los archivos corregidos (${esc(C.que)}).`
+      : !n && C.sinAviso && est !== 'cierre' ? C.sinAviso
+      : est === 'abierto' ? (n ? `Abierto. Cuando esté listo, dá el <b>Pre-cierre</b>: se guarda el listado para controlarlo, todavía no se manda nada.` : `Sin movimientos en ${esc(mesTxt)}. Se puede cerrar igual: al estudio le llega el aviso de que no hay.`)
       : est === 'pre_cierre' ? `En pre-cierre${ver}: emitido el ${_fechaTs(ult.cuando)} por ${quien(ult.por)}. Controlalo y, si está bien, dá el <b>Cierre</b> para mandarlo al estudio. Si corregiste algo, repetí el pre-cierre.`
       : est === 'rectificacion' ? `En corrección${ver}: ya se le avisó al estudio. Corregí y después dá de nuevo el <b>Pre-cierre</b>.`
       : ult ? `Cerrado y enviado al estudio${ver} el ${_fechaTs(ult.cuando)} por ${quien(ult.por)}.${C.bloquea ? ' Los comprobantes del mes ya no se modifican.' : ''} Si aparece una diferencia, hay que <b>rectificar</b>.`
       : `Cerrado el ${_fechaTs(leg.cerrado_at)} por ${quien(leg.cerrado_por)}${leg.nota ? ' · ' + esc(leg.nota) : ''} (antes de que existieran las etapas). Si aparece una diferencia, hay que <b>rectificar</b>.`;
     const B = est === 'cierre' ? `<button class="act gh" style="${_PILL}" onclick="abrirRectificar('${mesKey}','${l}',${vuelta})" title="Avisarle al estudio que se está corrigiendo este listado y volverlo a pre-cierre">Rectificar</button>`
+      : C.sube ? `<button class="act gh" style="${_PILL}" onclick="abrirCierre('${mesKey}','${l}',${vuelta},true)" title="Este mes no hubo: cerrar el listado y avisarle al estudio">Sin movimientos</button>
+          <button class="act${est === 'pre_cierre' ? ' gh' : ''}" style="${_PILL}" onclick="darPreCierre('${mesKey}','${l}',${vuelta})" title="Elegir los archivos desde la compu y dejarlos guardados para controlar. No se manda nada al estudio.">${ico('subir','s')} ${est === 'pre_cierre' ? 'Volver a subir' : 'Subir archivos y dar el Pre-cierre'}</button>
+          ${est === 'pre_cierre' ? `<button class="act" style="${_PILL}" onclick="abrirCierre('${mesKey}','${l}',${vuelta})" title="Mandar al estudio los archivos del pre-cierre">${ico('avion','s')} Dar el Cierre y enviar</button>` : ''}`
+      : !n && C.sinAviso ? ''
       : !n ? `<button class="act" style="${_PILL}" onclick="abrirCierre('${mesKey}','${l}',${vuelta},true)" title="Cerrar el listado y avisarle al estudio que no hubo movimientos">${ico('avion','s')} Cerrar sin movimientos y avisar</button>`
       : est === 'pre_cierre' ? `<button class="act gh" style="${_PILL}" onclick="darPreCierre('${mesKey}','${l}',${vuelta})" title="Volver a emitir el listado después de una corrección">Repetir el pre-cierre</button>
           <button class="act" style="${_PILL}" onclick="abrirCierre('${mesKey}','${l}',${vuelta})" title="Guardar el listado definitivo y mandarlo al estudio">${ico('avion','s')} Dar el Cierre y enviar</button>`
@@ -5402,10 +5447,10 @@ function _cierreNombres(archivos, mesKey, l, etapa, vuelta, numero){
 // Arma los archivos de UN listado (los mismos que se bajan a mano), sin subirlos.
 async function _cierreArmar(per, l, etapa, vuelta, numero){
   _CAPTURA = []; _CIERRE_SELLO = `${etapa === 'cierre' ? 'Cierre' : 'Pre-cierre'} ${vuelta || 1}${numero ? ' · ' + _nroEm(numero) : ''}`;
-  try { await _CL[l].armar(per); } catch (e){ _CAPTURA = null; throw e; } finally { _CIERRE_SELLO = ''; }
+  try { if (_CL[l].sube) await _cierreArmarSubidos(l); else await _CL[l].armar(per); } catch (e){ _CAPTURA = null; throw e; } finally { _CIERRE_SELLO = ''; }
   let archivos = _CAPTURA; _CAPTURA = null;
   if (!archivos.length) throw new Error('no quedó ningún archivo para guardar');
-  archivos = await Promise.all(archivos.map(a => /\.csv$/i.test(a.nombre) ? _csvAXlsx(a) : a));
+  if (!_CL[l].sube) archivos = await Promise.all(archivos.map(a => /\.csv$/i.test(a.nombre) ? _csvAXlsx(a) : a));
   return _cierreNombres(archivos, per, l, etapa, vuelta, numero);
 }
 // Listado sin movimientos: igual se le avisa al estudio. Se guarda una constancia para que el paso tenga su archivo.
@@ -5422,7 +5467,7 @@ async function _cierreSubir(archivos, carpeta, avisar){
     const path = `${carpeta}/${a.nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9._-]+/g, '_')}`;
     const r = await sb.storage.from('compras-estudio').upload(path, a.blob, {upsert: true, contentType: a.blob.type || 'application/octet-stream'});
     if (r.error) throw new Error(`no se pudo guardar ${a.nombre}: ${r.error.message}`);
-    subidos.push({path, nombre: a.nombre, bytes: a.blob.size});
+    subidos.push({path, nombre: a.nombre, bytes: a.blob.size, ...(a.orig ? {orig: a.orig} : {})});
   }
   return subidos;
 }
@@ -5474,6 +5519,10 @@ function _cierreCuerpo(mesKey, l, vuelta, sinMov){
   if (sinMov) return q ? `Hola,\n\nEn la ${q === 1 ? '1ª' : '2ª'} quincena de ${mesTxt} (del ${q === 1 ? '01' : '16'}-${m}-${y} al ${q === 1 ? '15' : _finMes(+y, +m)}-${m}-${y}) no se practicaron retenciones en los pagos a proveedores.\n\nRetenciones de Ganancias: no hay.\nRetenciones de IVA: no hay.\nRetenciones de Ingresos Brutos: no hay.${pie}`
     : `Hola,\n\nLes avisamos que en ${mesTxt} no hubo movimientos para el listado de ${C.t}.${pie}`;
   let det = `Adjuntamos el listado de ${C.t} de ${mesTxt}`;
+  if (C.sube){
+    const nota = (_CIERRE_ULT[l] && _CIERRE_ULT[l].etapa === 'pre_cierre' && _CIERRE_ULT[l].nota) || '';
+    return `Hola,\n\nAdjuntamos ${C.que} de ${mesTxt}.${nota ? '\n\n' + nota : ''}${pie}`;
+  }
   if (q){
     const R = _retQ(q), hay = re => R.filter(r => re.test(String(r.impuesto || '') + ' ' + String(r.regimen_codigo || ''))).length;
     const g = hay(/gan|rtn-g/i), i = hay(/iva|rtn-i/i), b = hay(/iibb|brutos|rtn-b/i);
@@ -5488,14 +5537,22 @@ const _cierreCarpeta = (per, l, paso) => `${MODO_PRUEBA ? 'prueba/' : ''}${per}/
 async function darPreCierre(mesKey, l, vuelta){
   const C = _CL[l], mesTxt = _envioMesTxt(mesKey);
   if (!C.n()){ alert('No hay movimientos en ese listado: no hay nada para emitir.'); return; }
-  const nota = prompt(`Dar el PRE-CIERRE de ${C.t} · ${mesTxt}.\n\nSe guarda el listado tal como está ahora, para controlarlo. No se manda nada al estudio.\n\nPodés dejar una nota (opcional):`, '');
+  let elegidos = null;
+  if (C.sube){
+    elegidos = await _cierreElegirArchivos(); if (!elegidos.length) return;
+    const peso = elegidos.reduce((a, f) => a + f.size, 0);
+    if (peso > 18 * 1024 * 1024){ alert(`Los archivos pesan ${(peso / 1024 / 1024).toFixed(1)} MB y el mail no admite más de 18 MB en total. Subí menos archivos o comprimilos.`); return; }
+  }
+  const nota = prompt(C.sube ? `PRE-CIERRE de ${C.t} · ${mesTxt}.\n\nSe guardan ${elegidos.length === 1 ? 'el archivo elegido' : 'los ' + elegidos.length + ' archivos elegidos'} para controlarlos. No se manda nada al estudio.\n\n${C.pideNota || 'Podés dejar una nota (opcional):'}`
+    : `Dar el PRE-CIERRE de ${C.t} · ${mesTxt}.\n\nSe guarda el listado tal como está ahora, para controlarlo. No se manda nada al estudio.\n\nPodés dejar una nota (opcional):`, '');
   if (nota === null) return;
   const cli = await _cierreCliente(`Pre-cierre de ${C.t} · ${mesTxt}`); if (!cli) return;
   const est = document.querySelector(`.cierre-lst[data-l="${l}"] .cierre-estado`), avisar = t => { if (est) est.textContent = t; };
   try {
     avisar('Armando el listado…');
     const nro = await _cierreProximo();
-    const subidos = await _cierreSubir(await _cierreArmar(mesKey, l, 'pre_cierre', vuelta, nro), _cierreCarpeta(mesKey, l, 'pre_cierre'), avisar);
+    const armados = elegidos ? _cierreNombres(elegidos.map(f => ({nombre: f.name, blob: f, orig: f.name})), mesKey, l, 'pre_cierre', vuelta, nro) : await _cierreArmar(mesKey, l, 'pre_cierre', vuelta, nro);
+    const subidos = await _cierreSubir(armados, _cierreCarpeta(mesKey, l, 'pre_cierre'), avisar);
     avisar('Registrando el pre-cierre…');
     const r = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'pre_cierre', p_es_prueba: MODO_PRUEBA, p_nota: nota.trim() || null, p_archivos: subidos, p_envio: null, p_numero: nro});
     if (r.error) throw new Error(r.error.message);
@@ -7807,6 +7864,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=151"></script>
+<script src="manual.js?v=152"></script>
 </body>
 </html>
