@@ -897,7 +897,8 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js" integrity="sha384-UagCvVPT5XXA0Hx+nJYUAGBFseHT9zBgpJMSebsAxl9lciTwbT+39j5VfRjdP5Tp" crossorigin="anonymous"></script>
 <script src="/hub/seguridad.js?v=1"></script>
-<script src="/hub/caras.js?v=4" defer></script>
+<script src="/hub/caras.js?v=7" defer></script>
+<script src="/hub/autorizar.js?v=3" defer></script>
 <script>
 const SUPABASE_URL  = 'https://jfwtiagteuwmyvblgwms.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_udSPma98Sw9eskeeLCgdCw_S2vIX0Fk';
@@ -1016,10 +1017,31 @@ async function _regQuien(f, detalle){
   return r;
 }
 const _regError = m => ({data: null, error: {message: m, code: 'REG_QUIEN'}, count: null, status: 0, statusText: ''});
-const _AUT_CANCELADA = {data: null, error: {message: 'falta la autorización (se canceló el pedido de usuario y clave).', code: 'AUT_CANCELADA'}, count: null, status: 0, statusText: ''};
-function _autOperacion(queEs){
+const _AUT_CANCELADA = {data: null, error: {message: 'falta la autorización (se canceló el pedido).', code: 'AUT_CANCELADA'}, count: null, status: 0, statusText: ''};
+// (15-nov, JP) Las funciones en "Pide permiso" usan la ventana común del Hub (/hub/autorizar.js): primero la cara,
+// si no un aviso al celular de alguien autorizado, si no usuario y clave. Autoriza quien tenga ESA función en
+// "Habilitada" en su perfil para la oficina, o un dueño. La autorización se marca usada en la base (un uso) y vale
+// _AUT_SEGUNDOS para las escrituras que siguen de la misma operación. Sigue siendo control de pantalla: las funciones
+// de Compras en la base todavía no la exigen. Devuelve true, false (canceló), 'sin' (no cargó el script) o {err}.
+function _autOperacion(queEs, f, detalle){
   if (_AUT_ADMIN || Date.now() < _AUT_HASTA) return Promise.resolve(true);
   if (_AUT_PEND) return _AUT_PEND;
+  if (!f) return _autOperacionClave(queEs);   // operación que no está en el mapa del Hub: la ventana de antes
+  if (!window.ADORNO_AUTORIZAR || !ADORNO_AUTORIZAR.pedir) return Promise.resolve('sin');
+  _AUT_PEND = (async () => {
+    try {
+      const a = await ADORNO_AUTORIZAR.pedir({funcion: f, local: 'oficina', que: queEs.charAt(0).toLowerCase() + queEs.slice(1), resumen: queEs, detalle});
+      if (!a) return false;
+      await ADORNO_AUTORIZAR.usar(a.id, {funcion: f, local: 'oficina', usado_en: queEs});
+      _AUT_HASTA = Date.now() + _AUT_SEGUNDOS * 1000; _AUT_QUIEN = a.nombre || '';
+      _AUT_FROM0('compras_eventos').insert({usuario: a.nombre || '', accion: 'autorizacion', detalle: {operacion: queEs, autorizo: a.nombre, modo: a.modo, funcion: f, aut_id: a.id}}).then(() => {}, () => {});
+      return true;
+    } catch (e){ return {err: (e && e.message) || String(e)}; }
+    finally { _AUT_PEND = null; }
+  })();
+  return _AUT_PEND;
+}
+function _autOperacionClave(queEs){
   _AUT_PEND = new Promise(res => {
     const e_ = t => String(t ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
     const ov = document.createElement('div'); ov.id = 'aut-op-overlay';
@@ -1062,8 +1084,10 @@ function _autOperacion(queEs){
 function _autPuerta(armar, clave, metodo, datos){
   const pasos = [];
   const correr = () => { const E = _hubEstado(clave, metodo); if (_AUT_ADMIN) E.e = 'h';
-   return (E.e === 'o' ? Promise.resolve('o') : E.e === 'h' ? Promise.resolve(true) : _autOperacion(_AUT_NOMBRES[clave] || 'Operación de Compras')).then(async ok => {
+   return (E.e === 'o' ? Promise.resolve('o') : E.e === 'h' ? Promise.resolve(true) : _autOperacion(_AUT_NOMBRES[clave] || 'Operación de Compras', E.f, _regDetalle(clave, metodo, datos, pasos))).then(async ok => {
     if (ok === 'o') return _hubOculta(E.f);
+    if (ok === 'sin') return _regError('no cargó la ventana de autorización del Hub. Recargá la página.');
+    if (ok && ok.err) return _regError('no se pudo autorizar: ' + ok.err);
     if (!ok) return _AUT_CANCELADA;
     if (_regMarcada(clave, metodo)){
       const g = await _regQuien(E.f, _regDetalle(clave, metodo, datos, pasos));
@@ -7724,6 +7748,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=148"></script>
+<script src="manual.js?v=149"></script>
 </body>
 </html>
