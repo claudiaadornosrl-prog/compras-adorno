@@ -928,7 +928,7 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
     <nav class="hnav ab-tabs" id="hnav"></nav>
     <div class="ab-der" id="hder"></div>
   </header>
-  <script src="/hub/banner.js?v=6"></script>
+  <script src="/hub/banner.js?v=7"></script>
   <nav class="tabs" id="tabs"></nav>
   <main id="cont"></main>
 </div>
@@ -936,7 +936,7 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js" integrity="sha384-UagCvVPT5XXA0Hx+nJYUAGBFseHT9zBgpJMSebsAxl9lciTwbT+39j5VfRjdP5Tp" crossorigin="anonymous"></script>
 <script src="/hub/seguridad.js?v=1"></script>
 <script src="/hub/caras.js?v=8" defer></script>
-<script src="/hub/autorizar.js?v=5" defer></script>
+<script src="/hub/autorizar.js?v=6" defer></script>
 <script>
 const SUPABASE_URL  = 'https://jfwtiagteuwmyvblgwms.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_udSPma98Sw9eskeeLCgdCw_S2vIX0Fk';
@@ -1129,7 +1129,9 @@ function _autPuerta(armar, clave, metodo, datos){
     if (ok === 'sin') return _regError('no cargó la ventana de autorización del Hub. Recargá la página.');
     if (ok && ok.err) return _regError('no se pudo autorizar: ' + ok.err);
     if (!ok) return _AUT_CANCELADA;
-    if (_regMarcada(clave, metodo)){
+    // (16-nov, JP) En «Ver como» (window.ADORNO_VERCOMO, lo pone /hub/banner.js) la ventana de permiso se muestra igual
+    // (autorizar.js v6 la abre en solo lectura), pero «registra quién» no se pide: hub_registrar es una escritura.
+    if (!window.ADORNO_VERCOMO && _regMarcada(clave, metodo)){
       const g = await _regQuien(E.f, _regDetalle(clave, metodo, datos, pasos));
       if (!g.ok) return _regError(g.motivo === 'error' ? 'no se pudo anotar quién lo hace: ' + g.error : 'no quedó anotado quién lo hace (se canceló).');
       if (E.e === 'a') _AUT_HASTA = Math.max(_AUT_HASTA, Date.now() + _AUT_SEGUNDOS * 1000);
@@ -7864,6 +7866,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=152"></script>
+<script src="manual.js?v=153"></script>
 </body>
 </html>
