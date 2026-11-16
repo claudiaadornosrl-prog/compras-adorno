@@ -928,7 +928,7 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
     <nav class="hnav ab-tabs" id="hnav"></nav>
     <div class="ab-der" id="hder"></div>
   </header>
-  <script src="/hub/banner.js?v=7"></script>
+  <script src="/hub/banner.js?v=8"></script>
   <nav class="tabs" id="tabs"></nav>
   <main id="cont"></main>
 </div>
@@ -1120,6 +1120,10 @@ function _autOperacionClave(queEs){
   });
   return _AUT_PEND;
 }
+// (16-nov, JP) Los errores del sistema salen por el cartel rojo común del Hub (/hub/banner.js → ADORNO_AVISO.error):
+// no se cierra solo, tiene ✕ y traduce el mensaje de la base a castellano simple (el original queda en «Ver detalle técnico»).
+// Si el banner no cargó, cae en el alert de siempre. Los avisos de carga y las confirmaciones siguen con alert/confirm.
+function avisoError(m){ if (window.ADORNO_AVISO && ADORNO_AVISO.error) ADORNO_AVISO.error(m); else alert(m); }
 // Devuelve algo que se usa igual que la consulta de Supabase (.eq().select()… y await), pero que antes de mandarla pide la autorización.
 function _autPuerta(armar, clave, metodo, datos){
   const pasos = [];
@@ -1743,7 +1747,7 @@ async function opExportar(cual, formato){
       fila(cols.map((c, i) => i === 0 ? rotTotal : c[2] === 'n' ? n2(suma(c)) : c[2] === 'e' ? suma(c) : ''), true);
       doc.save(nombre + '.pdf');
     }
-  } catch (e){ alert('No se pudo generar el listado: ' + e.message); }
+  } catch (e){ avisoError('No se pudo generar el listado: ' + e.message); }
 }
 
 const _diasDesde = f => {
@@ -1760,7 +1764,7 @@ async function abrirOP(cuit){
     REGIMENES = rg.data || [];
   }
   const {data, error} = await sb.rpc('compras_op_candidatos', {p_cuit: cuit, p_prueba: MODO_PRUEBA});
-  if (error){ alert(error.message); return; }
+  if (error){ avisoError(error.message); return; }
   opDocs = (data||[]).map(d => d.documento_id);   // por defecto, todas
   // (25-sep, JP) remito asociado de cada factura, para ver antes de pagar si la mercadería ya tiene remito
   if (opDocs.length){
@@ -2363,7 +2367,7 @@ async function emitirOP(){
                                      motivo_edicion: (r.motivo_edicion||'').trim() || null})),
     p_prueba: MODO_PRUEBA, p_descuento_pct: Number(opPrep.descuento_pct) > 0 ? Number(opPrep.descuento_pct) : null, p_importes: _opImps(), p_incluir_pagos: opIncluir.length ? opIncluir : null });
   if (error){
-    alert('No se pudo emitir: ' + error.message);
+    avisoError('No se pudo emitir: ' + error.message);
     if (btn){ btn.disabled = false; btn.textContent = 'Emitir orden de pago'; }
     return;
   }
@@ -2395,7 +2399,7 @@ const _OP_MAIL_ADMIN = 'administracion@claudiaadorno.com';
 const _opEnvIn = 'width:100%;box-sizing:border-box;padding:8px 14px;border:1px solid var(--bd);border-radius:999px;font:inherit;font-size:13px';
 async function opEnviar(opId, canal){
   const {data, error} = await sb.rpc('compras_op_detalle', {p_op: opId});
-  if (error){ alert(error.message); return; }
+  if (error){ avisoError(error.message); return; }
   const o = data.orden, pv = data.proveedor || {}, hayCert = (data.retenciones || []).some(x => Number(x.importe) > 0);
   let pd = {};
   if (pv.codigo){ const q = await sb.from('compras_proveedor_datos').select('email_op,email,whatsapp,contactos').eq('codigo', pv.codigo).maybeSingle(); pd = q.data || {}; }
@@ -2517,7 +2521,7 @@ async function _opPintarEnvios(opId){
 }
 async function opVincularNc(opId){
   const [{data, error}, det] = await Promise.all([sb.rpc('compras_op_nc_candidatas', {p_op: opId}), sb.rpc('compras_op_detalle', {p_op: opId})]);
-  if (error){ alert(error.message); return; }
+  if (error){ avisoError(error.message); return; }
   if (!(data || []).length){ alert('Este proveedor no tiene ninguna nota de crédito cargada sin orden de pago.\n\nCuando llegue y esté en el módulo, volvé a esta orden y vinculala.'); return; }
   // (v212, JP 11-nov) antes pedía escribir "el número de la lista" y se confundía con el número de la NC:
   // ahora se elige con un clic. La primera es la de importe más parecido al descuento.
@@ -2538,14 +2542,14 @@ async function opVincularNc(opId){
 }
 async function opVincularNcOk(opId, docId, comp){
   const r = await sb.rpc('compras_op_vincular_nc', {p_op: opId, p_doc: docId});
-  if (r.error){ alert(r.error.message); return; }
+  if (r.error){ avisoError(r.error.message); return; }
   const dif = Number(r.data.diferencia) || 0;
   if (Math.abs(dif) > 1) alert(`Nota de crédito ${comp} vinculada a la orden.\n\n⚠ La NC es por ${plata(r.data.nc_total)} y el descuento fue de ${plata(r.data.descuento)}: hay una diferencia de ${plata(dif)}.`);
   verOP(opId);
 }
 async function verOP(id){
   const {data, error} = await sb.rpc('compras_op_detalle', {p_op: id});
-  if (error){ alert(error.message); return; }
+  if (error){ avisoError(error.message); return; }
   const o = data.orden, fTodas = data.facturas || [], r = data.retenciones || [], pg = data.pagos || [];
   // (v204) la NC del descuento vinculada no se lista como comprobante: se muestra en el renglón del descuento
   const ncDto = o.descuento_nc_id ? fTodas.find(x => x.id === o.descuento_nc_id) : null;
@@ -2617,7 +2621,7 @@ async function anularOP(id, comp){
   if (motivo === null) return;
   if (!motivo.trim()){ alert('El motivo es obligatorio.'); return; }
   const {data, error} = await sb.rpc('compras_op_anular', {p_op: id, p_motivo: motivo.trim()});
-  if (error){ alert('No se pudo anular: ' + error.message); return; }
+  if (error){ avisoError('No se pudo anular: ' + error.message); return; }
   alert(`Anulada. ${data.comprobantes_liberados} comprobante(s) volvieron a "controlado sin OP".` +
         (data.retenciones_anuladas ? `\n${data.retenciones_anuladas} retención(es) anulada(s): no entran en los listados ni en el acumulado del mes.` : ''));
   vistaOrdenes();
@@ -2879,7 +2883,7 @@ async function abrirFichaProveedorDesdeDoc(cuit, nombre){
   const busca = (cuit && cuit.replace(/\D/g, '').length >= 3) ? cuit : (nombre || '');
   if (!busca){ alert('Este comprobante no tiene CUIT ni proveedor para buscar.'); return; }
   const {data, error} = await sb.rpc('compras_proveedores_listar', {p_busca: busca, p_limite: 20, p_prueba: MODO_PRUEBA});
-  if (error){ alert('No pude buscar el proveedor: ' + error.message); return; }
+  if (error){ avisoError('No pude buscar el proveedor: ' + error.message); return; }
   const L = data || [];
   if (!L.length){ alert('No encontré la ficha de este proveedor (' + busca + ') en el listado de Proveedores.'); return; }
   const cu = String(cuit || '').replace(/\D/g, '');
@@ -2945,13 +2949,13 @@ async function fichaProveedor(i){
     </div></div>
     <div class="pf-g"><h4>Mercadería</h4><div class="pf-grid">
       <label>Equivalencias
-        <select id="pf-eqdesc" onchange="(async(sel)=>{const r=await sb.rpc('compras_proveedor_equiv_desc',{p_codigo:'${_mEscP(p.codigo)}',p_valor:sel.value==='1'});if(r.error)alert(r.error.message);else _resP('datos','Equivalencias: '+(sel.value==='1'?'por código + descripción':'por código'),true);})(this)" title="Cómo se traduce su código a nuestro SKU. Por CÓDIGO: cada código del proveedor es un artículo nuestro. Por CÓDIGO + DESCRIPCIÓN (Los Naranjos): factura un solo código y el color va en la descripción, así que la equivalencia se carga por código + descripción; si una descripción no tiene la suya, se usa la del código entero. Se guarda al cambiarlo.">
+        <select id="pf-eqdesc" onchange="(async(sel)=>{const r=await sb.rpc('compras_proveedor_equiv_desc',{p_codigo:'${_mEscP(p.codigo)}',p_valor:sel.value==='1'});if(r.error)avisoError(r.error.message);else _resP('datos','Equivalencias: '+(sel.value==='1'?'por código + descripción':'por código'),true);})(this)" title="Cómo se traduce su código a nuestro SKU. Por CÓDIGO: cada código del proveedor es un artículo nuestro. Por CÓDIGO + DESCRIPCIÓN (Los Naranjos): factura un solo código y el color va en la descripción, así que la equivalencia se carga por código + descripción; si una descripción no tiene la suya, se usa la del código entero. Se guarda al cambiarlo.">
           <option value="0">Por código del proveedor</option>
           <option value="1">Por código + descripción (el color/variante va en la descripción)</option>
         </select>${(setTimeout(async () => { try { const r = await sb.from('compras_proveedor_datos').select('equiv_por_descripcion').eq('codigo', p.codigo).maybeSingle(); const el = document.getElementById('pf-eqdesc'); if (el && r.data) el.value = r.data.equiv_por_descripcion ? '1' : '0'; } catch (e) {} }, 0), '')}
       </label>
       <label>Lista con la que factura
-        <select id="pf-lista" onchange="(async(sel)=>{const r=await sb.rpc('compras_proveedor_factura_lista',{p_codigo:'${_mEscP(p.codigo)}',p_lista:sel.value});if(r.error)alert(r.error.message);else _resP('datos','Lista de la factura: '+sel.value,true);})(this)" title="Qué precio trae la factura: COMPRA (lista del proveedor, el descuento se aplica aparte) o COSTO (ya viene con el descuento, como Los Naranjos). Se guarda al cambiarlo.">
+        <select id="pf-lista" onchange="(async(sel)=>{const r=await sb.rpc('compras_proveedor_factura_lista',{p_codigo:'${_mEscP(p.codigo)}',p_lista:sel.value});if(r.error)avisoError(r.error.message);else _resP('datos','Lista de la factura: '+sel.value,true);})(this)" title="Qué precio trae la factura: COMPRA (lista del proveedor, el descuento se aplica aparte) o COSTO (ya viene con el descuento, como Los Naranjos). Se guarda al cambiarlo.">
           <option value="compra">Factura a lista COMPRA (con descuento aparte)</option>
           <option value="costo">Factura a lista COSTO (ya descontada)</option>
           <option value="costo_pct">Lista COSTO y el % del renglón es lo FACTURADO del pedido (ej. factura el 30 %)</option>
@@ -3088,12 +3092,12 @@ async function guardarFichaProveedor(codigo, cuit){
   }
   datos.cbu = datos.cbu.replace(/\D/g,'');
   const { error } = await sb.rpc('compras_proveedor_guardar', { p_codigo: codigo, p_datos: datos });
-  if (error) return alert('No se pudo guardar: ' + error.message);
+  if (error) return avisoError('No se pudo guardar: ' + error.message);
   if (cuit && _fRet.length){
     const { error: e2 } = await sb.rpc('compras_proveedor_retenciones_guardar', { p_cuit: cuit,
       p_filas: _fRet.map(r => ({ regimen_id: r.regimen_id, aplica: !!r.aplica, exento: !!r.exento, alicuota: r.alicuota || null,
         cert_numero: r.cert_numero || null, cert_vigencia_hasta: r.cert_vigencia_hasta || null, notas: r.notas || null })) });
-    if (e2) return alert('Ficha guardada, pero las retenciones no: ' + e2.message);
+    if (e2) return avisoError('Ficha guardada, pero las retenciones no: ' + e2.message);
   }
   // (v136, JP) Guardar cierra la ficha; el aviso de cambios sin guardar queda solo para Cerrar / click afuera
   _pfFoto = ''; cerrarModalP();
@@ -3181,7 +3185,7 @@ async function confirmarAltaProveedor(){
     { p_nombre: nombre, p_cuit: cuit || null, p_es_exterior: ext,
       p_datos: { pais, moneda_habitual: ext ? 'USD' : 'ARS', cond_iva: ext ? 'EXT' : (ivaForm || arca?.cond_iva || ''), domicilio: domForm || domArca,
                  notas: arca ? `ARCA ${arca.estado_clave} · ${arca.razon_social || ''} · validado ${_fechaTs(new Date())}` : '' } });
-  if (error) return alert('No se pudo crear: ' + error.message);
+  if (error) return avisoError('No se pudo crear: ' + error.message);
   if (data && data.ya_existe){
     alert(`Ese proveedor ya existe: "${data.nombre}" (código ${data.codigo}).\n\nNo lo dupliqué. Buscalo en el listado y completá su ficha.`);
     cerrarModalP(); _provBusca = nombre; document.getElementById('prov-q').value = nombre; await buscarProveedores(); return;
@@ -3535,7 +3539,7 @@ async function pedirMotor(){
   const btn = document.getElementById('btn-motor');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="reloj">⏳</span> Pidiendo…'; }
   const {data, error} = await sb.rpc('compras_pedir_motor');
-  if (error){ alert('No pude pedir la lectura: ' + error.message); if (btn){ btn.disabled=false; btn.textContent='🤖 Leer 1 - SIN CONTABILIZAR'; } return; }
+  if (error){ avisoError('No pude pedir la lectura: ' + error.message); if (btn){ btn.disabled=false; btn.textContent='🤖 Leer 1 - SIN CONTABILIZAR'; } return; }
   MOTOR_PEDIDO = {id: data.id, estado: 'pendiente', desde: Date.now()};
   pintarEstadoMotor();
   seguirPedido();
@@ -3688,7 +3692,7 @@ async function editarNumeroDoc(id){
     ne.poliza = m[1]; ne.endoso = Number(m[2]); ne.operacion = m[3];
     const pv = Number(m[1] + String(Number(m[2]))), num = Number(m[3]);
     const {error} = await sb.from('compras_documentos').update({punto_venta: pv, numero: num, numeros_extra: ne, corregida: true}).eq('id', id);
-    if (error){ alert(error.message.includes('duplicate') || error.message.includes('unique') ? 'Ya existe un comprobante de este proveedor con esa póliza/endoso/operación.' : 'No se pudo guardar: ' + error.message); return; }
+    if (error){ avisoError(error.message.includes('duplicate') || error.message.includes('unique') ? 'Ya existe un comprobante de este proveedor con esa póliza/endoso/operación.' : 'No se pudo guardar: ' + error.message); return; }
     await sb.from('compras_eventos').insert({documento_id: id, usuario: (session && session.email) || null, accion: 'numero_corregido', detalle: {poliza: ne, punto_venta: pv, numero: num}});
     d.punto_venta = pv; d.numero = num; d.numeros_extra = ne;
     if (typeof toast === 'function') toast('✓ Números de la póliza corregidos');
@@ -3704,7 +3708,7 @@ async function editarNumeroDoc(id){
   const tipo = m[1] || d.tipo || 'FC', letra = m[2] || d.letra || 'A', pv = Number(m[3]), num = Number(m[4]);
   if (pv === Number(d.punto_venta) && num === Number(d.numero) && tipo === d.tipo && letra === d.letra) return;
   const {error} = await sb.from('compras_documentos').update({tipo, letra, punto_venta: pv, numero: num, corregida: true}).eq('id', id);
-  if (error) { alert(error.message.includes('duplicate') || error.message.includes('unique') ? 'Ya existe un comprobante de este proveedor con ese número.' : 'No se pudo guardar: ' + error.message); return; }
+  if (error) { avisoError(error.message.includes('duplicate') || error.message.includes('unique') ? 'Ya existe un comprobante de este proveedor con ese número.' : 'No se pudo guardar: ' + error.message); return; }
   await sb.from('compras_eventos').insert({documento_id: id, usuario: (session && session.email) || null, accion: 'numero_corregido', detalle: {antes: actual, despues: `${String(pv).padStart(4,'0')}-${String(num).padStart(8,'0')}`}});
   d.punto_venta = pv; d.numero = num; d.tipo = tipo; d.letra = letra;
   const n = document.querySelector('.fx-cab .fx-num a, .fx-cab .fx-num span.fx-numtxt'); if (n) n.textContent = `${esc(tipo)} ${esc(letra)} ${String(pv).padStart(4,'0')}-${String(num).padStart(8,'0')}`;
@@ -3871,7 +3875,7 @@ async function _arcaConsultarDoc(cuit){
     }
     if (!c) throw new Error('ARCA no respondió en 90 segundos. Probá de nuevo en un rato.');
     if (enControl && enControl.id === d.id) enControl._arca = c;
-  } catch (e) { alert(e.message); }
+  } catch (e) { avisoError(e.message); }
   if (enControl && enControl.id === d.id){ enControl._arcaBuscando = false; pintarControl(); }
 }
 // (28-sep, JP) Remitos asociados a la factura, para el botón "📦 Ver remito" del control/resumen.
@@ -4181,7 +4185,7 @@ async function _guardarImportes(){
   const d = enControl; if (!d) return;
   const imp = {}; _IMP_CAMPOS.forEach(([k]) => imp[k] = Number(document.getElementById('imp-' + k)?.value || 0));
   const { data, error } = await sb.rpc('compras_corregir_importes', { p_doc: d.id, p_imp: imp, p_motivo: (document.getElementById('imp-motivo')?.value || '').trim() || null });
-  if (error) return alert('No se pudo guardar: ' + error.message);
+  if (error) return avisoError('No se pudo guardar: ' + error.message);
   Object.assign(d, imp); d._impuestosOk = true;
   const b = BANDEJA.find(x => x.id === d.id); if (b) Object.assign(b, { neto_gravado: imp.neto_gravado, neto_no_gravado: imp.neto_no_gravado, exento: imp.exento, total: imp.total });
   const neto = imp.neto_gravado + imp.neto_no_gravado + imp.exento;
@@ -4405,7 +4409,7 @@ async function crearConcepto(){
   if (!cod || !desc){ alert('Completá código y descripción.'); return; }
   const {data, error} = await sb.rpc('compras_crear_concepto',
     {p_codigo: cod, p_descripcion: desc, p_alicuota: alic});
-  if (error){ alert('No se pudo crear: ' + error.message); return; }
+  if (error){ avisoError('No se pudo crear: ' + error.message); return; }
   CONCEPTOS.push({codigo: cod, descripcion: desc, alicuota: alic});
   // lo pone directo en la primera línea vacía (o en la primera)
   const libre = lineasControl.find(l => !(l.concepto||'').trim()) || lineasControl[0];
@@ -4479,7 +4483,7 @@ async function contabilizar(){
       p_renglones: enControl._rengDirty ? (enControl._renglones || []).map(r => ({nroitem: r.nroitem, cantidad: r.cantidad, precio_unitario: r.precio_unitario, descuento_pct: r.descuento_pct ?? 0})) : null,
       p_descuentos: enControl._descDirty ? _descExtras(enControl, sub).map(x => ({descripcion: x.descripcion, pct: (x.pct === '' ? null : x.pct), importe: x.monto})) : null,
     });
-    if (eR){ alert('No se pudieron guardar los renglones: ' + eR.message); return; }
+    if (eR){ avisoError('No se pudieron guardar los renglones: ' + eR.message); return; }
     enControl._rengDirty = false; enControl._descDirty = false;
   }
   // (24-sep) Planilla de gastos: una parte = como siempre · varias partes = reparto por unidad y/o período
@@ -4517,11 +4521,11 @@ async function contabilizar(){
     p_numero_interno: niTxt ? Number(niTxt) : null,
     p_gestion: gestionPayload,
   });
-  if (error){ alert('No se pudo contabilizar: ' + error.message); return; }
+  if (error){ avisoError('No se pudo contabilizar: ' + error.message); return; }
   // (24-oct, JP) póliza → un pago pendiente en Tesorería por cada cuota (en 🧪 no se crean)
   if (_docClase(enControl) === 'poliza'){
     try { const r = await sb.rpc('compras_poliza_pendientes', {p_doc_id: enControl.id});
-      if (r.error) alert('La póliza quedó contabilizada, pero no pude crear los pagos por cuota en Tesorería: ' + r.error.message);
+      if (r.error) avisoError('La póliza quedó contabilizada, pero no pude crear los pagos por cuota en Tesorería: ' + r.error.message);
       else if (r.data && r.data.ok) { if (typeof toast === 'function') toast(`✓ ${r.data.creadas} cuota(s) cargadas como pagos pendientes en Tesorería`); }
       else if (r.data && !MODO_PRUEBA) console.warn('poliza pendientes:', r.data.motivo);
     } catch (e) { console.warn(e); }
@@ -4534,7 +4538,7 @@ async function rechazarDoc(){
   const motivo = prompt('¿Por qué queda afuera? (duplicada, archivo mal armado, no corresponde…)\n\nEl PDF vuelve a «1 - SIN CONTABILIZAR» con el nombre «RECHAZADO - …». Si después lo corregís, sacale el «RECHAZADO - » del nombre y el sistema lo vuelve a leer y lo trae de nuevo a la Bandeja.');
   if (motivo === null) return;
   const {error} = await sb.rpc('compras_rechazar', {p_doc_id: enControl.id, p_motivo: motivo});
-  if (error){ alert('No se pudo rechazar: ' + error.message); return; }
+  if (error){ avisoError('No se pudo rechazar: ' + error.message); return; }
   cerrarControl();
   await cargarTodo();
 }
@@ -4740,7 +4744,7 @@ function _pintarCCClientes(c){
 async function abrirCCCliente(codigo){
   const x = (LIST_CCC || []).find(y => y.cliente_codigo === codigo) || {cliente_codigo: codigo};
   const {data, error} = await sb.rpc('compras_cc_cliente_movs', {p_cliente: codigo});
-  if (error){ alert(error.message); return; }
+  if (error){ avisoError(error.message); return; }
   const M = data || [];
   openModalP(`
     <h3 style="margin:0 0 4px;">${ico('cliente','s')} ${esc(x.nombre || codigo)}</h3>
@@ -4793,7 +4797,7 @@ const _CC_PEND = ['contabilizado_sin_controlar','controlado_sin_op','con_op_sin_
 async function abrirCC(cuit){
   const x = (LIST_CC || []).find(y => y.cuit === cuit) || {cuit};
   const {data, error} = await sb.rpc('compras_cc_movimientos', {p_cuit: cuit, p_prueba: MODO_PRUEBA});
-  if (error){ alert(error.message); return; }
+  if (error){ avisoError(error.message); return; }
   const M = data || [];
   _CC = {cuit, x, M, desde: '', hasta: ''};
   const pend = M.filter(m => m.clase !== 'OP' && _CC_PEND.includes(m.estado));
@@ -4878,7 +4882,7 @@ async function ccExportar(formato){
       fila(cols.map((c, i) => i === 0 ? 'TOTAL' + (rango ? ' del período' : '') : c[2] === 'n' ? n2(suma(c)) : ''), true);
       doc.save(nombre + '.pdf');
     }
-  } catch (e){ alert('No se pudo armar el archivo: ' + e.message); }
+  } catch (e){ avisoError('No se pudo armar el archivo: ' + e.message); }
 }
 
 function _listMes(delta){
@@ -5401,18 +5405,18 @@ async function cerrarMes(mesKey){
   const nota = prompt(`Marcar ${_envioMesTxt(mesKey)} como ENVIADO AL ESTUDIO.\n\nDesde ahora los comprobantes de ese mes no se pueden modificar (solo vos). Podés dejar una nota (opcional):`, '');
   if (nota === null) return;
   const {error} = await sb.from('compras_meses_cerrados').insert({periodo: mesKey + '-01', nota: nota.trim() || null});
-  if (error){ alert('No se pudo cerrar: ' + error.message); return; }
+  if (error){ avisoError('No se pudo cerrar: ' + error.message); return; }
   await cargarMesesCerrados(); cargarListadosEstudio();
 }
 async function reabrirMes(mesKey){
   if (!confirm('¿Reabrir el mes? Los comprobantes se van a poder modificar de nuevo, y el listado que recibió el estudio puede dejar de coincidir.')) return;
   const {error} = await sb.from('compras_meses_cerrados').delete().eq('periodo', mesKey + '-01');
-  if (error){ alert('No se pudo reabrir: ' + error.message); return; }
+  if (error){ avisoError('No se pudo reabrir: ' + error.message); return; }
   await cargarMesesCerrados(); cargarListadosEstudio();
 }
 async function _cierreBajar(path){
   const su = await sb.storage.from('compras-estudio').createSignedUrl(path, 120, {download: true});
-  if (su.error || !su.data){ alert('No se pudo bajar: ' + ((su.error && su.error.message) || 'sin enlace')); return; }
+  if (su.error || !su.data){ avisoError('No se pudo bajar: ' + ((su.error && su.error.message) || 'sin enlace')); return; }
   const a = document.createElement('a'); a.href = su.data.signedUrl; a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove();
 }
 // (JP 13-nov) El nombre de cada archivo dice qué listado es, de qué mes y de qué cierre (por si hay más de uno):
@@ -5558,7 +5562,7 @@ async function darPreCierre(mesKey, l, vuelta){
     avisar('Registrando el pre-cierre…');
     const r = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'pre_cierre', p_es_prueba: MODO_PRUEBA, p_nota: nota.trim() || null, p_archivos: subidos, p_envio: null, p_numero: nro});
     if (r.error) throw new Error(r.error.message);
-  } catch (e){ avisar(''); alert('No se pudo dar el pre-cierre: ' + e.message); return; }
+  } catch (e){ avisar(''); avisoError('No se pudo dar el pre-cierre: ' + e.message); return; }
   finally { _cierreSoltar(cli); }
   _pintarCierre(mesKey);
 }
@@ -5575,9 +5579,9 @@ async function abrirCierre(mesKey, l, vuelta, sinMov){
   const C = _CL[l], cfg = await _envioCfg(), mesTxt = _envioMesTxt(mesKey);
   let archivos, nro;
   // sin movimientos se registran dos pasos juntos (pre-cierre y cierre): el archivo lleva el número del cierre
-  try { nro = await _cierreProximo() + (sinMov ? 1 : 0); } catch (e){ alert('No pude preparar el cierre: ' + e.message); return; }
+  try { nro = await _cierreProximo() + (sinMov ? 1 : 0); } catch (e){ avisoError('No pude preparar el cierre: ' + e.message); return; }
   if (sinMov) archivos = _cierreSinMov(mesKey, l, vuelta, nro);
-  else try { archivos = await _cierreArmar(mesKey, l, 'cierre', vuelta, nro); } catch (e){ alert('No pude armar el listado: ' + e.message); return; }
+  else try { archivos = await _cierreArmar(mesKey, l, 'cierre', vuelta, nro); } catch (e){ avisoError('No pude armar el listado: ' + e.message); return; }
   const ov = _cierreOverlay(), R = 'width:100%;box-sizing:border-box;border-radius:999px';
   ov.innerHTML = `<div class="c-box" style="max-width:640px;width:100%">
     <div class="c-head"><div style="flex:1"><div style="font-weight:700;font-size:15px">${ico('candado','s')} ${sinMov ? 'Cerrar sin movimientos y avisar' : 'Dar el Cierre y enviar'} · ${esc(C.t)} · ${esc(mesTxt)}${vuelta > 1 ? ' · rectificado, versión ' + vuelta : ''}${MODO_PRUEBA ? ' · 🧪 PRUEBA' : ''}</div>
@@ -5622,7 +5626,7 @@ async function darCierre(mesKey, l, vuelta){
     est.textContent = 'Registrando el cierre…';
     const r = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'cierre', p_es_prueba: MODO_PRUEBA, p_nota: ov._sinMov ? 'Sin movimientos' : null, p_archivos: subidos, p_envio: m, p_numero: ov._nro});
     if (r.error) throw new Error(r.error.message);
-  } catch (e){ btn.disabled = false; est.textContent = ''; alert('No se pudo dar el cierre: ' + e.message); return; }
+  } catch (e){ btn.disabled = false; est.textContent = ''; avisoError('No se pudo dar el cierre: ' + e.message); return; }
   finally { _cierreSoltar(cli); }
   if (document.getElementById('env-guardar')?.checked){
     const cfg = await _envioCfg();
@@ -5636,7 +5640,7 @@ async function darCierre(mesKey, l, vuelta){
 }
 async function abrirRectificar(mesKey, l, vuelta){
   const C = _CL[l], cfg = await _envioCfg(), mesTxt = _envioMesTxt(mesKey);
-  let nro; try { nro = await _cierreProximo(); } catch (e){ alert('No pude preparar la rectificación: ' + e.message); return; }
+  let nro; try { nro = await _cierreProximo(); } catch (e){ avisoError('No pude preparar la rectificación: ' + e.message); return; }
   const ov = _cierreOverlay(), R = 'width:100%;box-sizing:border-box;border-radius:999px'; ov._nro = nro;
   ov.innerHTML = `<div class="c-box" style="max-width:640px;width:100%">
     <div class="c-head"><div style="flex:1"><div style="font-weight:700;font-size:15px">${ico('candado','s')} Rectificar · ${esc(C.t)} · ${esc(mesTxt)}${MODO_PRUEBA ? ' · 🧪 PRUEBA' : ''}</div>
@@ -5663,7 +5667,7 @@ async function rectificarListado(mesKey, l){
   const btn = document.getElementById('env-btn'); btn.disabled = true;
   const r = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'rectificacion', p_es_prueba: MODO_PRUEBA, p_nota: motivo, p_archivos: [], p_envio: m, p_numero: document.getElementById('nota-overlay')?._nro ?? null});
   _cierreSoltar(cli);
-  if (r.error){ btn.disabled = false; alert('No se pudo rectificar: ' + r.error.message); return; }
+  if (r.error){ btn.disabled = false; avisoError('No se pudo rectificar: ' + r.error.message); return; }
   document.getElementById('nota-overlay')?.remove();
   alert(`${_CL[l].t} volvió a pre-cierre. El aviso sale por mail a ${m.para.join(', ')} en unos 5 minutos.`);
   await cargarMesesCerrados(); cargarListadosEstudio();
@@ -5941,7 +5945,7 @@ function _libBajarCompras(cual){
 }
 async function _libBajarVentas(per, archivo){
   const r = await sb.from('libros_iva_archivos').select('contenido').eq('periodo', per).eq('archivo', archivo).single();
-  if (r.error){ alert('No se pudo bajar: ' + r.error.message); return; }
+  if (r.error){ avisoError('No se pudo bajar: ' + r.error.message); return; }
   const blob = new Blob([r.data.contenido], {type: 'text/plain;charset=us-ascii'});
   if (_capturar(`LIBRO_IVA_DIGITAL_${archivo}_${LIBRO_CUIT}_${per.replace('-', '')}.txt`, blob)) return;
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -6140,7 +6144,7 @@ async function guardarRegimen(id){
     actualizado_at:  new Date().toISOString(),
     actualizado_por: session.email,
   }).eq('id', id);
-  if (error){ alert('No se pudo guardar: ' + error.message); return; }
+  if (error){ avisoError('No se pudo guardar: ' + error.message); return; }
   vistaConfig();
 }
 
@@ -6199,7 +6203,7 @@ async function guardarRegimenNuevo(){
     notas: v('notas') || null, actualizado_at: new Date().toISOString(), actualizado_por: session.email,
   };
   const {error} = await sb.from('compras_regimenes').insert(fila);
-  if (error){ alert('No se pudo crear: ' + error.message); return; }
+  if (error){ avisoError('No se pudo crear: ' + error.message); return; }
   vistaConfig();
 }
 
@@ -6395,7 +6399,7 @@ async function aceptarSugerencia(i){
   if (_packDeTexto(p.descripcion) > 1){ abrirMapeo(i); return; }
   const r = await sb.rpc('compras_guardar_equivalencia', {p_cuit: p.cuit, p_codigo: (p.codigo_proveedor || '').trim() || null,
     p_descripcion: (p.descripcion || '').trim() || null, p_partes: [{sku: p.sug.sku, cantidad: 1, proporcion: 1}]});
-  if (r.error){ alert('No se pudo guardar: ' + r.error.message); return; }
+  if (r.error){ avisoError('No se pudo guardar: ' + r.error.message); return; }
   vistaEquivalencias();
 }
 async function ignorarPendiente(i){
@@ -6405,7 +6409,7 @@ async function ignorarPendiente(i){
   const {error} = await sb.from('compras_equiv_ignorados').upsert({cuit_proveedor: p.cuit, codigo_proveedor: p.codigo_proveedor || '',
     descripcion_clave: _eqClaveIgn(p).split('|')[2] || '', descripcion: p.descripcion || null, motivo: motivo.trim() || null},
     {onConflict: 'cuit_proveedor,codigo_proveedor,descripcion_clave'});
-  if (error){ alert('No se pudo marcar: ' + error.message); return; }
+  if (error){ avisoError('No se pudo marcar: ' + error.message); return; }
   vistaEquivalencias();
 }
 async function restaurarIgnorado(i){
@@ -6413,7 +6417,7 @@ async function restaurarIgnorado(i){
   const x = EQ_IGNORADOS.find(x => x.cuit_proveedor + '|' + (x.codigo_proveedor || '') + '|' + (x.descripcion_clave || '') === _eqClaveIgn(p));
   if (!x) return;
   const {error} = await sb.from('compras_equiv_ignorados').delete().eq('id', x.id);
-  if (error){ alert('No se pudo: ' + error.message); return; }
+  if (error){ avisoError('No se pudo: ' + error.message); return; }
   vistaEquivalencias();
 }
 
@@ -6473,7 +6477,7 @@ async function borrarEquivalencia(i){
     + 'Las facturas ya traducidas no cambian. Las próximas que traigan ' + (g.codigos.length > 1 ? 'estos códigos' : 'este código') + ' van a volver a aparecer como "sin traducir".')) return;
   const ids = (g.codigos || []).flatMap(k => k.ids || []);
   const {error} = await sb.from('compras_equivalencias').delete().in('id', ids.length ? ids : g.partes.map(p => p.id));
-  if (error){ alert('No se pudo borrar: ' + error.message); return; }
+  if (error){ avisoError('No se pudo borrar: ' + error.message); return; }
   vistaEquivalencias();
 }
 
@@ -6687,7 +6691,7 @@ async function guardarMapeo(){
       p_cuit: enMapeo.cuit, p_codigo: (k.codigo || '').trim() || null,
       p_descripcion: (k.descripcion || '').trim() || enMapeo.descripcion || null, p_partes: partesK,
     });
-    if (r.error){ alert(`No se pudo guardar el código ${k.codigo || k.descripcion}: ` + r.error.message); return; }
+    if (r.error){ avisoError(`No se pudo guardar el código ${k.codigo || k.descripcion}: ` + r.error.message); return; }
     res = r.data; retraducidos += Number(r.data?.retraducidos) || 0;
   }
   // al editar: los códigos que se sacaron de la lista se borran
@@ -6828,7 +6832,7 @@ async function asociarRemito(cuit, pv, num){
   const ok = confirm(`¿Asociar al ${d.tipo} ${d.letra} ${String(d.punto_venta).padStart(4,'0')}-${String(d.numero).padStart(8,'0')} de ${d.proveedor_nombre||d.cuit_emisor} (${fechaCorta(d.fecha_emision)} · ${plata(d.total)})?`);
   if (!ok) return;
   const {error} = await sb.rpc('compras_asociar_remito', {p_cuit: cuit, p_punto_venta: pv, p_numero: num, p_doc_id: d.id});
-  if (error){ alert('No se pudo asociar: ' + error.message); return; }
+  if (error){ avisoError('No se pudo asociar: ' + error.message); return; }
   vistaMercaderia();
 }
 
@@ -6846,7 +6850,7 @@ async function txtRemito(cuit, pv, num, local){
     if (!local) return;
     if (!locales.includes(local)){ alert('Local inválido. Opciones: ' + locales.join(', ')); return; }
     const {error} = await sb.rpc('compras_remito_set_local', {p_cuit: cuit, p_punto_venta: pv, p_numero: num, p_local: local});
-    if (error){ alert('No se pudo guardar el local: ' + error.message); return; }
+    if (error){ avisoError('No se pudo guardar el local: ' + error.message); return; }
   }
   await descargarTxtRemito(cuit, pv, num);
   vistaMercaderia();
@@ -6855,7 +6859,7 @@ async function txtRemito(cuit, pv, num, local){
 async function cambiarDestinoRemito(cuit, pv, num, local){
   if (!local){ vistaMercaderia(); return; }
   const {data, error} = await sb.rpc('compras_remito_set_local', {p_cuit: cuit, p_punto_venta: pv, p_numero: num, p_local: local});
-  if (error){ alert('No se pudo cambiar el destino: ' + error.message); }
+  if (error){ avisoError('No se pudo cambiar el destino: ' + error.message); }
   vistaMercaderia();
 }
 
@@ -6869,14 +6873,14 @@ async function recibirRemito(cuit, pv, num, local){
   }
   if (!confirm(`Confirmar la recepción del remito ${pv}-${num} en ${local} con las cantidades del remito.\n\nEsto marca la mercadería como INGRESADA (una sola vez) y genera el TXT para el Dragonfish. ¿Seguimos?`)) return;
   const {data, error} = await sb.rpc('compras_remito_confirmar', {p_cuit: cuit, p_punto_venta: pv, p_numero: num, p_lineas: null, p_local: local});
-  if (error){ alert('No se pudo recibir: ' + error.message); return; }
+  if (error){ avisoError('No se pudo recibir: ' + error.message); return; }
   await descargarTxtRemito(cuit, pv, num);
   vistaMercaderia();
 }
 
 async function descargarTxtRemito(cuit, pv, num){
   const {data, error} = await sb.rpc('compras_remito_txt', {p_cuit: cuit, p_punto_venta: pv, p_numero: num});
-  if (error){ alert('El TXT no se pudo generar: ' + error.message); return false; }
+  if (error){ avisoError('El TXT no se pudo generar: ' + error.message); return false; }
   const blob = new Blob([data.contenido], {type:'text/plain'});
   const aEl = document.createElement('a');
   aEl.href = URL.createObjectURL(blob);
@@ -6895,7 +6899,7 @@ async function descargarTxtRemito(cuit, pv, num){
 let RDET = null;
 async function abrirRemitoDetalle(cuit, pv, num){
   const {data, error} = await sb.rpc('compras_remito_detalle', {p_cuit: cuit, p_numero: num});
-  if (error){ alert('No se pudo abrir el remito: ' + error.message); return; }
+  if (error){ avisoError('No se pudo abrir el remito: ' + error.message); return; }
   RDET = {cuit, pv, num, ...data, form: null};
   let ov = document.getElementById('rdet-overlay');
   if (!ov){
@@ -7026,7 +7030,7 @@ async function guardarDesglose(){
   const nota = (f.nota || '').trim();
   if (Math.abs(suma - tot) >= 0.0001 && !nota){ alert(`Los colores suman ${_rdetNum(suma)} y la factura dice ${_rdetNum(tot)}.\nAnotá el motivo de la diferencia.`); return; }
   const {data, error} = await sb.rpc('compras_remito_desglosar', {p_cuit: RDET.cuit, p_numero: RDET.num, p_nroitem: f.nroitem, p_partes: partes, p_nota: nota || null});
-  if (error){ alert('No se pudo guardar: ' + error.message); return; }
+  if (error){ avisoError('No se pudo guardar: ' + error.message); return; }
   const cuit = RDET.cuit, pv = RDET.pv, num = RDET.num;
   await abrirRemitoDetalle(cuit, pv, num);
   if (RDET) { RDET._cambio = true; _rdetPintar(); }
@@ -7034,7 +7038,7 @@ async function guardarDesglose(){
 async function deshacerDesglose(id){
   if (!confirm('¿Deshacer el desglose por color? El renglón vuelve a quedar sin SKU (y el TXT se frena hasta resolverlo).')) return;
   const {error} = await sb.rpc('compras_remito_deshacer_desglose', {p_desglose_id: id});
-  if (error){ alert('No se pudo deshacer: ' + error.message); return; }
+  if (error){ avisoError('No se pudo deshacer: ' + error.message); return; }
   const cuit = RDET.cuit, pv = RDET.pv, num = RDET.num;
   await abrirRemitoDetalle(cuit, pv, num);
   if (RDET) { RDET._cambio = true; _rdetPintar(); }
@@ -7106,7 +7110,7 @@ async function guardarSucursal(i){
   const {error} = await sb.from('compras_sucursales')
     .update({nombre: x.nombre.trim(), codigo_txt: x.codigo_txt.trim(), activo: x.activo})
     .eq('clave', x.clave);
-  if (error){ alert('No se pudo guardar: ' + error.message); return; }
+  if (error){ avisoError('No se pudo guardar: ' + error.message); return; }
   pintarSucursales();
 }
 async function nuevaSucursal(){
@@ -7116,7 +7120,7 @@ async function nuevaSucursal(){
   const clave = nombre.toLowerCase().replace(/[^a-z0-9]/g,'');
   const {error} = await sb.from('compras_sucursales')
     .insert({clave, nombre, codigo_txt: codigo, orden: SUCS.length + 1});
-  if (error){ alert('No se pudo agregar: ' + error.message); return; }
+  if (error){ avisoError('No se pudo agregar: ' + error.message); return; }
   await cargarSucursales();
   pintarSucursales();
 }
@@ -7189,7 +7193,7 @@ async function guardarRemito(){
   const {error} = await sb.rpc('compras_cargar_remito', {
     p_cuit: cuit, p_punto_venta: pv, p_numero: num,
     p_fecha: fecha, p_destino: dest, p_lineas: lineas, p_prueba: MODO_PRUEBA});
-  if (error){ alert('No se pudo guardar: ' + error.message); return; }
+  if (error){ avisoError('No se pudo guardar: ' + error.message); return; }
   // 🚨 (20-sep) el TXT lo arma la base con el formato REAL del importador
   // (DESTINO;PV;NUMERO + "    cant+SKU", CRLF) — antes se armaba acá con un
   // formato inventado que el Dragonfish no tomaba.
@@ -7386,7 +7390,7 @@ async function altaConcepto(){
   if (!cod || !desc){ alert('Completá SKU y descripción.'); return; }
   const {error} = await sb.rpc('compras_crear_concepto',
     {p_codigo: cod, p_descripcion: desc, p_alicuota: document.getElementById('ac-alic').value});
-  if (error){ alert('No se pudo crear: ' + error.message); return; }
+  if (error){ avisoError('No se pudo crear: ' + error.message); return; }
   // (v131) el nuevo tiene 0 usos y quedaría al final: lo dejamos buscado para que se vea
   concBusca = cod;
   vistaConceptos();
@@ -7396,7 +7400,7 @@ async function guardarConcepto(cod){
         alic = document.getElementById('ca-'+cod).value,
         act  = document.getElementById('cx-'+cod).checked;
   const {error} = await sb.from('compras_conceptos').update({descripcion: desc, alicuota: alic, activo: act}).eq('codigo', cod);
-  if (error){ alert('No se pudo guardar: ' + error.message); return; }
+  if (error){ avisoError('No se pudo guardar: ' + error.message); return; }
   const x = CONC_LISTA.find(y=>y.codigo===cod);
   if (x){ x.descripcion=desc; x.alicuota=alic; x.activo=act; }
   const tr = document.getElementById('cr-'+cod); if (tr) tr.style.opacity = act ? '' : '.5';
@@ -7414,7 +7418,7 @@ async function guardarConcepto(cod){
 //  Si el SKU destino ya existe, es una FUSIÓN y hay que confirmarla aparte.
 async function abrirRenombreSKU(cod){
   const {data, error} = await sb.rpc('compras_concepto_impacto', {p_codigo: cod});
-  if (error){ alert('No se pudo leer el concepto: ' + error.message); return; }
+  if (error){ avisoError('No se pudo leer el concepto: ' + error.message); return; }
   const i = data || {};
   const n = v => Number(v || 0).toLocaleString('es-AR');
   openModalP(`
@@ -7473,7 +7477,7 @@ async function confirmarRenombreSKU(cod){
   const {data, error} = await sb.rpc('compras_concepto_renombrar',
     {p_viejo: cod, p_nuevo: nuevo, p_motivo: motivo || null, p_fusionar: fusiona});
   if (error){
-    alert('No se pudo cambiar: ' + error.message);
+    avisoError('No se pudo cambiar: ' + error.message);
     if (btn){ btn.disabled = false; btn.textContent = 'Cambiar el SKU'; }
     return;
   }
@@ -7566,7 +7570,7 @@ async function guardarAvisoMotor(docId){
   const d = (enControl && enControl.id === docId) ? enControl : (BANDEJA.find(x => x.id === docId) || DOCS.find(x => x.id === docId) || {});
   const {error} = await sb.from('compras_motor_feedback').insert({documento_id: docId, archivo_path: d.archivo_path || null,
     proveedor_cuit: d.cuit_emisor || d.proveedor_cuit || null, proveedor_nombre: d.proveedor_nombre || null, texto: txt, por: session.email || null});
-  if (error){ alert('No se pudo guardar el aviso: ' + error.message); return; }
+  if (error){ avisoError('No se pudo guardar el aviso: ' + error.message); return; }
   document.getElementById('nota-overlay')?.remove();
   alert('Aviso guardado: le llega a JP.');
 }
@@ -7601,7 +7605,7 @@ async function resolverAvisoMotor(id){
   const nota = prompt('¿Qué se ajustó? (una línea, queda a la vista de quien avisó)');
   if (nota === null) return;
   const {error} = await sb.from('compras_motor_feedback').update({estado: 'resuelto', resuelto_at: new Date().toISOString(), resuelto_por: session.email || null, resuelto_nota: nota || null}).eq('id', id);
-  if (error){ alert(error.message); return; }
+  if (error){ avisoError(error.message); return; }
   const cuerpo = document.getElementById('avisos-motor-cuerpo');
   if (cuerpo){ cuerpo.innerHTML = await _avisosMotorHTML(); AVISOS_MOTOR_PEND = Math.max(0, AVISOS_MOTOR_PEND - 1); }
   else vistaConfig();
@@ -7611,7 +7615,7 @@ async function guardarNotaDoc(docId, desde, borrar){
   if (borrar && !confirm('¿Borrar la nota de este comprobante?')) return;
   const datos = txt ? {nota: txt, nota_por: session.email || null, nota_at: new Date().toISOString()} : {nota: null, nota_por: null, nota_at: null};
   const {error} = await sb.from('compras_documentos').update(datos).eq('id', docId);
-  if (error){ alert('No se pudo guardar la nota: ' + error.message); return; }
+  if (error){ avisoError('No se pudo guardar la nota: ' + error.message); return; }
   [enControl && enControl.id === docId ? enControl : null, DOCS.find(x => x.id === docId)].filter(Boolean).forEach(x => Object.assign(x, datos));
   document.getElementById('nota-overlay')?.remove();
   const b = document.getElementById('ctrl-nota-btn');
@@ -7800,7 +7804,7 @@ async function guardarSinFactura(){
     p_proveedor: g('sf-prov').trim() || null,
     p_estado_pago: g('sf-estado'),
   });
-  if (error){ alert('No se pudo cargar: ' + error.message); return; }
+  if (error){ avisoError('No se pudo cargar: ' + error.message); return; }
   document.getElementById('sf-overlay').remove();
   await cargarTodo();
   irA('facturas');
@@ -7813,7 +7817,7 @@ async function cambiarEstadoPago(docId, estado){
   if (volvia && !confirm('Al ponerlo en "' + (EPAGO[estado]?.tx || estado) + '" el comprobante VUELVE a la Bandeja para controlarlo de nuevo, y el PDF se muda a esa carpeta del OneDrive.\n\n¿Seguir?')) return;
   const {data, error} = await sb.from('compras_documentos')
     .update({estado_pago: estado}).eq('id', docId).select('estado,estado_pago').single();
-  if (error){ alert('No se pudo cambiar: ' + error.message); return; }
+  if (error){ avisoError('No se pudo cambiar: ' + error.message); return; }
   const d = DOCS.find(x=>x.id===docId);
   if (d){ d.estado_pago = data.estado_pago; d.estado = data.estado; }
   if (data.estado !== 'aprobada'){
@@ -7866,6 +7870,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="pedidos.js?v=17"></script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=153"></script>
+<script src="manual.js?v=154"></script>
 </body>
 </html>
