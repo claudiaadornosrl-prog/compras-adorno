@@ -896,6 +896,9 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 #eqi-overlay .c-pie{display:flex;gap:8px;align-items:center;padding:12px 17px;border-top:1px solid var(--bd);position:sticky;bottom:0;background:#fff;border-radius:0 0 14px 14px;}
 #eqi-overlay thead th{position:sticky;top:0;background:#fff;z-index:1;}
 #map-overlay{z-index:10000!important}
+/* (19-nov, JP) Clodi siempre adelante, también con una subventana abierta (las ventanas usan z-index 9998–10090;
+   el bloque compartido de Clodi la deja en 9000/9001 y no se edita a mano en el módulo) */
+.asist-fab{z-index:10150!important}.asist-panel{z-index:10151!important}
 .fx-eq-btn{font-size:11.5px!important;padding:2px 8px!important;margin-left:4px;vertical-align:middle}
 #ctrl-overlay,#map-overlay,#res-overlay,#merc-overlay,#sf-overlay,#rem-overlay,#suc-overlay,#rdet-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9998;display:flex;
   align-items:flex-start;justify-content:center;padding:18px 12px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
@@ -7948,6 +7951,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="tablas.js?v=2"></script><!-- (19-nov, JP) títulos fijos, ordenar/filtrar/ocultar columnas y ventanas estirables -->
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=158"></script>
+<script src="manual.js?v=159"></script>
 </body>
 </html>
