@@ -1433,6 +1433,7 @@ const ICONOS = {
   mail: '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>',
   telefono: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"/>',
   lupa: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  cambiar: '<path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>',
   basura: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   iva: '<text x="12" y="16.5" text-anchor="middle" font-size="11.5" font-weight="800" stroke="none" fill="currentColor" font-family="inherit">IVA</text>',
   paleta: '<circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>',
@@ -1671,6 +1672,8 @@ function render(){
 //  alícuota, sale $0 y lo dice. Los avisos se muestran SIEMPRE, antes de emitir.
 // ═══════════════════════════════════════════════════════════════════════
 let OP_PROVS = null, OP_LISTA = null, opSel = null, opDocs = [], opPrep = null, opRets = [], opPagos = [], OP_CUENTAS = null;
+// (19-nov, JP) categorías de retención elegidas en la orden (null = las de la ficha del proveedor o la que propone el sistema)
+let opRegs = null, opCarry = null;
 
 async function vistaOrdenes(){
   const c = document.getElementById('cont');
@@ -1837,7 +1840,7 @@ const _diasDesde = f => {
 };
 
 async function abrirOP(cuit){
-  opSel = cuit; opPrep = null; opRets = []; opPagos = []; opVencManual = false; opImportes = {}; opIncluir = []; _opPaAbierto = false;
+  opSel = cuit; opPrep = null; opRets = []; opPagos = []; opRegs = null; opCarry = null; opVencManual = false; opImportes = {}; opIncluir = []; _opPaAbierto = false;
   // el catálogo de regímenes lo carga la pestaña ⚙️; si nunca la abrieron, acá
   if (!REGIMENES.length){
     const rg = await sb.from('compras_regimenes').select('*').order('codigo');
@@ -1973,7 +1976,8 @@ async function _opCalcular(){
   cont.innerHTML = '<div class="vacio">Calculando…</div>';
   const {data, error} = await sb.rpc('compras_op_preparar',
     {p_cuit: opSel, p_docs: opDocs, p_fecha: document.getElementById('op-fecha')?.value || null,
-     p_prueba: MODO_PRUEBA, p_descuento_pct: _opDescPct(), p_importes: _opImps(), p_incluir_pagos: opIncluir.length ? opIncluir : null});
+     p_prueba: MODO_PRUEBA, p_descuento_pct: _opDescPct(), p_importes: _opImps(), p_incluir_pagos: opIncluir.length ? opIncluir : null,
+     p_regimenes: opRegs});
   if (error){
     opPrep = null; if (btn) btn.disabled = true;
     cont.innerHTML = `<div class="alerta">${esc(error.message)}</div>`; return;
@@ -1981,11 +1985,18 @@ async function _opCalcular(){
   opPrep = data; if (btn) btn.disabled = false;
   // copia de trabajo: acá es donde se pueden tocar los importes a mano
   opRets = (data.retenciones || []).map(x => ({
-    codigo: x.codigo, nombre: x.nombre, propuesto: !!x.propuesto,
+    codigo: x.codigo, nombre: x.nombre, propuesto: !!x.propuesto, impuesto: x.impuesto, elegida: !!x.elegida,
     alicuota: x.alicuota, aviso: x.aviso,
     importe: Number(x.importe || 0), calculado: Number(x.importe || 0),
     motivo_edicion: '', agregada: false,
     calculo: Array.isArray(x.calculo) ? x.calculo : [] }));
+  // (19-nov, JP) al cambiar la categoría de una retención, las demás conservan lo que se les había tocado (eliminada / importe a mano)
+  if (opCarry){
+    for (const r of opRets){ const c = opCarry[r.codigo]; if (!c) continue;
+      if (c.eliminada){ r.eliminada = true; r.importe = 0; r.motivo_edicion = c.motivo_edicion; }
+      else if (c.editada){ r.importe = c.importe; r.motivo_edicion = c.motivo_edicion; } }
+    opCarry = null;
+  }
   if (!opPagos.length) opPagos = [{medio: '', importe: 0, cuenta_id: null, cheque_numero: '', cheque_banco: '', cheque_fecha: '', cheque_emision: '', dias_diferimiento: '', notas: ''}];
   if (opPagos.length === 1) opPagos[0].importe = Math.round(_opNeto() * 100) / 100;
   if (OP_CUENTAS === null){
@@ -2310,6 +2321,8 @@ function _opPintarRets(){
           ${r.alicuota ? ` <span class="mini">${Number(r.alicuota)}%</span>` : ''}
           ${r.propuesto ? ` <span class="mini" title="Propuesta por el sistema según el régimen del proveedor" style="cursor:help">${ico('info','s')}</span>` : ''}
           ${r.agregada ? ' <span class="chip" style="background:#e0e7ff;color:#3730a3">agregada</span>' : ''}
+          ${r.elegida ? ' <span class="chip" style="background:#e0e7ff;color:#3730a3;cursor:help" title="Categoría elegida en esta orden: se calculó con sus reglas (base, acumulado del mes, mínimo, escala)">elegida</span>' : ''}
+          ${_opRetOtras(r).length ? `<span class="op-mas"><button class="act op-ico" title="Cambiar la categoría de esta retención: se recalcula sola" onclick="this.nextElementSibling.style.display='';this.style.display='none'">${ico('cambiar','s')}</button><select style="display:none;font-size:12px;padding:4px 7px;max-width:260px" onchange="_opRetCambiar(${i}, this.value)"><option value="">Cambiar por…</option>${_opRetOtras(r).map(x => `<option value="${esc(x.codigo)}">${esc(x.codigo)} · ${esc(x.nombre)}</option>`).join('')}</select></span>` : ''}
           <span class="chip" id="op-mano-${i}" style="background:#fee2e2;color:#991b1b;${ed?'':'display:none'}">a mano</span>
           ${i === opRets.length - 1 && libres.length ? `<span class="op-mas"><button class="act op-ico" title="Agregar otra retención" onclick="this.nextElementSibling.style.display='';this.style.display='none'">${ico('mas','s')}</button><select style="display:none;font-size:12px;padding:4px 7px;max-width:260px" onchange="_opRetAgregar(this.value)"><option value="">Régimen…</option>${libres.map(x => `<option value="${esc(x.codigo)}">${esc(x.codigo)} · ${esc(x.nombre)}</option>`).join('')}</select></span>` : ''}
           ${r.aviso ? `<br><span class="mini" style="color:#b45309">${esc(r.aviso)}</span>` : ''}
@@ -2323,7 +2336,7 @@ function _opPintarRets(){
           <input type="number" step="0.01" min="0" id="op-imp-${i}" value="${Number(r.importe)||0}"
                  oninput="_opRetImporte(${i}, this.value)"
                  style="width:118px;text-align:right;display:inline-block;padding:4px 7px">
-          ${r.agregada
+          ${(r.agregada || r.elegida)
             ? `<button class="act gh" onclick="_opRetQuitar(${i})" title="Quitar" style="padding:2px 7px;margin-left:3px">✕</button>`
             : `<button class="act op-ico" onclick="_opRetReset(${i})" title="Volver a lo calculado">${ico('refrescar','s')}</button><button class="act op-ico" onclick="_opRetEliminar(${i})" title="Eliminar esta retención de la orden" style="background:var(--bad)">${ico('anular','s')}</button>`}
         </td></tr>`; }).join('')
@@ -2331,7 +2344,8 @@ function _opPintarRets(){
       <tr style="font-weight:700;border-top:2px solid var(--bd)">
         <td>Neto a pagar</td>
         <td class="num" style="font-size:16px" id="op-neto">${plata(_opNeto())}</td></tr>
-    </tbody></table>`;
+    </tbody></table>
+    ${opRegs ? `<div style="margin-top:6px"><button class="act gh" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 12px;border-radius:999px" onclick="_opRegsAuto()" title="Volver a calcular con la categoría de la ficha del proveedor (o la que propone el sistema)">${ico('refrescar','s')} Volver a la categoría propuesta</button></div>` : ''}`;
 }
 
 function _opRetImporte(i, val){
@@ -2361,11 +2375,8 @@ function _opRetReset(i){
 
 function _opRetAgregar(cod){
   if (!cod) return;
-  const reg = (REGIMENES||[]).find(r => r.codigo === cod); if (!reg) return;
-  opRets.push({codigo: reg.codigo, nombre: reg.nombre, propuesto: false,
-    alicuota: null, aviso: null, importe: 0, calculado: 0,
-    motivo_edicion: '', agregada: true});
-  _opPintarRets();
+  // (19-nov, JP) la que se agrega también se calcula con sus reglas (antes entraba en $0 para ponerla a mano)
+  _opRegsRecalcular(opRets.map(x => x.codigo).concat(cod));
 }
 
 function _opRetMotivo(i, val){ if (opRets[i]) opRets[i].motivo_edicion = val; }
@@ -2392,7 +2403,30 @@ function _opRetsCambio(){
   if (opPagos.length === 1) opPagos[0].importe = Math.round(_opNeto()*100)/100;
   _opPintarRets(); _opPintarPagos();
 }
-function _opRetQuitar(i){ opRets.splice(i,1); _opRetsCambio(); }
+function _opRetQuitar(i){
+  if (opRegs || opRets[i]?.elegida){ const lista = opRets.map(x => x.codigo); lista.splice(i, 1); _opRegsRecalcular(lista); return; }
+  opRets.splice(i,1); _opRetsCambio();
+}
+// (19-nov, JP) «Cuando yo cambie la categoría, que me haga el recálculo en la nueva categoría.»
+// La orden manda la lista de regímenes elegidos (opRegs) a compras_op_preparar / compras_op_emitir y la base calcula
+// cada uno con sus reglas (base, acumulado del mes, mínimo no imponible, escala, certificado de exclusión, alícuota de
+// la ficha). Queda anotado en los avisos de la orden y en el cálculo de la retención qué proponía el sistema.
+function _opRetOtras(r){
+  const en = new Set(opRets.map(x => x.codigo));
+  return (REGIMENES||[]).filter(x => x.activo && x.codigo !== r.codigo && !en.has(x.codigo) && (!r.impuesto || x.impuesto === r.impuesto));
+}
+function _opRegsRecalcular(lista){
+  opCarry = {};
+  for (const r of opRets) opCarry[r.codigo] = {eliminada: !!r.eliminada, editada: !r.eliminada && _opEditada(r), importe: r.importe, motivo_edicion: r.motivo_edicion || ''};
+  opRegs = [...new Set(lista)];
+  _opCalcular();
+}
+function _opRetCambiar(i, cod){
+  if (!cod || !opRets[i]) return;
+  const lista = opRets.map(x => x.codigo); lista[i] = cod;
+  _opRegsRecalcular(lista);
+}
+function _opRegsAuto(){ opRegs = null; opCarry = null; _opCalcular(); }
 
 async function emitirOP(){
   if (!opPrep){ alert('Todavía no se calculó la orden.'); return; }
@@ -2445,7 +2479,8 @@ async function emitirOP(){
       notas: (p.notas||'').trim() || null})),
     p_retenciones: opRets.map(r => ({codigo: r.codigo, importe: Number(r.importe)||0,
                                      motivo_edicion: (r.motivo_edicion||'').trim() || null})),
-    p_prueba: MODO_PRUEBA, p_descuento_pct: Number(opPrep.descuento_pct) > 0 ? Number(opPrep.descuento_pct) : null, p_importes: _opImps(), p_incluir_pagos: opIncluir.length ? opIncluir : null });
+    p_prueba: MODO_PRUEBA, p_descuento_pct: Number(opPrep.descuento_pct) > 0 ? Number(opPrep.descuento_pct) : null, p_importes: _opImps(), p_incluir_pagos: opIncluir.length ? opIncluir : null,
+    p_regimenes: opRegs });
   if (error){
     avisoError('No se pudo emitir: ' + error.message);
     if (btn){ btn.disabled = false; btn.textContent = 'Emitir orden de pago'; }
@@ -7951,6 +7986,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="tablas.js?v=2"></script><!-- (19-nov, JP) títulos fijos, ordenar/filtrar/ocultar columnas y ventanas estirables -->
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=159"></script>
+<script src="manual.js?v=160"></script>
 </body>
 </html>
