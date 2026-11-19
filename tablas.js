@@ -18,6 +18,10 @@
 //   · el embudito del título abre el menú: ordenar, buscar, elegir valores,
 //     desde/hasta (números y fechas), ocultar la columna y ver las ocultas.
 //   · una barrita arriba de la tabla cuando hay filtros u ocultas, para sacarlos.
+//   · (19-nov, JP: «que las pueda agrandar o achicar arrastrándolas, como Excel») el borde
+//     derecho de cada título se arrastra para cambiar el ancho de la columna; doble clic en ese
+//     borde (o «Anchos automáticos» en el menú) vuelve al ancho que se acomoda solo. Los anchos
+//     se recuerdan en esta computadora (localStorage adorno.tt.anchos.*).
 //  Y a las ventanas (#prov-modal y los *-overlay) les hace estirables los
 //  bordes y las puntas (doble clic en el borde: vuelve al tamaño original).
 //
@@ -60,15 +64,21 @@ th.tt-col:not(.tt-ordenable){cursor:default}
 th .tt-menu{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin:-4px -4px -4px 2px;padding:0;border:0;
   background:transparent;border-radius:999px;color:inherit;opacity:.32;cursor:pointer;vertical-align:middle;transition:opacity .15s,background .15s,color .15s}
 th:hover .tt-menu,th .tt-menu:focus-visible,th .tt-menu.abierto{opacity:.95}
-th .tt-menu:hover,th .tt-menu.abierto{background:rgba(234,88,12,.13);color:var(--primary,#ea580c)}
-th .tt-menu.on{opacity:1;color:var(--primary,#ea580c)}
+th .tt-menu:hover,th .tt-menu.abierto{background:rgba(176,122,85,.13);color:var(--primary,#B07A55)}
+th .tt-menu.on{opacity:1;color:var(--primary,#B07A55)}
 th .tt-menu.on svg{fill:currentColor}
 th .tt-menu svg,.tt-ico{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;flex:none}
-th .tt-flecha{color:var(--primary,#ea580c);font-size:9px;margin-left:3px;vertical-align:1px}
+th .tt-flecha{color:var(--primary,#B07A55);font-size:9px;margin-left:3px;vertical-align:1px}
 th .tt-flecha:empty{display:none}
 @media (hover:none){th .tt-menu{opacity:.6}}
 .tt-oc{display:none!important}
 tr.tt-fuera{display:none!important}
+th .tt-ancho{position:absolute;top:0;right:0;width:9px;height:100%;cursor:col-resize;z-index:2;touch-action:none}
+th .tt-ancho::after{content:'';position:absolute;top:18%;bottom:18%;right:3px;width:2px;border-radius:2px;background:transparent;transition:background .15s}
+th:hover>.tt-ancho::after{background:var(--bd,#e2e8f0)}
+th>.tt-ancho:hover::after,th>.tt-ancho.activo::after{background:var(--primary,#B07A55)}
+table.tt-anchos>*>tr>th,table.tt-anchos>*>tr>td:not(:has(.sku-sug,.op-tip)){overflow:hidden;text-overflow:ellipsis}
+html.tt-col-res,html.tt-col-res *{cursor:col-resize!important}
 #tt-pop{position:fixed;z-index:10200;width:290px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;background:#fff;color:var(--tx,#0f172a);
   border:1px solid var(--bd,#e2e8f0);border-radius:24px;box-shadow:0 16px 44px rgba(15,23,42,.24);padding:12px 12px 10px;font-family:inherit;font-size:13px;
   text-transform:none;letter-spacing:0;font-weight:400;text-align:left;white-space:normal;line-height:1.3;cursor:default}
@@ -78,41 +88,41 @@ tr.tt-fuera{display:none!important}
 #tt-pop .tt-fila{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
 #tt-pop button.tt-p{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--bd,#e2e8f0);background:#fff;border-radius:999px;padding:6px 12px;
   font:inherit;font-size:12.5px;cursor:pointer;color:var(--tx,#0f172a);white-space:nowrap}
-#tt-pop button.tt-p:hover{border-color:var(--primary,#ea580c);color:var(--primary-dark,#c2410c)}
-#tt-pop button.tt-p.on{background:#fff7ed;border-color:var(--primary,#ea580c);color:var(--primary-dark,#c2410c);font-weight:700}
+#tt-pop button.tt-p:hover{border-color:var(--primary,#B07A55);color:var(--primary-dark,#8A5F42)}
+#tt-pop button.tt-p.on{background:#F7F1EC;border-color:var(--primary,#B07A55);color:var(--primary-dark,#8A5F42);font-weight:700}
 #tt-pop button.tt-p.solo{border-color:transparent;background:transparent}
-#tt-pop button.tt-p.solo:hover{background:#fff7ed}
+#tt-pop button.tt-p.solo:hover{background:#F7F1EC}
 #tt-pop input.tt-in{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:7px 14px;border:1px solid var(--bd,#e2e8f0);border-radius:999px;outline:none;background:#fff;color:inherit}
-#tt-pop input.tt-in:focus{border-color:var(--primary,#ea580c)}
+#tt-pop input.tt-in:focus{border-color:var(--primary,#B07A55)}
 #tt-pop .tt-rango{display:flex;gap:6px;margin:6px 0 2px}
 #tt-pop .tt-rango input{min-width:0;flex:1;padding:6px 10px;font-size:12.5px}
 #tt-pop .tt-vals{max-height:228px;overflow:auto;margin:8px 0 4px;padding:2px 0}
 #tt-pop label.tt-v{display:flex;align-items:center;gap:9px;padding:5px 9px;border-radius:999px;cursor:pointer;margin:0;font-size:13px;color:inherit;font-weight:400}
-#tt-pop label.tt-v:hover{background:#fff7ed}
+#tt-pop label.tt-v:hover{background:#F7F1EC}
 #tt-pop label.tt-v .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #tt-pop label.tt-v .t.vacia{color:var(--mut,#64748b);font-style:italic}
 #tt-pop label.tt-v .n{color:var(--mut,#64748b);font-size:11.5px;font-variant-numeric:tabular-nums}
 #tt-pop label.tt-v.todos{font-weight:700}
 #tt-pop input[type=checkbox]{-webkit-appearance:none;appearance:none;width:17px;height:17px;border:1.5px solid #cbd5e1;border-radius:50%;margin:0;flex:none;
   background:#fff center/11px no-repeat;cursor:pointer;padding:0}
-#tt-pop input[type=checkbox]:checked{background-color:var(--primary,#ea580c);border-color:var(--primary,#ea580c);
+#tt-pop input[type=checkbox]:checked{background-color:var(--primary,#B07A55);border-color:var(--primary,#B07A55);
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E")}
-#tt-pop input[type=checkbox]:indeterminate{border-color:var(--primary,#ea580c);
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ea580c' stroke-width='3.4' stroke-linecap='round'%3E%3Cline x1='6' y1='12' x2='18' y2='12'/%3E%3C/svg%3E")}
+#tt-pop input[type=checkbox]:indeterminate{border-color:var(--primary,#B07A55);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23B07A55' stroke-width='3.4' stroke-linecap='round'%3E%3Cline x1='6' y1='12' x2='18' y2='12'/%3E%3C/svg%3E")}
 #tt-pop .tt-sep{height:1px;background:#f1f5f9;margin:8px 2px}
 #tt-pop .tt-nota{font-size:11.5px;color:var(--mut,#64748b);margin:4px 8px}
 #tt-pop .tt-pie{display:flex;gap:6px;flex-wrap:wrap;justify-content:space-between;margin-top:6px}
 #tt-pop details.tt-cols>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:7px;padding:6px 9px;border-radius:999px;font-size:12.5px;color:var(--mut,#64748b);font-weight:700}
 #tt-pop details.tt-cols>summary::-webkit-details-marker{display:none}
-#tt-pop details.tt-cols>summary:hover{background:#fff7ed;color:var(--primary-dark,#c2410c)}
+#tt-pop details.tt-cols>summary:hover{background:#F7F1EC;color:var(--primary-dark,#8A5F42)}
 #tt-pop details.tt-cols>summary .tt-ico.ch{transition:transform .15s}
 #tt-pop details.tt-cols[open]>summary .tt-ico.ch{transform:rotate(90deg)}
 #tt-pop details.tt-cols .tt-vals{max-height:200px}
 .tt-barra{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:2px 0 8px;font-size:12.5px;color:var(--mut,#64748b);text-transform:none;letter-spacing:0}
-.tt-barra .tt-chip{display:inline-flex;align-items:center;gap:6px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;border-radius:999px;padding:3px 4px 3px 11px;white-space:nowrap}
+.tt-barra .tt-chip{display:inline-flex;align-items:center;gap:6px;background:#F7F1EC;color:#7F583D;border:1px solid #E7D7CC;border-radius:999px;padding:3px 4px 3px 11px;white-space:nowrap}
 .tt-barra .tt-chip .tt-ico{width:13px;height:13px}
-.tt-barra button{display:inline-flex;align-items:center;gap:4px;border:0;background:transparent;color:var(--primary-dark,#c2410c);font:inherit;font-weight:700;cursor:pointer;border-radius:999px;padding:3px 9px}
-.tt-barra button:hover{background:#ffedd5}
+.tt-barra button{display:inline-flex;align-items:center;gap:4px;border:0;background:transparent;color:var(--primary-dark,#8A5F42);font:inherit;font-weight:700;cursor:pointer;border-radius:999px;padding:3px 9px}
+.tt-barra button:hover{background:#F2EAE4}
 .tt-barra .tt-aviso{font-size:11.5px}
 html[data-tt-borde="n"],html[data-tt-borde="n"] *,html[data-tt-borde="s"],html[data-tt-borde="s"] *{cursor:ns-resize!important}
 html[data-tt-borde="e"],html[data-tt-borde="e"] *,html[data-tt-borde="w"],html[data-tt-borde="w"] *{cursor:ew-resize!important}
@@ -206,6 +216,9 @@ const ESTADO = new Map();              // clave → {orden:{id,dir}|null, filtro
 const LS = 'adorno.tt.ocultas.' + ((location.pathname.split('/').filter(Boolean)[0]) || 'raiz') + '.';
 function ocultasDe(clave){ try { return new Set(JSON.parse(localStorage.getItem(LS + clave) || '[]')); } catch (e){ return new Set(); } }
 function guardarOcultas(T){ try { if (T.oc.size) localStorage.setItem(LS + T.clave, JSON.stringify([...T.oc])); else localStorage.removeItem(LS + T.clave); } catch (e){} }
+const LSA = 'adorno.tt.anchos.' + ((location.pathname.split('/').filter(Boolean)[0]) || 'raiz') + '.';
+function anchosDe(clave){ try { return JSON.parse(localStorage.getItem(LSA + clave) || 'null'); } catch (e){ return null; } }
+function guardarAnchos(T){ try { if (T.w) localStorage.setItem(LSA + T.clave, JSON.stringify(T.w)); else localStorage.removeItem(LSA + T.clave); } catch (e){} }
 function estadoDe(clave){ let s = ESTADO.get(clave); if (!s){ s = {orden: null, filtros: {}}; ESTADO.set(clave, s); } return s; }
 const activo = f => !!(f && (f.q || (f.excl && f.excl.size) || f.desde != null || f.hasta != null));
 let ocupado = 0;
@@ -331,6 +344,7 @@ function aplicar(T){
       if (T.st.orden || T.desordenado) ordenarFilas(T, U);
     }
     marcarOcultas(T);
+    if (T.w) pintarAnchos(T);
     pintarTitulos(T);
     pintarBarra(T);
   } finally { ocupado--; obs.takeRecords(); }
@@ -384,8 +398,13 @@ function marcarOcultas(T){
 // ── títulos: flechita de orden + embudito del menú ──
 function armarTitulos(T){
   for (const col of T.cols){
-    if (!col.util) continue;
     const th = col.th;
+    if (!th.querySelector(':scope > .tt-ancho')){   // borde derecho del título: se arrastra para cambiar el ancho
+      const h = document.createElement('span'); h.className = 'tt-ui tt-ancho';
+      h.title = 'Arrastrá para agrandar o achicar la columna · doble clic: ancho automático';
+      th.appendChild(h);
+    }
+    if (!col.util) continue;
     th.classList.add('tt-col');
     if (!T.ordenApp) th.classList.add('tt-ordenable');
     if (th.querySelector(':scope > .tt-menu')) continue;
@@ -398,6 +417,42 @@ function armarTitulos(T){
     for (const ch of th.children){ if (ch.classList.contains('tt-ui')) continue; const d = getComputedStyle(ch).display; if (d === 'block' || d === 'flex') { antes = ch; break; } }
     th.insertBefore(fl, antes); th.insertBefore(b, antes);
   }
+}
+
+// ── ancho de las columnas (como en Excel) ──
+// La primera vez que se estira una columna, la tabla «congela» los anchos que tenía (table-layout:fixed,
+// ancho = suma de las columnas); desde ahí cada columna mide lo que se le dé. Se recuerda en esta computadora.
+function congelar(T, guardados){
+  const t = T.t;
+  for (const c of T.cols) if (c.th._ttW0 == null) c.th._ttW0 = c.th.style.width;
+  if (t._ttW0 == null) t._ttW0 = t.style.width;
+  t.classList.remove('tt-anchos'); t.style.tableLayout = ''; t.style.width = t._ttW0;
+  for (const c of T.cols) c.th.style.width = c.th._ttW0;
+  const medidas = T.cols.map(c => c.th.classList.contains('tt-oc') ? 0 : Math.round(c.th.getBoundingClientRect().width));
+  T.w = {};
+  T.cols.forEach((c, i) => { const g = guardados && Number(guardados[c.id]); T.w[c.id] = g > 0 ? g : medidas[i]; });
+  pintarAnchos(T);
+}
+function pintarAnchos(T){
+  if (!T.w) return;
+  let suma = 0;
+  for (const c of T.cols){
+    if (c.th.classList.contains('tt-oc')) continue;
+    if (!(T.w[c.id] > 0)) T.w[c.id] = 120;   // columna que estaba oculta cuando se congeló
+    const v = T.w[c.id] + 'px'; if (c.th.style.width !== v) c.th.style.width = v;
+    suma += T.w[c.id];
+  }
+  const t = T.t, v = suma + 'px';
+  if (t.style.tableLayout !== 'fixed') t.style.tableLayout = 'fixed';
+  if (t.style.width !== v) t.style.width = v;
+  if (!t.classList.contains('tt-anchos')) t.classList.add('tt-anchos');
+}
+function anchosAuto(T){
+  const t = T.t;
+  T.w = null; T.anchosPend = null; guardarAnchos(T);
+  t.classList.remove('tt-anchos'); t.style.tableLayout = ''; t.style.width = t._ttW0 || '';
+  for (const c of T.cols) if (c.th._ttW0 != null) c.th.style.width = c.th._ttW0;
+  programarFijo(T);
 }
 function pintarTitulos(T){
   const o = T.st.orden;
@@ -505,6 +560,7 @@ function prepararFijo(T){
   if (!t.isConnected || !t.offsetWidth || !t.tHead) return;   // escondida: la vuelve a llamar el ResizeObserver
   ocupado++;
   try {
+    if (T.anchosPend && !T.w){ congelar(T, T.anchosPend); T.anchosPend = null; }   // anchos guardados de esta tabla
     let sc = null;
     for (let el = t.parentElement; el && el !== document.body && el !== document.documentElement; el = el.parentElement){
       if (el.classList.contains('tt-clip')) continue;
@@ -571,6 +627,7 @@ function mejorar(t){
   T.ordenApp = [...info.fila.cells].some(c => /orden/i.test(c.getAttribute('onclick') || ''));
   if (T.ordenApp) T.st.orden = null;
   if (T.soloFijo){ T.cols = []; T.colPorId = {}; }
+  else { const a = anchosDe(T.clave); if (a && typeof a === 'object') T.anchosPend = a; }
   t._tt = T; t.classList.add('tt');
   REG.add(T);
   ocupado++;
@@ -669,6 +726,7 @@ function pintarMenu(){
     </div>
     <details class="tt-cols"${P.colsAbierto ? ' open' : ''}><summary>${svg('chev', 'ch')}${svg('columnas')}Columnas${nOc ? ` · ${nOc} oculta${nOc > 1 ? 's' : ''}` : ''}</summary>
       <div class="tt-vals">${otras.map(c => `<label class="tt-v"><input type="checkbox" data-col="${escH(c.id)}"${T.oc.has(c.id) ? '' : ' checked'}><span class="t">${escH(c.nombre)}</span></label>`).join('')}</div>
+      ${T.w ? `<button type="button" class="tt-p solo" data-a="anchos" title="Las columnas vuelven al ancho que se acomoda solo">${svg('columnas')}Anchos automáticos</button>` : ''}
     </details>`;
   const todos = P.el.querySelector('input[data-a="todos"]');
   todos.checked = nExcl === 0; todos.indeterminate = nExcl > 0 && nExcl < vals.length;
@@ -700,6 +758,7 @@ function alMenu(ev){
     if (a === 'asc' || a === 'desc'){ T.st.orden = {id: col.id, dir: a === 'asc' ? 1 : -1}; aplicar(T); pintarMenu(); return; }
     if (a === 'sinorden'){ T.st.orden = null; aplicar(T); pintarMenu(); return; }
     if (a === 'limpiar'){ delete T.st.filtros[col.id]; aplicar(T); pintarMenu(); return; }
+    if (a === 'anchos'){ anchosAuto(T); pintarMenu(); return; }
     if (a === 'ocultar'){ T.oc.add(col.id); guardarOcultas(T); if (T.st.filtros[col.id]) delete T.st.filtros[col.id]; cerrarMenu(); aplicar(T); programarFijo(T); return; }
     return;
   }
@@ -778,6 +837,44 @@ window.addEventListener('keydown', ev => {
 }, true);
 document.addEventListener('scroll', ev => { if (POP && !POP.el.contains(ev.target)) posicionar(); }, true);
 addEventListener('resize', () => { programarFijo(); if (POP) posicionar(); });
+
+// ── arrastrar el borde del título para cambiar el ancho de la columna ──
+let ANCHO = null;
+document.addEventListener('pointerdown', ev => {
+  const h = ev.target.closest && ev.target.closest('th > .tt-ancho'); if (!h) return;
+  if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+  const th = h.parentElement, t = th.closest('table'), T = t && t._tt; if (!T) return;
+  const col = T.cols.find(c => c.th === th); if (!col) return;
+  ev.preventDefault(); ev.stopPropagation();
+  cerrarMenu();
+  if (!T.w) congelar(T, null);
+  ANCHO = {T, col, h, x0: ev.clientX, w0: T.w[col.id], id: ev.pointerId, movio: false};
+  h.classList.add('activo');
+  document.documentElement.classList.add('tt-estirando', 'tt-col-res');
+  try { document.documentElement.setPointerCapture(ev.pointerId); } catch (e){}
+}, true);
+document.addEventListener('pointermove', ev => {
+  const A = ANCHO; if (!A || ev.pointerId !== A.id) return;
+  const w = Math.max(36, Math.round(A.w0 + ev.clientX - A.x0));
+  if (w === A.T.w[A.col.id]) return;
+  A.movio = true; A.T.w[A.col.id] = w; pintarAnchos(A.T);
+}, {passive: true});
+function soltarAncho(ev){
+  const A = ANCHO; if (!A || (ev && ev.pointerId !== A.id)) return;
+  ANCHO = null;
+  A.h.classList.remove('activo');
+  document.documentElement.classList.remove('tt-estirando', 'tt-col-res');
+  guardarAnchos(A.T);
+  tragarClick = true; setTimeout(() => { tragarClick = false; }, 0);   // que soltar no ordene la columna
+  programarFijo(A.T);
+}
+document.addEventListener('pointerup', soltarAncho, true);
+document.addEventListener('pointercancel', soltarAncho, true);
+document.addEventListener('dblclick', ev => {
+  const h = ev.target.closest && ev.target.closest('th > .tt-ancho'); if (!h) return;
+  ev.stopPropagation(); ev.preventDefault();
+  const T = h.closest('table') && h.closest('table')._tt; if (T) anchosAuto(T);
+}, true);
 
 // ═══ VENTANAS ESTIRABLES ═══════════════════════════════════════════════
 const OVS = '#prov-modal, [id$="-overlay"]';

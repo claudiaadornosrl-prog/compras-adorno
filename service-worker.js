@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v249-tablas';
+const CACHE_VERSION = 'compras-v250-color-anchos';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './firma-jp.jpg', './pedidos.js', './tablas.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

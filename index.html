@@ -638,7 +638,8 @@ window.ADORNO_SSO = (function () {
 .lp-rango label{display:flex;gap:5px;align-items:center}
 
 @font-face{font-family:'URW Gothic';src:url('fonts/URWGothic-Book.ttf') format('truetype');font-weight:300 700;font-display:swap;}
-:root{--primary:#ea580c;--primary-dark:#c2410c;--bg:#f8fafc;--card:#fff;--bd:#e2e8f0;--tx:#0f172a;--mut:#64748b;
+/* (19-nov, JP) color de Compras = el del banner común (hub/banner.css, #B07A55); antes naranja #ea580c */
+:root{--primary:#B07A55;--primary-dark:#8A5F42;--primary-bg:#F7F1EC;--primary-bd:#E7D7CC;--bg:#f8fafc;--card:#fff;--bd:#e2e8f0;--tx:#0f172a;--mut:#64748b;
       --ok:#16a34a;--warn:#d97706;--bad:#dc2626;--info:#2563eb;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'URW Gothic',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--tx);font-size:15px;}
@@ -665,7 +666,7 @@ header h1{font-size:17px;font-weight:700;}
 .fchip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--bd);background:#fff;border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit;color:var(--tx)}
 .fchip b{font-size:15px}
 .fchip .dot{width:9px;height:9px;border-radius:50%;background:var(--mut);flex:none}
-.fchip.on{border-color:var(--primary);background:#fff7ed;color:var(--primary-dark);font-weight:700}
+.fchip.on{border-color:var(--primary);background:#F7F1EC;color:var(--primary-dark);font-weight:700}
 /* Barra de acciones */
 .abar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
 .abar .estado{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mut);cursor:help}
@@ -676,9 +677,9 @@ header h1{font-size:17px;font-weight:700;}
 button.act.ico-btn{display:inline-flex;align-items:center;gap:7px}
 /* Tabla de la Bandeja: la fila es el botón */
 table.tb-band tbody tr{cursor:pointer}
-table.tb-band tbody tr:hover td{background:#fff7ed}
+table.tb-band tbody tr:hover td{background:#F7F1EC}
 tr.le-clic{cursor:pointer}
-.le-pan table tbody tr.le-clic:hover td{background:#fff7ed !important}
+.le-pan table tbody tr.le-clic:hover td{background:#F7F1EC !important}
 table.tb-band td.oculta-mov{white-space:nowrap}
 table.tb-band td.prov{max-width:260px}
 table.tb-band .prov-nom{display:inline-block;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
@@ -703,19 +704,19 @@ table.tb-band a.nro:hover{color:var(--primary);border-bottom-color:var(--primary
 .op-mas{display:inline-flex;align-items:center;gap:6px;margin-left:6px;vertical-align:middle}
 button.act.op-ico{background:var(--primary);color:#fff;border:none;padding:2px 4px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;margin-left:3px;vertical-align:middle}
 button.act.op-ico svg{width:11px;height:11px}
-.op-sec{border:1px solid #fde7d2;border-radius:12px;margin-bottom:12px;overflow:hidden;background:#fff}
+.op-sec{border:1px solid #EFE4DD;border-radius:12px;margin-bottom:12px;overflow:hidden;background:#fff}
 /* (22-oct, JP eligió la propuesta A) orden de pago en bloques con cabecera naranja suave */
-.op-tit{background:#fff7ed;border-left:5px solid var(--primary);border-radius:10px;padding:10px 14px;color:#9a3412}
-.op-blq{border:1px solid #fde7d2;border-radius:12px;margin-bottom:12px;overflow:hidden;background:#fff}
-.op-blq>h4{margin:0;padding:8px 12px;background:#fff7ed;border-bottom:1px solid #fde7d2;font-size:11.5px;color:#9a3412;text-transform:uppercase;letter-spacing:.05em}
+.op-tit{background:#F7F1EC;border-left:5px solid var(--primary);border-radius:10px;padding:10px 14px;color:#7F583D}
+.op-blq{border:1px solid #EFE4DD;border-radius:12px;margin-bottom:12px;overflow:hidden;background:#fff}
+.op-blq>h4{margin:0;padding:8px 12px;background:#F7F1EC;border-bottom:1px solid #EFE4DD;font-size:11.5px;color:#7F583D;text-transform:uppercase;letter-spacing:.05em}
 .op-blq>.cont{padding:10px 12px}.op-blq table{margin:0;width:100%}.op-blq tbody tr:nth-child(even) td{background:#fafafa}
-#op-calc .op-blq tr.tot td,#op-calc .op-blq td#op-neto{background:#fff7ed;color:#9a3412}#op-calc .op-blq td#op-neto{font-weight:700;border-top:2px solid var(--primary)}
-#prov-modal #op-calc .op-neto{border:1px solid #fed7aa;border-top:3px solid var(--primary)}
-.op-lista thead th{background:#fff7ed;color:#9a3412}.op-lista tbody tr:nth-child(even) td{background:#fafafa}.op-lista tbody tr:hover td{background:#fff7ed}
-.op-sec>h4{margin:0;padding:7px 11px;background:#fff7ed;border-bottom:1px solid #fde7d2;color:#9a3412;font-size:11.5px;display:flex;gap:7px;align-items:center;color:var(--mut);text-transform:uppercase;letter-spacing:.4px}
+#op-calc .op-blq tr.tot td,#op-calc .op-blq td#op-neto{background:#F7F1EC;color:#7F583D}#op-calc .op-blq td#op-neto{font-weight:700;border-top:2px solid var(--primary)}
+#prov-modal #op-calc .op-neto{border:1px solid #E7D7CC;border-top:3px solid var(--primary)}
+.op-lista thead th{background:#F7F1EC;color:#7F583D}.op-lista tbody tr:nth-child(even) td{background:#fafafa}.op-lista tbody tr:hover td{background:#F7F1EC}
+.op-sec>h4{margin:0;padding:7px 11px;background:#F7F1EC;border-bottom:1px solid #EFE4DD;color:#7F583D;font-size:11.5px;display:flex;gap:7px;align-items:center;color:var(--mut);text-transform:uppercase;letter-spacing:.4px}
 .op-sec table{margin:0;width:100%}.op-sec td{padding:7px 11px;border-top:1px solid #f1f5f9}.op-sec tr:first-child td{border-top:none}
 .op-sec tr.tot td{background:#fafafa;font-weight:700}
-.op-neto{display:flex;justify-content:space-between;align-items:center;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-weight:700;color:var(--primary-dark,#9a3412)}
+.op-neto{display:flex;justify-content:space-between;align-items:center;background:#F7F1EC;border:1px solid #E7D7CC;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-weight:700;color:var(--primary-dark,#7F583D)}
 .op-neto b{font-size:18px}
 label.c-tog{cursor:pointer;display:inline-flex}label.c-tog input{display:none}
 label.c-tog .eico{width:38px;height:38px;color:#cbd5e1;border:1px solid var(--bd);background:#fff;cursor:pointer}
@@ -726,10 +727,10 @@ label.c-tog input:checked + .eico{color:#fff;background:var(--primary);border-co
 button.act.mini-ico{padding:5px 7px;border-radius:8px;display:inline-flex}
 .sku-sug{position:absolute;left:0;right:0;top:100%;z-index:20;background:#fff;border:1px solid var(--bd);border-radius:9px;box-shadow:0 8px 24px rgba(15,23,42,.14);max-height:260px;overflow:auto;margin-top:3px}
 .sku-sug-it{padding:6px 10px;cursor:pointer;font-size:13px;display:flex;gap:8px;align-items:baseline;border-bottom:1px solid #f1f5f9}
-.sku-sug-it:hover,.sku-sug-it.on{background:#fff7ed}
+.sku-sug-it:hover,.sku-sug-it.on{background:#F7F1EC}
 /* (22-oct, JP) tónica de todos los módulos: los botones de ícono van sin recuadro, solo el ícono, fondo suave al pasar el mouse */
 button.act.mini-ico,button.act.gh.mini-ico{background:transparent;border:none;color:var(--primary);box-shadow:none;padding:6px 8px}
-button.act.mini-ico:hover,button.act.gh.mini-ico:hover{background:var(--primary-bg,#fff7ed)}
+button.act.mini-ico:hover,button.act.gh.mini-ico:hover{background:var(--primary-bg,#F7F1EC)}
 button.act.mini-ico svg{width:18px;height:18px}
 /* reloj de arena animado mientras algo trabaja */
 @keyframes reloj-gira{0%,70%{transform:rotate(0)}85%,100%{transform:rotate(180deg)}}.reloj{display:inline-block;animation:reloj-gira 1.6s ease-in-out infinite}@keyframes girar{to{transform:rotate(360deg)}}.girar{display:inline-block;animation:girar 1.2s linear infinite}
@@ -758,62 +759,62 @@ main{padding:14px;max-width:1250px;margin:0 auto;}
 .pf-sec .pf-body{padding:8px 12px 12px;background:#fff;border-top:1px solid var(--bd);border-radius:0 0 10px 10px;}
 .pf-sec .hint{font-size:12px;color:var(--mut);line-height:1.5;}
 /* (v200, JP 10-nov) ficha del proveedor "opción C": cabecera naranja suave + apartados como pestañas en pastilla + grupos */
-.pf-c .pf-hd{background:linear-gradient(135deg,#fff7ed,#fde7d2);color:#7c2d12;border-radius:18px;padding:16px 18px;margin-bottom:10px;}
-.pf-c .pf-hd h3{margin:0 0 3px;font-size:19px;color:#7c2d12;}
-.pf-c .pf-hd .hint{color:#9a3412;font-size:12.5px;margin-bottom:9px;}
+.pf-c .pf-hd{background:linear-gradient(135deg,#F7F1EC,#EFE4DD);color:#6A4933;border-radius:18px;padding:16px 18px;margin-bottom:10px;}
+.pf-c .pf-hd h3{margin:0 0 3px;font-size:19px;color:#6A4933;}
+.pf-c .pf-hd .hint{color:#7F583D;font-size:12.5px;margin-bottom:9px;}
 .pf-c .pf-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
-.pf-c .pf-chip{padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:#fff;color:#7c2d12;white-space:nowrap;}
+.pf-c .pf-chip{padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:#fff;color:#6A4933;white-space:nowrap;}
 .pf-c .pf-chip.rojo{background:#fde2e2;color:#a11d1d;}
 .pf-c .pf-chip.amb{background:#fef0c7;color:#8a5a00;}
 .pf-c .pf-hd .btn{border-radius:999px !important;border-color:transparent !important;}
-.pf-tabs{display:flex;flex-wrap:wrap;gap:4px 6px;padding:8px;background:#fdf1e4;border-radius:24px;margin-bottom:12px;position:sticky;top:-20px;z-index:3;}
-.pf-tabs button{border:0;background:none;font:inherit;font-size:13px;font-weight:700;color:#9a3412;padding:7px 15px;border-radius:999px;cursor:pointer;white-space:nowrap;}
+.pf-tabs{display:flex;flex-wrap:wrap;gap:4px 6px;padding:8px;background:#F5EFEA;border-radius:24px;margin-bottom:12px;position:sticky;top:-20px;z-index:3;}
+.pf-tabs button{border:0;background:none;font:inherit;font-size:13px;font-weight:700;color:#7F583D;padding:7px 15px;border-radius:999px;cursor:pointer;white-space:nowrap;}
 .pf-tabs button:hover{background:#fbe3cb;}
 .pf-tabs button.on{background:var(--primary);color:#fff;}
 .pf-tabs .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#dc2626;margin-left:5px;vertical-align:middle;}
 .pf-tabs button.on .dot{background:#fff;}
 .pf-c .pf-sec{border:0;background:none;margin:0;}
-.pf-c .pf-sec>summary{cursor:default;padding:2px 4px 10px;font-size:14px;color:#9a3412;}
+.pf-c .pf-sec>summary{cursor:default;padding:2px 4px 10px;font-size:14px;color:#7F583D;}
 .pf-c .pf-sec>summary[title]{cursor:help;}
 .pf-c .pf-sec>summary .chev{display:none;}
 .pf-c .pf-sec .pf-body{padding:0 4px 4px;border:0;border-radius:0;}
 .pf-c .pf-g{padding-bottom:14px;margin-bottom:14px;border-bottom:1px dashed #e3dbd0;}
 .pf-c .pf-g:last-child{border:0;margin-bottom:0;padding-bottom:0;}
 .pf-c .pf-g>h4{margin:0 0 10px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--primary);display:flex;align-items:center;gap:8px;}
-.pf-c .pf-g>h4:after{content:"";flex:1;height:2px;background:#fde7d2;border-radius:2px;}
+.pf-c .pf-g>h4:after{content:"";flex:1;height:2px;background:#EFE4DD;border-radius:2px;}
 .pf-c .pf-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;}
 .pf-c label{font-size:12.5px;font-weight:700;color:#5c544c;}
 .pf-c input:not([type=checkbox]),.pf-c select{border-radius:999px !important;background-color:#faf7f3 !important;border-color:#e3dbd0 !important;padding-left:14px !important;margin-top:3px;}
 .pf-c textarea{border-radius:16px !important;background:#faf7f3 !important;border-color:#e3dbd0 !important;}
-.pf-c input:focus,.pf-c select:focus,.pf-c textarea:focus{outline:2px solid #fdba74;background-color:#fff !important;}
+.pf-c input:focus,.pf-c select:focus,.pf-c textarea:focus{outline:2px solid #DCC3B3;background-color:#fff !important;}
 .pf-c .btn{border-radius:999px !important;}
 .pf-c .pf-fila{border-radius:16px !important;background:#faf7f3 !important;}
 .pf-c .pf-pie{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:14px;position:sticky;bottom:-20px;background:#fff;padding:10px 0;border-top:1px solid #eee6dc;z-index:3;}
 @media(max-width:600px){.pf-c .pf-grid{grid-template-columns:1fr;}}
 /* (v206, JP 10-nov) Órdenes de pago: dos pestañas grandes en pastilla + buscador */
-.op-tabs{display:flex;gap:8px;padding:8px;background:#fdf1e4;border-radius:28px;margin-bottom:12px;flex-wrap:wrap;}
-.op-tabs button{flex:1;min-width:240px;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;border:0;background:none;font:inherit;font-size:15.5px;font-weight:700;color:#9a3412;padding:13px 20px;border-radius:999px;cursor:pointer;}
+.op-tabs{display:flex;gap:8px;padding:8px;background:#F5EFEA;border-radius:28px;margin-bottom:12px;flex-wrap:wrap;}
+.op-tabs button{flex:1;min-width:240px;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;border:0;background:none;font:inherit;font-size:15.5px;font-weight:700;color:#7F583D;padding:13px 20px;border-radius:999px;cursor:pointer;}
 .op-tabs button:hover{background:#fbe3cb;}
-.op-tabs button.on{background:var(--primary);color:#fff;box-shadow:0 2px 8px rgba(234,88,12,.3);}
+.op-tabs button.on{background:var(--primary);color:#fff;box-shadow:0 2px 8px rgba(176,122,85,.3);}
 .op-tabs button span{font-size:12.5px;font-weight:600;opacity:.85;}
 .op-q{flex:1;min-width:220px;padding:9px 16px;border:1.5px solid #e3dbd0;border-radius:999px;background:#faf7f3;font:inherit;font-size:13.5px;}
-.op-q:focus{outline:2px solid #fdba74;background:#fff;}
+.op-q:focus{outline:2px solid #DCC3B3;background:#fff;}
 /* (v209, JP 10-nov) Listados "opción C": sub-pestañas en pastilla, cabecera naranja suave con el período y los totales, un listado por pestaña */
-.abar.le-subs{display:inline-flex;gap:6px;padding:6px;background:#fdf1e4;border-radius:999px;margin-bottom:12px;flex-wrap:wrap}
-.le-subs .fchip{border:0;background:none;font-weight:700;color:#9a3412;padding:9px 18px;font-size:13.5px}
+.abar.le-subs{display:inline-flex;gap:6px;padding:6px;background:#F5EFEA;border-radius:999px;margin-bottom:12px;flex-wrap:wrap}
+.le-subs .fchip{border:0;background:none;font-weight:700;color:#7F583D;padding:9px 18px;font-size:13.5px}
 .le-subs .fchip:hover{background:#fbe3cb}
 .le-subs .fchip.on{background:var(--primary);color:#fff}
-.le-hd{background:linear-gradient(135deg,#fff7ed,#fde7d2);border-radius:20px;padding:16px;margin-bottom:14px}
+.le-hd{background:linear-gradient(135deg,#F7F1EC,#EFE4DD);border-radius:20px;padding:16px;margin-bottom:14px}
 .le-hd select,.le-hd input[type=date]{border-radius:999px !important;border:1.5px solid #e3dbd0;background:#fff;font-family:inherit}
 .le-hd .lp-rangos{border-top-color:#f3d5b5}
 .le-hd .card{background:rgba(255,255,255,.75);border-radius:16px;margin:12px 0 0;border-color:#f3d5b5}
 .le-hd .alerta{margin:12px 0 0;border-radius:16px}
 .le-hd .kpis{margin:12px 0 0}
 .le-hd .kpi{border:0;border-radius:16px;background:rgba(255,255,255,.88)}
-.le-hd .kpi .val{color:#9a3412}
-.le-tabs{display:flex;gap:4px;align-items:flex-end;flex-wrap:wrap;border-bottom:2px solid #fde7d2;padding:0 6px}
+.le-hd .kpi .val{color:#7F583D}
+.le-tabs{display:flex;gap:4px;align-items:flex-end;flex-wrap:wrap;border-bottom:2px solid #EFE4DD;padding:0 6px}
 .le-tabs button[data-k]{border:0;background:none;font:inherit;font-weight:700;font-size:13.5px;color:#857b70;padding:10px 16px;border-radius:14px 14px 0 0;cursor:pointer;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
-.le-tabs button[data-k]:hover{background:#fff7ed;color:#9a3412}
+.le-tabs button[data-k]:hover{background:#F7F1EC;color:#7F583D}
 .le-tabs button[data-k].on{background:var(--primary);color:#fff}
 .le-tabs button[data-k] i{font-style:normal;font-size:11.5px;opacity:.85}
 .le-tabs button[data-k].av i{background:#fcd34d;color:#5c3b00;border-radius:999px;padding:0 7px;opacity:1}
@@ -826,9 +827,9 @@ main{padding:14px;max-width:1250px;margin:0 auto;}
 .le-cc{align-items:center;gap:8px;padding-bottom:0}
 .le-cc button[data-k]{align-self:flex-end}
 .le-cc>.fchip,.le-cc>input,.le-cc>span{margin-bottom:6px}
-.le-pan thead th{background:#fff7ed;color:#9a3412}
+.le-pan thead th{background:#F7F1EC;color:#7F583D}
 .le-pan tbody tr:nth-child(even){background:#fcfaf7}
-.le-pan tfoot tr{background:#fff7ed !important}
+.le-pan tfoot tr{background:#F7F1EC !important}
 /* (v218) cuenta corriente de un proveedor: fechas del filtro en un renglón */
 #prov-modal input.cc-f{width:150px !important;flex:0 0 auto;margin:0 !important}
 /* (v217) orden de pago: botones para mandarla por WhatsApp / mail */
@@ -860,7 +861,7 @@ table{width:100%;border-collapse:collapse;font-size:13.5px;}
 th{text-align:left;padding:8px 7px;border-bottom:2px solid var(--bd);color:var(--mut);font-size:12px;
    text-transform:uppercase;letter-spacing:.3px;cursor:pointer;white-space:nowrap;}
 td{padding:8px 7px;border-bottom:1px solid #f1f5f9;vertical-align:top;}
-tr:hover td{background:#fff7ed;}
+tr:hover td{background:#F7F1EC;}
 .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
 .chip{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11.5px;font-weight:700;white-space:nowrap;}
 .c-gastos{background:#dbeafe;color:#1e40af;} .c-mercaderia{background:#dcfce7;color:#166534;}
@@ -898,11 +899,11 @@ button.act.gh{background:#fff;color:var(--primary);border:1px solid var(--primar
 .fx-eq-btn{font-size:11.5px!important;padding:2px 8px!important;margin-left:4px;vertical-align:middle}
 #ctrl-overlay,#map-overlay,#res-overlay,#merc-overlay,#sf-overlay,#rem-overlay,#suc-overlay,#rdet-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9998;display:flex;
   align-items:flex-start;justify-content:center;padding:18px 12px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
-#nota-overlay .c-box,#ctrl-overlay .c-box,#map-overlay .c-box,#res-overlay .c-box,#merc-overlay .c-box,#sf-overlay .c-box,#rem-overlay,#suc-overlay .c-box,#rdet-overlay .c-box{background:#fff;border-radius:14px;max-width:720px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);}
-#nota-overlay .c-head,#ctrl-overlay .c-head,#map-overlay .c-head,#res-overlay .c-head,#merc-overlay .c-head,#sf-overlay .c-head,#rem-overlay,#suc-overlay .c-head,#rdet-overlay .c-head{position:sticky;top:0;background:var(--primary);color:#fff;padding:13px 17px;
+#nota-overlay .c-box,#ctrl-overlay .c-box,#map-overlay .c-box,#res-overlay .c-box,#merc-overlay .c-box,#sf-overlay .c-box,#rem-overlay .c-box,#suc-overlay .c-box,#rdet-overlay .c-box{background:#fff;border-radius:14px;max-width:720px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+#nota-overlay .c-head,#ctrl-overlay .c-head,#map-overlay .c-head,#res-overlay .c-head,#merc-overlay .c-head,#sf-overlay .c-head,#rem-overlay .c-head,#suc-overlay .c-head,#rdet-overlay .c-head{position:sticky;top:0;background:var(--primary);color:#fff;padding:13px 17px;
   border-radius:14px 14px 0 0;display:flex;align-items:flex-start;gap:10px;z-index:1;}
-#nota-overlay .m-x,#ctrl-overlay .m-x,#map-overlay .m-x,#res-overlay .m-x,#merc-overlay .m-x,#sf-overlay .m-x,#rem-overlay,#suc-overlay .m-x,#rdet-overlay .m-x{background:rgba(255,255,255,.18);border:none;color:#fff;font-size:15px;border-radius:8px;padding:5px 10px;cursor:pointer;}
-#nota-overlay .c-body,#ctrl-overlay .c-body,#map-overlay .c-body,#res-overlay .c-body,#merc-overlay .c-body,#sf-overlay .c-body,#rem-overlay,#suc-overlay .c-body,#rdet-overlay .c-body{padding:15px 17px;}
+#nota-overlay .m-x,#ctrl-overlay .m-x,#map-overlay .m-x,#res-overlay .m-x,#merc-overlay .m-x,#sf-overlay .m-x,#rem-overlay .m-x,#suc-overlay .m-x,#rdet-overlay .m-x{background:rgba(255,255,255,.18);border:none;color:#fff;font-size:15px;border-radius:8px;padding:5px 10px;cursor:pointer;}
+#nota-overlay .c-body,#ctrl-overlay .c-body,#map-overlay .c-body,#res-overlay .c-body,#merc-overlay .c-body,#sf-overlay .c-body,#rem-overlay .c-body,#suc-overlay .c-body,#rdet-overlay .c-body{padding:15px 17px;}
 #ctrl-overlay .c-nums,#map-overlay .c-nums,#res-overlay .c-nums,#merc-overlay .c-nums{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:9px;padding-bottom:10px;border-bottom:1px solid var(--bd);}
 #ctrl-overlay .c-nums .lbl,#map-overlay .c-nums .lbl,#res-overlay .c-nums .lbl,#merc-overlay .c-nums .lbl{display:block;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px;}
 #ctrl-overlay .c-nums .v,#map-overlay .c-nums .v,#res-overlay .c-nums .v,#merc-overlay .c-nums .v{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;}
@@ -1627,7 +1628,7 @@ function barraFiltros(){
       <option value="NC" ${filtro.clase==='NC'?'selected':''}>Solo notas de crédito</option>
       <option value="ND" ${filtro.clase==='ND'?'selected':''}>Solo notas de débito</option>
       <option value="RTO" ${filtro.clase==='RTO'?'selected':''}>Solo remitos</option></select>
-    <select onchange="setF('estado',this.value)" title="Estado de pago" style="${filtro.estado ? 'border-color:var(--primary);background:#fff7ed;font-weight:700' : ''}"><option value="">Todos los estados</option>
+    <select onchange="setF('estado',this.value)" title="Estado de pago" style="${filtro.estado ? 'border-color:var(--primary);background:#F7F1EC;font-weight:700' : ''}"><option value="">Todos los estados</option>
       ${Object.entries(EPAGO).filter(([k]) => k !== 'sin_definir').map(([k,v]) => `<option value="${k}" ${filtro.estado===k?'selected':''}>${v.tx}</option>`).join('')}</select>
     <button class="act mini-ico" onclick="abrirSinFactura()" title="Cargar un gasto sin factura (comprobante interno)">${ico('docmas')}</button>` : ''}
   </div>`;
@@ -2049,7 +2050,7 @@ function _opPaFilas(f, editable){
   return P.map(p => { const ret = Number(p.retenido) > 0, fs = String(p.facturas || '').split(', ').filter(Boolean);
     const fac = fs.length > 1 ? `${fs[0]} +${fs.length - 1}` : (fs[0] || '');
     const marca = ret ? '<span style="color:#86efac">✓</span>'
-      : editable ? `<input type="checkbox" ${p.suma ? 'checked' : ''} style="width:14px !important;height:14px !important;margin:0 !important;vertical-align:middle;accent-color:#f97316;cursor:pointer" title="Tildalo para que este pago sume en el cálculo de la retención" onclick="event.stopPropagation()" onchange="_opPaIncluir(${Number(p.op_id)}, this.checked)">`
+      : editable ? `<input type="checkbox" ${p.suma ? 'checked' : ''} style="width:14px !important;height:14px !important;margin:0 !important;vertical-align:middle;accent-color:#B07A55;cursor:pointer" title="Tildalo para que este pago sume en el cálculo de la retención" onclick="event.stopPropagation()" onchange="_opPaIncluir(${Number(p.op_id)}, this.checked)">`
       : (p.suma ? '<span style="color:#86efac">✓</span>' : '<span style="opacity:.6">–</span>');
     return `<tr class="pa${p.suma ? '' : ' no'}" style="${_opPaAbierto ? '' : 'display:none'}" title="${esc(p.orden + ' · ' + (p.facturas || ''))}">
       <td class="op">${marca}</td><td>${_fecha(p.fecha).slice(0, 5)} · ${esc(fac)} · ${esc(String(p.orden || '').replace(/^OP \d+-0*/, 'OP '))} <span class="pa-ch ${ret ? 'r' : ''}">${ret ? 'retenido ' + plata(p.retenido) : p.suma ? 'sin retención · sumado' : 'sin retención · no suma'}</span></td>
@@ -4396,7 +4397,7 @@ function pintarControl(){
         ${lineasControl.length > 1
           ? `<button class="act gh" onclick="quitarLinea(${i})" title="Quitar">✕</button>` : ''}
       </div>`; }).join('')}
-      <div id="nc-form" style="display:none;background:#fff7ed;border:1px solid var(--primary);border-radius:9px;padding:11px;margin-top:9px;">
+      <div id="nc-form" style="display:none;background:#F7F1EC;border:1px solid var(--primary);border-radius:9px;padding:11px;margin-top:9px;">
         <div class="mini" style="margin-bottom:7px"><b>Crear concepto contable</b> — un SKU + su descripción, como los artículos del Dragonfish. Solo para gastos de un tipo que todavía no existe en el catálogo.</div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;">
           <input id="nc-codigo" placeholder="SKU (ej: SEGVIG)" maxlength="20"
@@ -4827,7 +4828,7 @@ async function abrirCCCliente(codigo){
     <div class="hint" style="margin-bottom:10px;">${x.cuit ? 'CUIT ' + _cuitFmt(x.cuit) + ' · ' : ''}código ${esc(codigo)} · saldo <b style="color:${Number(x.saldo) > 0 ? '#991b1b' : '#166534'}">${plata(x.saldo || 0)}</b> · ${M.length} movimiento${M.length === 1 ? '' : 's'} en el Dragonfish</div>
     ${!M.length ? '<div class="vacio">Sin movimientos.</div>' : `<div style="overflow:auto;max-height:60vh"><table class="tb-band" style="font-size:12.5px">
       <thead><tr><th>Fecha</th><th>Comprobante</th><th class="num">Debe</th><th class="num">Haber</th><th class="num" title="Lo que queda sin imputar de este comprobante">Pendiente</th><th>Nota</th></tr></thead>
-      <tbody>${M.map(m => `<tr${Math.abs(Number(m.saldo)) >= 0.005 ? ' style="background:#fff7ed"' : ''}>
+      <tbody>${M.map(m => `<tr${Math.abs(Number(m.saldo)) >= 0.005 ? ' style="background:#F7F1EC"' : ''}>
         <td class="mini" style="white-space:nowrap">${_fecha(m.fecha)}${m.vto && m.vto !== m.fecha ? `<div style="opacity:.7">vto ${_fecha(m.vto)}</div>` : ''}</td>
         <td>${esc(m.comprobante || '')}</td>
         <td class="num">${m.signo > 0 ? plata(m.total) : ''}</td>
@@ -4906,7 +4907,7 @@ function _ccPintarMovs(){
   c.innerHTML = !M.length ? `<div class="vacio">${_CC.M.length ? 'Sin movimientos entre esas fechas.' : 'Sin movimientos.'}</div>` : `<div style="overflow:auto;max-height:56vh"><table class="tb-band" style="font-size:12.5px">
       <thead><tr><th>Fecha</th><th>Comprobante</th><th>Detalle</th><th class="num">Debe</th><th class="num">Haber</th><th>Estado</th></tr></thead>
       <tbody>${M.map(m => { const esPend = m.clase !== 'OP' && _CC_PEND.includes(m.estado);
-        return `<tr style="${m.clase === 'OP' ? 'background:#f0fdf4' : esPend ? 'background:#fff7ed' : ''}" ${m.doc_id ? `onclick="abrirResumenDoc(${m.doc_id})" title="Abrir el comprobante"` : m.op_id ? `onclick="verOP(${m.op_id})" title="Abrir la orden de pago"` : ''}>
+        return `<tr style="${m.clase === 'OP' ? 'background:#f0fdf4' : esPend ? 'background:#F7F1EC' : ''}" ${m.doc_id ? `onclick="abrirResumenDoc(${m.doc_id})" title="Abrir el comprobante"` : m.op_id ? `onclick="verOP(${m.op_id})" title="Abrir la orden de pago"` : ''}>
         <td class="mini" style="white-space:nowrap">${_fecha(m.fecha)}</td>
         <td style="white-space:nowrap">${esc(m.comprobante)}</td>
         <td class="mini">${esc(m.detalle || '')}</td>
@@ -5251,7 +5252,7 @@ function _pintarEstudio(){
       ${LIST_RET && LIST_RET.length ? `<div style="overflow-x:auto"><table>
         <thead><tr><th>Quincena</th><th>Fecha</th><th>OP</th><th>Proveedor</th><th>Régimen</th>
           <th class="num">Base</th><th class="num">Alíc.</th><th class="num">Retenido</th><th>Certificado</th></tr></thead>
-        <tbody>${LIST_RET.map(r=>`<tr${r.orden_pago_id ? ` class="le-clic" onclick="verOP(${Number(r.orden_pago_id)})" title="Abrir la orden de pago"` : ''}${r.editado ? ' style="background:#fff7ed"' : ''}>
+        <tbody>${LIST_RET.map(r=>`<tr${r.orden_pago_id ? ` class="le-clic" onclick="verOP(${Number(r.orden_pago_id)})" title="Abrir la orden de pago"` : ''}${r.editado ? ' style="background:#F7F1EC"' : ''}>
           <td class="mini">${esc(r.quincena)}</td><td class="mini">${_fecha(r.fecha)}</td>
           <td>${esc(r.orden_pago || ('#'+r.orden_pago_id))}</td><td>${esc(r.proveedor||'')}</td>
           <td class="mini">${esc(r.regimen_codigo||'')} ${esc(r.regimen_nombre||'')}
@@ -6391,7 +6392,7 @@ function _pintarEquivalencias(){
       <span class="fchip" style="cursor:default;color:#92400e" title="Códigos del proveedor que todavía no tienen nuestro SKU: se resuelven una sola vez">${ico('alerta','s')} <b>${nPend}</b> sin traducir</span>
       <span class="fchip" style="cursor:default;color:#166534" title="Equivalencias cargadas: ya funcionan solas">${ico('ok','s')} <b>${EQUIV_HECHAS.length}</b> cargadas</span>
       ${nIgn ? `<button class="fchip ${EQ_VER_IGNORADOS ? 'on' : ''}" type="button" title="Renglones marcados como 'no es un artículo' (servicios, cargos): no se traducen. Tocá para verlos y, si hace falta, volverlos a la lista." onclick="EQ_VER_IGNORADOS=!EQ_VER_IGNORADOS;_pintarEquivalencias()">${ico('anular','s')} <b>${nIgn}</b> no son artículos</button>` : ''}
-      <select id="eq-prov" title="Ver solo un proveedor" style="padding:7px 10px;border:1px solid var(--bd);border-radius:999px;font-size:13px;font-family:inherit;max-width:220px;${EQ_PROV ? 'border-color:var(--primary);background:#fff7ed;font-weight:700' : ''}"
+      <select id="eq-prov" title="Ver solo un proveedor" style="padding:7px 10px;border:1px solid var(--bd);border-radius:999px;font-size:13px;font-family:inherit;max-width:220px;${EQ_PROV ? 'border-color:var(--primary);background:#F7F1EC;font-weight:700' : ''}"
               onchange="EQ_PROV=this.value;_pintarEquivalencias()">
         <option value="">Todos los proveedores</option>
         ${provOpts.map(([cu, no]) => `<option value="${esc(cu)}" ${EQ_PROV === cu ? 'selected' : ''}>${esc(no)}</option>`).join('')}</select>
@@ -7410,7 +7411,7 @@ function pintarConceptos(){
                oninput="buscarConcepto(this.value)" onkeydown="if(event.key==='Enter')buscarConcepto(this.value,true)">
         <button class="act mini-ico" title="Nuevo concepto" onclick="toggleAltaConcepto()">${ico('mas')}</button>
       </div>
-      <div id="alta-conc" style="display:none;background:#fff7ed;border:1px solid var(--primary);border-radius:9px;padding:11px;margin-bottom:11px;">
+      <div id="alta-conc" style="display:none;background:#F7F1EC;border:1px solid var(--primary);border-radius:9px;padding:11px;margin-bottom:11px;">
         <div style="display:flex;gap:7px;flex-wrap:wrap;">
           <input id="ac-sku" placeholder="SKU (ej: SEGVIG)" maxlength="20" style="width:150px;text-transform:uppercase">
           <input id="ac-desc" placeholder="Descripción para los listados" style="flex:1;min-width:180px">
@@ -7514,7 +7515,7 @@ async function abrirRenombreSKU(cod){
     <div id="rs-aviso" class="mini" style="margin:6px 0 10px;min-height:18px"></div>
     <label>Por qué lo cambiás (queda asentado)</label>
     <input id="rs-motivo" placeholder="Ej: el SKU viejo no servía para el listado de IVA" style="margin-bottom:12px">
-    <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:9px;padding:10px;font-size:12.5px;line-height:1.6;margin-bottom:14px">
+    <div style="background:#F7F1EC;border:1px solid #DCC3B3;border-radius:9px;padding:10px;font-size:12.5px;line-height:1.6;margin-bottom:14px">
       🚨 Mientras el Dragonfish siga en uso, el SKU nuevo <b>tiene que existir también allá</b> como artículo,
       sino la exportación lo rechaza. El SKU viejo queda guardado en el historial para poder rastrear los asientos.
     </div>
@@ -7944,9 +7945,9 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk" crossorigin="anonymous"></script>
 <script src="op-pdf.js?v=10"></script>
 <script src="pedidos.js?v=18"></script>
-<script src="tablas.js?v=1"></script><!-- (19-nov, JP) títulos fijos, ordenar/filtrar/ocultar columnas y ventanas estirables -->
+<script src="tablas.js?v=2"></script><!-- (19-nov, JP) títulos fijos, ordenar/filtrar/ocultar columnas y ventanas estirables -->
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=157"></script>
+<script src="manual.js?v=158"></script>
 </body>
 </html>
