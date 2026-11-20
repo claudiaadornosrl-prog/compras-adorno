@@ -1,6 +1,34 @@
 // ═══════════════════════════════════════════════════════════════════════
-//  Compras Adorno · tablas.js — TABLAS Y VENTANAS (19-nov-2026, JP)
+//  adorno-tablas.js — TABLAS TIPO EXCEL, IGUAL EN TODOS LOS MÓDULOS
+//  FUENTE ÚNICA: C:\CRM_Adorno\_shared\adorno-tablas.js. Cada módulo tiene una COPIA que pone
+//  `python _shared/inyectar_tablas.py <modulo>`. NO editar la copia de un módulo: se cambia acá,
+//  se vuelve a correr el inyector en cada módulo y cada módulo publica (con el OK de JP en su charla).
 //
+//  (19-nov-2026, JP) «Cuando haya tablas de información, quiero que sea más como un Excel: títulos
+//  fijos al bajar, cada línea con colores alternos, que los títulos sirvan como filtros, para
+//  acomodar, que se puedan ocultar y que las columnas se puedan arrastrar para agrandar o achicar.
+//  Y que cuando creemos una tabla nueva ya tome esa base.» → nació en Compras (tablas.js v1, mismo
+//  día) y se pasó acá, más los renglones alternados (cebra) y el renglón resaltado bajo el mouse.
+//
+//  (19-nov, aviso de Clientes) Fondo de los títulos fijos: respeta el fondo propio del <th>, toma el de
+//  su <tr> cuando el módulo pinta la fila del título (fondo de color con letra blanca) y deja ver los
+//  tintes semitransparentes. Antes los títulos podían quedar blanco sobre blanco.
+//  (19-nov, avisos de Marketing y Documentos) Una tabla con overflow:hidden propio (molde de módulos) pasa
+//  a overflow:clip: si no, los títulos fijos se iban con la tabla.
+//  (19-nov, aviso del POS) Para filtrar y ordenar, el valor de una celda deja afuera el renglón chico de
+//  abajo (.mini, .tt-aparte, [data-tt-aparte]) y los botones, si la celda tiene otro texto. Una celda
+//  puede decir su valor con data-valor="…".
+//  (19-nov, JP) El embudito y la flechita de orden van SIEMPRE al costado del título (a la derecha, en un
+//  lugar reservado del margen), nunca abajo, aunque la columna sea angosta y el título baje de renglón.
+//
+//  Variables de color que usa (con valores por defecto si el módulo no las define):
+//   --primary, --primary-dark, --bd, --tx, --mut, y propias: --tt-cebra (fondo de los renglones
+//   alternados), --tt-hover (renglón bajo el mouse).
+//  Una tabla sin cebra: data-tt-cebra="no". Las ventanas estirables (lo de Compras) se activan solo
+//  si el módulo define ANTES de cargar este archivo:
+//   window.ADORNO_TABLAS_CONF = {ventanas: '#prov-modal, [id$="-overlay"]'};
+//
+//  ── Lo que sigue es la descripción original de Compras ──
 //  JP: «Quiero que todos los títulos de tablas queden fijos cuando voy para
 //  abajo, que se puedan acomodar por los títulos, filtrar por los títulos y
 //  ocultar. También en las tablas de adentro de cada apartado (ej. el nuevo
@@ -54,10 +82,14 @@ const svg = (k, cls) => `<svg class="tt-ico${cls ? ' ' + cls : ''}" viewBox="0 0
 
 const CSS = `
 table.tt>thead>tr>th.tt-th{position:sticky!important;z-index:1}
-:where(table.tt)>thead>tr>th.tt-th{background:var(--tt-fondo,#fff);border-bottom-color:transparent;box-shadow:inset 0 -2px 0 var(--bd,#e2e8f0)}
+:where(table.tt)>thead>tr>th.tt-th{border-bottom-color:transparent;box-shadow:inset 0 -2px 0 var(--bd,#e2e8f0)}
+:where(table.tt)>thead>tr>th.tt-th:not(.tt-th-propio){background:linear-gradient(var(--tt-tinte,transparent),var(--tt-tinte,transparent)),var(--tt-fondo,#fff)}
 [id$="-overlay"] .c-head{z-index:4!important}
+:where(table.tt:not([data-tt-cebra="no"])>tbody>tr.tt-cebra)>td{box-shadow:inset 0 0 0 9999px var(--tt-cebra,rgba(120,86,60,.07))}
+@media (hover:hover){:where(table.tt:not([data-tt-cebra="no"])>tbody>tr:hover)>td{box-shadow:inset 0 0 0 9999px var(--tt-hover,rgba(176,122,85,.12))}}
 .tt-sinx{overflow:visible!important}
 .tt-clip{overflow:clip!important}
+table.tt-clip-t{overflow:visible!important;overflow:clip!important}
 .tt-caja{overflow:auto!important}
 th.tt-col.tt-ordenable{cursor:pointer;user-select:none;-webkit-user-select:none}
 th.tt-col:not(.tt-ordenable){cursor:default}
@@ -70,6 +102,13 @@ th .tt-menu.on svg{fill:currentColor}
 th .tt-menu svg,.tt-ico{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;flex:none}
 th .tt-flecha{color:var(--primary,#B07A55);font-size:9px;margin-left:3px;vertical-align:1px}
 th .tt-flecha:empty{display:none}
+th.tt-col{position:relative}
+th.tt-col>.tt-menu{position:absolute;top:50%;right:var(--tt-pr0,6px);transform:translateY(-50%);margin:0}
+th.tt-col>.tt-flecha{position:absolute;top:50%;right:calc(var(--tt-pr0,6px) + 19px);transform:translateY(-50%);margin:0;line-height:1}
+th.tt-col.tt-va-b>.tt-menu{top:auto;bottom:var(--tt-pb0,4px);transform:none}
+th.tt-col.tt-va-b>.tt-flecha{top:auto;bottom:calc(var(--tt-pb0,4px) + 4px);transform:none}
+th.tt-col.tt-va-t>.tt-menu{top:var(--tt-pt0,4px);transform:none}
+th.tt-col.tt-va-t>.tt-flecha{top:calc(var(--tt-pt0,4px) + 4px);transform:none}
 @media (hover:none){th .tt-menu{opacity:.6}}
 .tt-oc{display:none!important}
 tr.tt-fuera{display:none!important}
@@ -143,7 +182,10 @@ const VACIO = /^(|—|-|–|s\/d|sin dato|sin datos)$/i;
 // lo que está escondido adentro de una celda y no es su valor (globitos de ayuda, sugerencias, nuestra UI)
 const SALTA = /(^|\s)(tt-ui|op-tipbox|sku-sug)(\s|$)/;
 
-function texto(el, conControles){
+// lo que es «de más» en una celda: renglón chico de abajo (.mini, .tt-aparte, [data-tt-aparte]) y botones.
+// Se deja afuera del valor SOLO si la celda tiene otro texto (ver textoCelda).
+const APARTE = /(^|\s)(mini|tt-aparte)(\s|$)/;
+function texto(el, conControles, sinExtras){
   let s = '';
   for (let n = el.firstChild; n; n = n.nextSibling){
     if (n.nodeType === 3){ s += n.nodeValue; continue; }
@@ -153,6 +195,7 @@ function texto(el, conControles){
     if (n.hidden || (n.style && n.style.display === 'none')) continue;
     const cl = typeof n.className === 'string' ? n.className : '';
     if (cl && SALTA.test(cl)) continue;
+    if (sinExtras && (tg === 'BUTTON' || (cl && APARTE.test(cl)) || n.hasAttribute('data-tt-aparte'))) continue;
     if (tg === 'INPUT'){
       if (!conControles) continue;
       const ty = (n.type || '').toLowerCase();
@@ -163,15 +206,21 @@ function texto(el, conControles){
     if (tg === 'SELECT'){ if (conControles){ const o = n.options[n.selectedIndex]; s += ' ' + (o ? o.text : '') + ' '; } continue; }
     if (tg === 'TEXTAREA'){ if (conControles) s += ' ' + n.value + ' '; continue; }
     if (tg === 'BR'){ s += ' '; continue; }
-    const t = texto(n, conControles);
+    const t = texto(n, conControles, sinExtras);
     // entre dos pedazos pegados (<span>×3</span><span>Copa</span>) va un espacio, si no quedan como una sola palabra
     s += /^(DIV|P|LI|UL|OL|H\d|SECTION)$/.test(tg) || (s && t && !/\s$/.test(s) && !/^\s/.test(t) && n.previousSibling && n.previousSibling.nodeType === 1) ? ' ' + t + ' ' : t;
   }
   return s;
 }
+// Valor de una celda para filtrar y ordenar:
+//  · data-valor="…" en la celda manda (el módulo dice qué vale);
+//  · si no, el texto SIN el renglón chico de abajo ni los botones («Recibido» y no «Recibido Mariana · 19/11»);
+//  · si sin eso no queda nada, el texto entero; y si tampoco, el cartelito del ícono.
 function textoCelda(c){
   if (!c) return '';
-  let t = limpio(texto(c, true));
+  if (c.dataset && c.dataset.valor != null) return limpio(c.dataset.valor);
+  let t = limpio(texto(c, true, true));
+  if (!t) t = limpio(texto(c, true, false));
   if (!t){   // celdas que son solo un ícono: vale lo que dice su cartelito
     const q = c.querySelector('[aria-label],[title]');
     if (q) t = limpio(q.getAttribute('aria-label') || q.getAttribute('title') || '');
@@ -188,8 +237,8 @@ function aFecha(t){
   m = String(t).trim().match(RX_ISO);
   return m ? (+m[1]) * 10000 + (+m[2]) * 100 + (+m[3]) : null;
 }
-// números a la argentina: 1.234.567,89 · $ -1.234,00 · 12 % · 3 u. · (1.234,00)
-const RX_NUM = /^([-−–+]?)\s*(?:US\$|U\$S|USD|ARS|\$)?\s*([-−–]?)\s*(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d+))?\s*(?:%|u\.?|unid\.?|uds?\.?|pk|kg)?$/i;
+// números a la argentina: 1.234.567,89 · $ -1.234,00 · 12 % · 3 u. · (1.234,00) · U$D 3.600,00 (Tesorería, 19-nov)
+const RX_NUM = /^([-−–+]?)\s*(?:US\$|U\$S|U\$D|USD|ARS|\$)?\s*([-−–]?)\s*(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d+))?\s*(?:%|u\.?|unid\.?|uds?\.?|pk|kg)?$/i;
 function aNumero(t){
   let s = String(t).trim(), neg = false;
   const p = s.match(/^\((.*)\)$/); if (p){ s = p[1]; neg = true; }
@@ -343,6 +392,7 @@ function aplicar(T){
       T.fijasAbajo = U.some(u => u.fija === 'abajo') || !!(T.t.tFoot && T.t.tFoot.rows.length);
       if (T.st.orden || T.desordenado) ordenarFilas(T, U);
     }
+    cebra(T);
     marcarOcultas(T);
     if (T.w) pintarAnchos(T);
     pintarTitulos(T);
@@ -370,6 +420,24 @@ function ordenarFilas(T, U){
     if (!igual){ const fr = document.createDocumentFragment(); for (const r of filas) fr.appendChild(r); tb.appendChild(fr); }
   }
   T.desordenado = !!col;
+}
+// ── renglones alternados (cebra) ──
+// Se cuenta por «unidad» (una fila + las que cuelgan de ella, como un detalle desplegado) y solo las
+// que se ven: al filtrar u ordenar, la cebra sigue pareja. Totales y renglones fijos no se pintan.
+// Primero se lee qué se ve y después se marcan las clases (para no recalcular la página en cada fila).
+function cebra(T){
+  const t = T.t;
+  if (t.dataset.ttCebra === 'no') return;
+  const U = unidadesDe(T);
+  const medir = t.offsetWidth > 0;
+  const ve = U.map(u => !u.fija && !u.tr.hidden && !u.tr.classList.contains('tt-fuera') && u.tr.style.display !== 'none' &&
+    (!medir || u.tr.getClientRects().length > 0));
+  let i = 0, tbAnt = null;
+  U.forEach((u, k) => {
+    if (u.tb !== tbAnt){ tbAnt = u.tb; i = 0; }
+    const par = ve[k] && (i++ % 2 === 1);
+    for (const r of u.filas) if (r.classList.contains('tt-cebra') !== par) r.classList.toggle('tt-cebra', par);
+  });
 }
 function marcarOcultas(T){
   const pos = new Set();
@@ -405,6 +473,19 @@ function armarTitulos(T){
       th.appendChild(h);
     }
     if (!col.util) continue;
+    // (19-nov, JP: «que el ícono del filtro nunca quede por debajo del título, siempre al costado») el embudito y
+    // la flechita van fijos a la derecha del título, en un lugar reservado del margen derecho: aunque la columna
+    // sea angosta y el título baje de renglón, el ícono queda al costado. Se guarda el margen propio una sola vez.
+    // (aviso de Compras) Si el título está alineado arriba o abajo (vertical-align top/bottom), el ícono va arriba o
+    // abajo junto al texto, no al medio.
+    if (th._ttPr0 == null){
+      const cs = getComputedStyle(th);
+      th._ttPr0 = parseFloat(cs.paddingRight) || 0;
+      th.style.setProperty('--tt-pr0', th._ttPr0 + 'px');
+      const va = cs.verticalAlign;
+      if (va === 'bottom' || va === 'text-bottom'){ th.classList.add('tt-va-b'); th.style.setProperty('--tt-pb0', (parseFloat(cs.paddingBottom) || 0) + 'px'); }
+      else if (va === 'top' || va === 'text-top'){ th.classList.add('tt-va-t'); th.style.setProperty('--tt-pt0', (parseFloat(cs.paddingTop) || 0) + 'px'); }
+    }
     th.classList.add('tt-col');
     if (!T.ordenApp) th.classList.add('tt-ordenable');
     if (th.querySelector(':scope > .tt-menu')) continue;
@@ -461,6 +542,11 @@ function pintarTitulos(T){
     const fl = col.th.querySelector(':scope > .tt-flecha'), b = col.th.querySelector(':scope > .tt-menu');
     const f = !T.ordenApp && o && o.id === col.id ? (o.dir > 0 ? '▲' : '▼') : '';
     if (fl && fl.textContent !== f) fl.textContent = f;
+    if (b && col.th._ttPr0 != null){   // lugar para el embudito (20 px) y, si está ordenada, la flechita (11 px más)
+      // con «important» en línea: le gana a un padding !important del módulo (aviso de Compras), que si no lo anulaba
+      const pr = (col.th._ttPr0 + 20 + (f ? 11 : 0)) + 'px', s = col.th.style;
+      if (s.getPropertyValue('padding-right') !== pr || s.getPropertyPriority('padding-right') !== 'important') s.setProperty('padding-right', pr, 'important');
+    }
     if (b){ const on = activo(T.st.filtros[col.id]); if (b.classList.contains('on') !== on) b.classList.toggle('on', on); }
   }
 }
@@ -544,16 +630,45 @@ function altoCaja(el){
   const alto = Math.max(260, Math.round(visible - topePegado(el, sc) - (sc ? 70 : 24)));
   const v = alto + 'px'; if (el.style.maxHeight !== v) el.style.maxHeight = v;
 }
+// opacidad de un color calculado («rgb(…)» = 1, «rgba(…, a)» = a, «transparent» = 0)
+function alfa(b){
+  const m = b && b.match(/rgba?\(([^)]+)\)/);
+  if (!m) return 0;
+  const p = m[1].match(/[\d.]+%?/g) || [];
+  return p.length >= 4 ? (p[3].includes('%') ? parseFloat(p[3]) / 100 : parseFloat(p[3])) : 1;
+}
 function fondoDe(el){
   for (let n = el; n && n.nodeType === 1; n = n.parentElement){
     const b = getComputedStyle(n).backgroundColor;
-    const m = b && b.match(/rgba?\(([^)]+)\)/);
-    if (!m) continue;
-    const p = m[1].split(',');
-    if (p.length === 4 && parseFloat(p[3]) < 1) continue;
+    if (alfa(b) < 1) continue;
     return b;
   }
   return '#fff';
+}
+// Títulos con algo en bloque debajo del nombre (renglón chico, un select, una casilla): el embudito y la flechita
+// se alinean con el ÚLTIMO renglón del NOMBRE, no con el medio o el pie de la celda (aviso de Compras, 19-nov).
+// Se mide con el dibujo real; lo vuelve a llamar prepararFijo cuando la tabla cambia de tamaño.
+const BLOQUE = /^(block|flex|grid|table|list-item)$/;
+function alinearIconos(th){
+  const b = th.querySelector(':scope > .tt-menu'); if (!b || !th.offsetWidth) return;
+  const rs = [];
+  for (const n of th.childNodes){
+    if (n.nodeType === 1){
+      if (n.classList.contains('tt-ui')) continue;
+      if (BLOQUE.test(getComputedStyle(n).display)) break;
+      for (const x of n.getClientRects()) if (x.width && x.height) rs.push(x);
+    } else if (n.nodeType === 3 && n.nodeValue.trim()){
+      const rg = document.createRange(); rg.selectNodeContents(n);
+      for (const x of rg.getClientRects()) if (x.width && x.height) rs.push(x);
+    }
+  }
+  if (!rs.length) return;
+  const ult = rs.reduce((a, x) => x.bottom > a.bottom ? x : a);
+  const y = Math.round(ult.top + ult.height / 2 - th.getBoundingClientRect().top) + 'px';
+  for (const el of [b, th.querySelector(':scope > .tt-flecha')]){
+    if (!el || el.style.top === y) continue;
+    el.style.top = y; el.style.bottom = 'auto'; el.style.transform = 'translateY(-50%)';
+  }
 }
 function prepararFijo(T){
   const t = T.t;
@@ -561,6 +676,10 @@ function prepararFijo(T){
   ocupado++;
   try {
     if (T.anchosPend && !T.w){ congelar(T, T.anchosPend); T.anchosPend = null; }   // anchos guardados de esta tabla
+    // (19-nov, avisos de Marketing y Documentos) la TABLA misma con overflow:hidden (para redondear las puntas,
+    // lo trae el molde de módulos) se vuelve caja de desplazamiento y los títulos se van con ella: pasa a «clip»,
+    // que recorta igual las puntas pero no arma caja.
+    if (!t.classList.contains('tt-clip-t')){ const ct = getComputedStyle(t); if (ct.overflowX === 'hidden' || ct.overflowY === 'hidden') t.classList.add('tt-clip-t'); }
     let sc = null;
     for (let el = t.parentElement; el && el !== document.body && el !== document.documentElement; el = el.parentElement){
       if (el.classList.contains('tt-clip')) continue;
@@ -584,9 +703,30 @@ function prepararFijo(T){
     T.sc = sc;
     const tope = Math.round(topePegado(t, sc));
     const filas = t.tHead.rows, y0 = filas.length ? filas[0].offsetTop : 0;
+    // Fondo de los títulos fijos (tienen que ser opacos para tapar lo que pasa por abajo):
+    //  · si el título ya tiene un fondo opaco propio del módulo → se respeta (tt-th-propio);
+    //  · si tiene un tinte semitransparente → se pinta el tinte arriba del fondo de abajo (--tt-tinte);
+    //  · si es transparente → el fondo de su FILA o lo que haya debajo (thead, tabla, tarjeta…). Así
+    //    sirve también para los módulos que pintan el <tr> del título (fondo de color con letra blanca).
+    // Se mira el fondo propio una sola vez, antes de que la pieza lo pinte.
     for (const r of filas){
       const v = (tope + r.offsetTop - y0) + 'px';
-      for (const th of r.cells){ if (!th.classList.contains('tt-th')) th.classList.add('tt-th'); if (th.style.top !== v) th.style.top = v; }
+      let fr = null;
+      for (const th of r.cells){
+        if (th._ttPropio == null){
+          const a = alfa(getComputedStyle(th).backgroundColor);
+          th._ttPropio = a >= 1;
+          if (a > 0 && a < 1) th.style.setProperty('--tt-tinte', getComputedStyle(th).backgroundColor);
+          if (th._ttPropio) th.classList.add('tt-th-propio');
+        }
+        if (!th.classList.contains('tt-th')) th.classList.add('tt-th');
+        if (th.classList.contains('tt-col')){
+          if (th._ttBloque == null) th._ttBloque = [...th.children].some(ch => !ch.classList.contains('tt-ui') && BLOQUE.test(getComputedStyle(ch).display));
+          if (th._ttBloque) alinearIconos(th);
+        }
+        if (!th._ttPropio){ if (fr == null) fr = fondoDe(r); if (th.style.getPropertyValue('--tt-fondo') !== fr) th.style.setProperty('--tt-fondo', fr); }
+        if (th.style.top !== v) th.style.top = v;
+      }
     }
     const f = fondoDe(t);
     if (t.style.getPropertyValue('--tt-fondo') !== f) t.style.setProperty('--tt-fondo', f);
@@ -877,7 +1017,8 @@ document.addEventListener('dblclick', ev => {
 }, true);
 
 // ═══ VENTANAS ESTIRABLES ═══════════════════════════════════════════════
-const OVS = '#prov-modal, [id$="-overlay"]';
+// Solo si el módulo lo pide (window.ADORNO_TABLAS_CONF.ventanas = selector de sus ventanas); si no, nada de esto corre.
+const OVS = String((window.ADORNO_TABLAS_CONF || {}).ventanas || '').trim();
 const TAM = new Map();     // id de la ventana → tamaño elegido (mientras la página esté abierta)
 let ovCache = null, EST = null, tragarClick = false, cursorAct = '';
 function cajaDe(ov){
@@ -887,6 +1028,7 @@ function cajaDe(ov){
   return f && !f.classList.contains('tt-ui') ? f : null;
 }
 function ventanaArriba(){
+  if (!OVS) return null;
   if (!ovCache) ovCache = [...document.querySelectorAll(OVS)];
   let mejor = null, z = -Infinity;
   for (const ov of ovCache){
@@ -1027,7 +1169,7 @@ const obs = new MutationObserver(muts => {
       else if (tag === 'TBODY' || tag === 'TFOOT'){ const t = n.parentElement; if (t && t._tt) sucias.add(t._tt); else buscar = true; }
       else if (tag === 'THEAD'){ const t = n.parentElement; if (t && t._tt) rehacer.add(t); else buscar = true; }
       else if (tag === 'TABLE' || n.getElementsByTagName('table').length) buscar = true;
-      if (n.matches && (n.matches(OVS) || (tg.nodeType === 1 && tg.matches && tg.matches(OVS)))) ventanas = true;
+      if (OVS && n.matches && (n.matches(OVS) || (tg.nodeType === 1 && tg.matches && tg.matches(OVS)))) ventanas = true;
     }
   }
   for (const t of rehacer){ const T = t._tt; if (T){ olvidar(T); t._tt = null; } mejorar(t); }
@@ -1045,7 +1187,8 @@ function arrancar(){
 if (document.body) arrancar(); else document.addEventListener('DOMContentLoaded', arrancar);
 
 window.ADORNO_TABLAS = {
-  version: 1,
+  version: 2,   // 2 = pieza común (_shared) con cebra; 1 = tablas.js de Compras
+  cebra: T => cebra(T),
   recalcular: () => { escanear(); for (const T of REG){ prepararFijo(T); aplicar(T); } },
   _reg: REG, _estado: ESTADO, _tam: TAM,
   _num: aNumero, _fecha: aFecha

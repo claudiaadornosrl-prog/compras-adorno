@@ -1,5 +1,5 @@
-const CACHE_VERSION = 'compras-v252-op-categoria';
-const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './firma-jp.jpg', './pedidos.js', './tablas.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
+const CACHE_VERSION = 'compras-v253-tablas-clodi-ir';
+const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './firma-jp.jpg', './pedidos.js', './adorno-tablas.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE_VERSION).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));

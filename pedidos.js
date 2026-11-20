@@ -33,7 +33,7 @@
 .ped-sub button{background:#fff;border:1px solid var(--bd);border-radius:20px;padding:6px 13px;font:inherit;font-size:13px;cursor:pointer;color:var(--mut);}
 .ped-sub button.on{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:700;}
 .ped-cat{max-height:290px;overflow-y:auto;border:1px solid var(--bd);border-radius:9px;margin:6px 0 12px;}
-/* (19-nov, JP) si se estira la ventana del pedido, el catálogo crece con ella (tablas.js pone --tt-alto) */
+/* (19-nov, JP) si se estira la ventana del pedido, el catálogo crece con ella (adorno-tablas.js pone --tt-alto) */
 #ped-overlay .ped-cat{max-height:max(290px,calc(var(--tt-alto,0px) - 420px))}
 .ped-cat table{font-size:12.5px;} .ped-cat th{position:sticky;top:0;background:#fff;z-index:1;line-height:1.15;vertical-align:bottom;padding:5px 5px!important}
 .ped-cat th .sub{display:block;font-size:9.5px;color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0}

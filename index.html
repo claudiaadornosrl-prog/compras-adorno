@@ -246,10 +246,39 @@ window.ADORNO_ASISTENTE = (function () {
     return '';
   }
   function pestanas() {
-    const els = [...document.querySelectorAll('#tabs > button, nav.tabs > button, .tabs > button, .nav-item[data-tab], .tabs .tab[data-tab]')];
+    const els = [...document.querySelectorAll('#tabs > button, nav.tabs > button, .tabs > button, .nav-item[data-tab], .tabs .tab[data-tab], .ab-tabs > button:not(.ab-fijo):not(.ab-hamb):not(.kebab-tabs-btn):not(.ab-manual):not(.ab-espejo)')];
     const out = [];
     els.forEach((el) => { const lb = limpiar(el.getAttribute('title') || (el.querySelector('.lb') && el.querySelector('.lb').textContent) || el.textContent); if (lb && !out.some((o) => o.lb === lb)) out.push({ lb, el }); });
     return out;
+  }
+  // (19-nov-2026, charla de Clodi) «llevame a…» entre módulos: el servidor manda ir_modulo {nombre, ruta, pestana?, llevar?}
+  function irUrl(m) {
+    if (!m || !/^\/[a-z0-9-]+\/$/.test(String(m.ruta || ''))) return '';
+    if (location.pathname.replace(/index\.html$/, '') === m.ruta) return '';   // ya está en ese módulo
+    return m.ruta + (m.pestana ? '#clodi-ir=' + encodeURIComponent(String(m.pestana).slice(0, 60)) : '');
+  }
+  // (19-nov-2026, 2ª vuelta) el módulo puede avisar que tiene algo sin guardar: window.ADORNO_ASISTENTE_SIN_GUARDAR = () => 'hay un ticket armado'
+  function sinGuardar() { try { const f = window.ADORNO_ASISTENTE_SIN_GUARDAR; const r = typeof f === 'function' ? f() : ''; return r ? (typeof r === 'string' ? r : 'hay algo sin guardar') : ''; } catch (_) { return ''; } }
+  function irModulo(m) {   // solo cuando pidió que la lleven: espera a que termine de hablar y va
+    const u = irUrl(m); if (!u || sinGuardar()) return; let n = 0;
+    const t = setInterval(() => { n++; let habla = false; try { habla = 'speechSynthesis' in window && (speechSynthesis.speaking || speechSynthesis.pending); } catch (_) {} if ((n > 3 && !habla) || n > 60) { clearInterval(t); location.href = u; } }, 400);
+  }
+  function llegar() {   // al entrar desde el botón de Clodi: abre la pestaña que venía pedida (espera a que el módulo arme sus pestañas)
+    const m = /[#&]clodi-ir=([^&]+)/.exec(location.hash || ''); if (!m) return;
+    let q = ''; try { q = decodeURIComponent(m[1]).toLowerCase(); } catch (_) { return; }
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
+    // (2ª vuelta) hay módulos que cargan permisos o datos después de dibujar las pestañas y el primer toque se pierde:
+    // se toca, se comprueba que quedó abierta y, si no, se vuelve a tocar (hasta 20 s)
+    const abierta = (el) => /(^|\s)(active|activa|on|act|sel|selected|current)(\s|$)/.test(el.className || '') || el.getAttribute('aria-selected') === 'true' || el.getAttribute('aria-current') === 'page';
+    let n = 0, toques = 0; const t = setInterval(() => {
+      if (++n > 40) { clearInterval(t); return; }
+      const ps = pestanas(); const p = ps.find((x) => x.lb.toLowerCase() === q) || ps.find((x) => x.lb.toLowerCase().includes(q) || q.includes(x.lb.toLowerCase()));
+      if (!p) return;
+      if (abierta(p.el)) { clearInterval(t); return; }
+      const seVe = ps.some((x) => abierta(x.el));   // ¿este módulo marca la pestaña abierta de una forma que se puede leer?
+      if (seVe || toques === 0 || n === 6 || n === 14) { toques++; irA(p.lb); }
+      if (!seVe && toques >= 3) clearInterval(t);
+    }, 500);
   }
   function irA(nombre) {
     const p = pestanas().find((x) => x.lb.toLowerCase() === String(nombre).toLowerCase());
@@ -303,7 +332,7 @@ window.ADORNO_ASISTENTE = (function () {
   .asist-card{align-self:stretch;border:1px solid var(--accent,#d97757);border-radius:12px;padding:9px 11px;background:var(--surface,#fff);line-height:1.4}
   .asist-bts{display:flex;gap:8px;margin-top:9px} .asist-bt{border:0;border-radius:999px;padding:7px 16px;font:inherit;font-weight:600;cursor:pointer}
   .asist-bt.si{background:var(--accent,#d97757);color:#fff} .asist-bt.no{background:transparent;color:var(--muted,#5f5e5a);border:0.5px solid var(--border,#d3d1c7)}
-  .asist-bt:disabled{opacity:.6;cursor:default} .asist-fin{margin-top:8px;font-size:13px} .asist-fin.ok{color:#166534} .asist-fin.mal{color:#991b1b}
+  .asist-bt:disabled{opacity:.6;cursor:default} a.asist-bt{text-decoration:none;display:inline-block} .asist-fin{margin-top:8px;font-size:13px} .asist-fin.ok{color:#166534} .asist-fin.mal{color:#991b1b}
   .asist-resalta{outline:3px solid var(--accent,#d97757)!important;outline-offset:2px;border-radius:8px;transition:outline-color 1.2s}
   @media (max-width:600px){.asist-panel{right:calc(8px + env(safe-area-inset-right,0px));left:calc(8px + env(safe-area-inset-left,0px));width:auto;bottom:calc(92px + env(safe-area-inset-bottom,0px));max-height:66vh;max-height:66dvh}}
   /* (28-oct, JP) en celular y tablet: cara redonda flotante, despegada del borde (en iPhone la barra de Safari se achica abajo y tapaba el busto) */
@@ -519,7 +548,8 @@ window.ADORNO_ASISTENTE = (function () {
     if (tipo === 'q') { d.className = 'asist-q'; d.textContent = texto; }
     else if (tipo === 'err') { d.className = 'asist-err'; d.textContent = texto; }
     else if (tipo === 'wait') { d.className = 'asist-fila'; d.innerHTML = `<span class="asist-av">${CLODI('cara')}</span><div class="asist-a asist-wait"><i>Clodi está buscando en el manual…</i></div>`; d.querySelector('.clodi').classList.add('piensa'); }
-    else { d.className = 'asist-fila'; d.innerHTML = `<span class="asist-av">${CLODI('cara')}</span><div class="asist-a"></div>`; d.lastChild.innerHTML = esc(texto.respuesta) + (texto.pestana ? `<br><i>→ pestaña <b>${esc(texto.pestana)}</b></i>` : '') + ('speechSynthesis' in window ? ` <button class="asist-ib" title="Escuchar la respuesta" data-a="leer" data-t="${esc(texto.respuesta)}">${ICO.voz}</button>` : ''); }
+    else { d.className = 'asist-fila'; d.innerHTML = `<span class="asist-av">${CLODI('cara')}</span><div class="asist-a"></div>`; d.lastChild.innerHTML = esc(texto.respuesta) + (texto.pestana ? `<br><i>→ pestaña <b>${esc(texto.pestana)}</b></i>` : '') + (irUrl(texto.ir_modulo) ? `<div class="asist-bts"><a class="asist-bt si asist-ir" href="${esc(irUrl(texto.ir_modulo))}">Ir a ${esc(texto.ir_modulo.nombre || 'ese módulo')} →</a></div>` : '') + ('speechSynthesis' in window ? ` <button class="asist-ib" title="Escuchar la respuesta" data-a="leer" data-t="${esc(texto.respuesta)}">${ICO.voz}</button>` : ''); }
+    { const ir = d.querySelector && d.querySelector('a.asist-ir'); if (ir) ir.addEventListener('click', (ev) => { const sg = sinGuardar(); if (sg && !window.confirm('Ojo: ' + sg + '. Si salís ahora, se pierde. ¿Salgo igual?')) ev.preventDefault(); }); }
     l.appendChild(d); l.scrollTop = l.scrollHeight; return d;
   }
   async function prepararAccion(acc, porVoz) {   // completa el formulario del módulo; se envía SOLO con el botón Enviar
@@ -557,14 +587,17 @@ window.ADORNO_ASISTENTE = (function () {
       const j = await r.json().catch(() => ({}));
       w.remove();
       if (!r.ok || !j.ok) throw new Error(j.error || ('Error ' + r.status));
+      if (j.ir_modulo && j.ir_modulo.llevar && !j.accion && irUrl(j.ir_modulo)) { const sg = sinGuardar(); if (sg) { j.ir_modulo.llevar = false; j.respuesta = 'No te llevo todavía porque ' + sg + '. Cuando termines, tocá el botón para ir a ' + (j.ir_modulo.nombre || 'ese módulo') + '.'; } }
       hist.push({ q, a: j.respuesta }); log('a', j);
       if (j.pestana && !j.accion) irA(j.pestana);
+      if (j.ir_modulo && j.ir_modulo.llevar && !j.accion) irModulo(j.ir_modulo);
       if (porVoz || siempreVoz()) leer(j.respuesta);
       if (j.accion) await prepararAccion(j.accion, porVoz);
     } catch (e) { w.remove(); log('err', e.message || String(e)); }
     finally { ocupado = false; ta.focus(); }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', armar); else armar();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', llegar); else llegar();
   return { abrir, cerrar, preguntar: (q) => { abrir(); panel.querySelector('textarea').value = q; enviar(false); },
     // para soporte: qué voz y ajustes usa Clodi en este equipo
     decir: (t) => { armar(); leer(String(t || '')); },   // para probar la voz y la boca
@@ -709,10 +742,10 @@ button.act.op-ico svg{width:11px;height:11px}
 .op-tit{background:#F7F1EC;border-left:5px solid var(--primary);border-radius:10px;padding:10px 14px;color:#7F583D}
 .op-blq{border:1px solid #EFE4DD;border-radius:12px;margin-bottom:12px;overflow:hidden;background:#fff}
 .op-blq>h4{margin:0;padding:8px 12px;background:#F7F1EC;border-bottom:1px solid #EFE4DD;font-size:11.5px;color:#7F583D;text-transform:uppercase;letter-spacing:.05em}
-.op-blq>.cont{padding:10px 12px}.op-blq table{margin:0;width:100%}.op-blq tbody tr:nth-child(even) td{background:#fafafa}
+.op-blq>.cont{padding:10px 12px}.op-blq table{margin:0;width:100%}.op-blq table:not(.tt) tbody tr:nth-child(even) td{background:#fafafa}
 #op-calc .op-blq tr.tot td,#op-calc .op-blq td#op-neto{background:#F7F1EC;color:#7F583D}#op-calc .op-blq td#op-neto{font-weight:700;border-top:2px solid var(--primary)}
 #prov-modal #op-calc .op-neto{border:1px solid #E7D7CC;border-top:3px solid var(--primary)}
-.op-lista thead th{background:#F7F1EC;color:#7F583D}.op-lista tbody tr:nth-child(even) td{background:#fafafa}.op-lista tbody tr:hover td{background:#F7F1EC}
+.op-lista thead th{background:#F7F1EC;color:#7F583D}.op-lista:not(.tt) tbody tr:nth-child(even) td{background:#fafafa}.op-lista:not(.tt) tbody tr:hover td{background:#F7F1EC}
 .op-sec>h4{margin:0;padding:7px 11px;background:#F7F1EC;border-bottom:1px solid #EFE4DD;color:#7F583D;font-size:11.5px;display:flex;gap:7px;align-items:center;color:var(--mut);text-transform:uppercase;letter-spacing:.4px}
 .op-sec table{margin:0;width:100%}.op-sec td{padding:7px 11px;border-top:1px solid #f1f5f9}.op-sec tr:first-child td{border-top:none}
 .op-sec tr.tot td{background:#fafafa;font-weight:700}
@@ -828,7 +861,7 @@ main{padding:14px;max-width:1250px;margin:0 auto;}
 .le-cc button[data-k]{align-self:flex-end}
 .le-cc>.fchip,.le-cc>input,.le-cc>span{margin-bottom:6px}
 .le-pan thead th{background:#F7F1EC;color:#7F583D}
-.le-pan tbody tr:nth-child(even){background:#fcfaf7}
+.le-pan table:not(.tt) tbody tr:nth-child(even){background:#fcfaf7}
 .le-pan tfoot tr{background:#F7F1EC !important}
 /* (v218) cuenta corriente de un proveedor: fechas del filtro en un renglón */
 #prov-modal input.cc-f{width:150px !important;flex:0 0 auto;margin:0 !important}
@@ -1882,7 +1915,7 @@ function _pintarModalOP(cands){
         <td style="white-space:nowrap;font-size:12px">${d.es_nc ? '<span class="mini">—</span>' : celdaRemitos({id: d.documento_id, tipo_gasto: d.tipo_gasto})}</td>
         <td class="num mini"${d.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(d.neto)}</td>
         <td class="num"${d.es_nc ? ' style="color:var(--bad)"' : ''}>${plata(d.total)}${Number(d.imputado) > 0.005 ? `<div class="mini" style="color:#b45309" title="Ya se tomaron ${plata(d.imputado)} en otra orden de pago">saldo ${plata(d.saldo)}</div>` : ''}</td>
-        <td class="num" style="white-space:nowrap">${d.es_nc ? '<span class="mini" style="color:var(--bad)">−</span> ' : ''}<input type="text" inputmode="decimal" id="op-imp-${d.documento_id}" class="op-imp" value="${_opImpFmt(Math.abs(Number(d.saldo ?? d.total)))}"
+        <td class="num" style="white-space:nowrap">${d.es_nc ? '<span style="font-size:11.5px;color:var(--bad)">−</span> ' : ''}<input type="text" inputmode="decimal" id="op-imp-${d.documento_id}" class="op-imp" value="${_opImpFmt(Math.abs(Number(d.saldo ?? d.total)))}"
              onfocus="this.value=_opImpEdit(this.value);this.select()" onblur="this.value=_opImpFmt(_opImpNum(this.value)||_opImpNum(this.dataset.v||this.defaultValue))" onkeydown="if(event.key==='Enter')this.blur()"
              onchange="_opImporte(${d.documento_id}, this.value)" title="${d.es_nc ? 'Cuánto de esta nota de crédito se descuenta en esta orden' : 'Cuánto de esta factura se paga en esta orden'}">
           <div class="mini" id="op-queda-${d.documento_id}" style="color:#b45309;min-height:0"></div></td>
@@ -3177,6 +3210,18 @@ function cerrarFichaProveedor(){
   if (_pfFoto && _pfEstado() !== _pfFoto && !confirm('Tenés cambios sin guardar en la ficha.\n\n¿Cerrar igual y perderlos?')) return;
   _pfFoto = ''; cerrarModalP();
 }
+// (19-nov, charla de Clodi) si hay algo a medio hacer, Clodi no se va sola a otro módulo y su botón «Ir a …» pregunta antes
+// de salir. Lo lee el bloque común de Clodi (window.ADORNO_ASISTENTE_SIN_GUARDAR): devuelve el motivo o '' si no hay nada.
+window.ADORNO_ASISTENTE_SIN_GUARDAR = () => {
+  const pm = document.getElementById('prov-modal');
+  if (pm && pm.querySelector('#op-calc')){
+    if (pm.querySelector('input[data-doc]:checked')) return 'hay una orden de pago armada sin emitir';
+  } else if (pm && _pfFoto && _pfEstado() !== _pfFoto) return 'hay cambios sin guardar en la ficha del proveedor';
+  if (document.getElementById('ped-overlay') && typeof pedEd !== 'undefined' && pedEd && (pedEd.lineas || []).length)
+    return pedEd.id ? 'hay un pedido abierto' : 'hay un pedido nuevo sin guardar';
+  if (document.getElementById('rem-overlay')) return 'hay un remito a medio cargar';
+  return '';
+};
 async function guardarFichaProveedor(codigo, cuit){
   const g = id => (document.getElementById(id)?.value || '').trim();
   const _pOrig = _provCache.find(x => x.codigo === codigo) || {};
@@ -7982,10 +8027,13 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk" crossorigin="anonymous"></script>
 <script src="op-pdf.js?v=10"></script>
-<script src="pedidos.js?v=18"></script>
-<script src="tablas.js?v=2"></script><!-- (19-nov, JP) títulos fijos, ordenar/filtrar/ocultar columnas y ventanas estirables -->
+<script src="pedidos.js?v=19"></script>
+<!-- (19-nov, JP) tablas tipo Excel: pieza común _shared/adorno-tablas.js (la pone _shared/inyectar_tablas.py, no editar la copia).
+     Compras además pide las ventanas estirables desde las puntas y los bordes: -->
+<script>window.ADORNO_TABLAS_CONF = {ventanas: '#prov-modal, [id$="-overlay"]'};</script>
 <script src="equiv-import.js?v=6"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=160"></script>
+<script src="manual.js?v=164"></script>
+<script src="adorno-tablas.js?v=abc48a63"></script>
 </body>
 </html>
