@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v255-un-ingreso';
+const CACHE_VERSION = 'compras-v256-cache-propia';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './firma-jp.jpg', './pedidos.js', './adorno-tablas.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
@@ -6,7 +6,8 @@ self.addEventListener('install', e => {
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(
-    ks.filter(k => k !== CACHE_VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+    // (25-nov, Infra) todos los módulos comparten el dominio y las cachés: solo se borran las viejas DE COMPRAS
+    ks.filter(k => k.startsWith('compras-') && k !== CACHE_VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
