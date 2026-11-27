@@ -3796,7 +3796,10 @@ async function seguirPedido(){
     if (data.estado === 'listo'){
       const r = data.resultado || {};
       const leidas = (r.a_revisar||0)+(r.sin_regla||0)+(r.auto||0);
-      MOTOR_PEDIDO.resumen = `${leidas} nueva(s) en la Bandeja · ${r.ignoradas||0} fuera de norma · ${r.errores||0} error(es)`;
+      MOTOR_PEDIDO.resumen = `${leidas} nueva(s) en la Bandeja · ${r.ignoradas||0} fuera de norma · ${r.errores||0} error(es)`
+        // (27-nov, JP) la IA estuvo apagada un mes sin que nadie lo notara: ahora cada lectura lo dice
+        + (r.ia && !/^(cli|api)$/.test(r.ia) ? ` · ⚠ lectura SIN inteligencia artificial${r.equipo ? ' en ' + r.equipo : ''}: ${r.ia}. Avisale a JP` : '')
+        + (r.ia_fallas ? ` · ⚠ la inteligencia artificial no contestó en ${r.ia_fallas} factura(s)` : '');
       pintarEstadoMotor();
       await cargarTodo();      // refresca Bandeja + franja 🤖
       MOTOR_PEDIDO = null;
@@ -8121,7 +8124,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script>window.ADORNO_TABLAS_CONF = {ventanas: '#prov-modal, [id$="-overlay"]'};</script>
 <script src="equiv-import.js?v=8"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=167"></script>
+<script src="manual.js?v=168"></script>
 <script src="adorno-tablas.js?v=abc48a63"></script>
 </body>
 </html>
