@@ -430,6 +430,14 @@ function _pedStk(stock, min){
   return Number(stock || 0) < Number(min) ? `<b style="color:var(--bad)" title="Por debajo del mínimo (${_pedN(min)})">${s}</b>` : s;
 }
 function _pedMin(v){ return v == null || !(Number(v) > 0) ? '—' : _pedN(v); }
+// (27-nov, JP) El filtro de las columnas Stock y Mín. (A · U · O) es por LOCAL, no por cantidad: la lista del embudo
+// muestra en qué locales hay stock (o mínimo cargado) y no una opción por cada combinación de números. Ordenar la
+// columna sigue siendo por cantidad (la suma de los tres). Lo toma adorno-tablas.js de data-valor / data-orden.
+function _pedLocales(a, k){
+  const L = [['Alcorta', a[k + '_alcorta']], ['Unicenter', a[k + '_unicenter']], ['Oficina', a[k + '_oficina']]].filter(x => Number(x[1]) > 0).map(x => x[0]);
+  return L.length ? L.join(' · ') : (k === 'stock' ? 'Sin stock en ningún local' : 'Sin mínimo cargado');
+}
+const _pedSuma3 = (a, k) => (Number(a[k + '_alcorta']) || 0) + (Number(a[k + '_unicenter']) || 0) + (Number(a[k + '_oficina']) || 0);
 function _pedCatHtml(){
   if (!pedEd || !pedEd.proveedor_nombre) return '<div class="mini" style="padding:8px">Elegí el proveedor para ver sus artículos.</div>';
   if (!pedCat.length) return `<div class="mini" style="padding:8px">No hay artículos de este proveedor con ese filtro. Probá "todo el catálogo" o cargá un renglón sin SKU.</div>`;
@@ -454,10 +462,10 @@ function _pedCatHtml(){
     <tbody>${filas.map(({a, i}) => { const f = _pedFalta(a); return `<tr>
       <td title="${a.codigo_proveedor ? 'Código del proveedor: ' + esc(a.codigo_proveedor) : ''}"><b>${esc(a.sku)}</b>${_pedPres(a).length > 1 ? `<div>${_pedPresSel('ped-cp-' + i, _pedPres(a), a.codigo_proveedor || a.descripcion_proveedor, `pedPresCat(${i}, this.value)`)}</div>` : ''}</td>
       <td>${_pedPackChip(_pedPk(a))}<span class="desc" title="${esc(a.descripcion||'')}">${esc(a.descripcion||'')}</span></td>
-      <td class="num">${_pedStk(a.stock_alcorta, a.min_alcorta)} · ${_pedStk(a.stock_unicenter, a.min_unicenter)} · ${_pedStk(a.stock_oficina, a.min_oficina)}</td>
+      <td class="num" data-valor="${_pedLocales(a, 'stock')}" data-orden="${_pedSuma3(a, 'stock')}">${_pedStk(a.stock_alcorta, a.min_alcorta)} · ${_pedStk(a.stock_unicenter, a.min_unicenter)} · ${_pedStk(a.stock_oficina, a.min_oficina)}</td>
       <td class="num"><b>${_pedN(a.stock_total)}</b></td>
       <td class="num">${a.vendido == null ? '<span class="mini" title="Sin ventas en ese período">—</span>' : _pedN(a.vendido)}</td>
-      <td class="num">${_pedMin(a.min_alcorta)} · ${_pedMin(a.min_unicenter)} · ${_pedMin(a.min_oficina)}</td>
+      <td class="num" data-valor="${_pedLocales(a, 'min')}" data-orden="${_pedSuma3(a, 'min')}">${_pedMin(a.min_alcorta)} · ${_pedMin(a.min_unicenter)} · ${_pedMin(a.min_oficina)}</td>
       <td class="num">${f == null ? '<span class="mini">sin mín.</span>' : (f > 0 ? `<b style="color:var(--bad)">${_pedN(f)}</b>${_pedPk(a) > 1 ? ` <span class="mini">= ${_pedN(Math.ceil(f/_pedPk(a)))} pk</span>` : ''}` : '<span class="mini ped-ok">OK</span>')}${Number(a.falta_por_piezas) > 0 ? ` <span class="eico" style="width:22px;height:22px;background:#0e74901a;color:#0e7490;vertical-align:middle;cursor:help" title="${esc(_pedPiezasTip(a))}">${ico('puzzle','s')}</span>` : ''}</td>
       <td class="num">${a.precio_compra ? plata(a.precio_compra) : '—'}</td>
       <td class="num">${_pedYaPedido(a) ? `<b style="color:var(--warn)">${_pedN(_pedYaPedido(a))}</b>` : '—'}</td>

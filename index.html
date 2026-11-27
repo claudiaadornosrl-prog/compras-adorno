@@ -1915,25 +1915,12 @@ async function opExportar(cual, formato){
       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, cual === 'pend' ? 'Esperando OP' : 'Ordenes de pago');
       XLSX.writeFile(wb, nombre + '.xlsx');
     } else {
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({unit: 'mm', format: 'a4', orientation: 'landscape'});
-      const ancho = cols.reduce((a, c) => a + c[3], 0), k = 269 / ancho, n2 = v => (Number(v)||0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-      let y = 0, pag = 0;
-      const fila = (vals, negrita) => { doc.setFont('helvetica', negrita ? 'bold' : 'normal'); doc.setFontSize(8); let x = 14;
-        cols.forEach((c, j) => { const w = c[3] * k, num = c[2];
-          let t = String(vals[j] ?? ''); const max = Math.floor(w / 1.45); if (!num && t.length > max) t = t.slice(0, max - 1) + '…';
-          if (num) doc.text(t, x + w - 1.5, y, {align: 'right'}); else doc.text(t, x, y);
-          x += w; }); y += 4.6; };
-      const cabecera = () => { pag++; doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text('Claudia Adorno SRL · ' + titulo, 14, 13);
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.text(`Emitido el ${_fecha(_hoyISO())}${MODO_PRUEBA ? ' · AMBIENTE DE PRUEBA' : ''} · página ${pag}`, 283, 13, {align: 'right'});
-        y = 21; fila(cols.map(c => c[0]), true); doc.line(14, y - 3.2, 283, y - 3.2); };
-      cabecera();
-      filas.forEach(xf => { if (y > 195){ doc.addPage(); cabecera(); }
-        if (xf.estado === 'anulada') doc.setTextColor(150);
-        fila(cols.map(c => c[2] === 'n' ? n2(c[1](xf)) : c[1](xf))); doc.setTextColor(0); });
-      doc.line(14, y - 3.2, 283, y - 3.2);
-      fila(cols.map((c, i) => i === 0 ? rotTotal : c[2] === 'n' ? n2(suma(c)) : c[2] === 'e' ? suma(c) : ''), true);
-      doc.save(nombre + '.pdf');
+      // (27-nov, JP) misma tabla que los listados del estudio: ninguna celda cortada, el texto largo baja de renglón
+      const n2 = v => (Number(v)||0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+      await _pdfListado(titulo, cols.map((c, i) => ({t: c[0], num: c[2] ? 1 : 0, b: 0})),
+        filas.map(xf => cols.map(c => c[2] === 'n' ? n2(c[1](xf)) : String(c[1](xf) ?? ''))),
+        {totales: cols.map((c, i) => i === 0 ? rotTotal : c[2] === 'n' ? n2(suma(c)) : c[2] === 'e' ? String(suma(c)) : ''),
+         periodo: `Emitido el ${_fecha(_hoyISO())}`, nombre, filaGris: (f, i) => filas[i] && filas[i].estado === 'anulada'});
     }
   } catch (e){ avisoError('No se pudo generar el listado: ' + e.message); }
 }
@@ -5097,25 +5084,12 @@ async function ccExportar(formato){
       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Cuenta corriente');
       XLSX.writeFile(wb, nombre + '.xlsx');
     } else {
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({unit: 'mm', format: 'a4'});
-      const ancho = cols.reduce((a, c) => a + c[3], 0), k = 182 / ancho, n2 = v => Number(v) ? '$ ' + Number(v).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '';
-      let y = 0, pag = 0;
-      const fila = (vals, negrita) => { doc.setFont('helvetica', negrita ? 'bold' : 'normal'); doc.setFontSize(8); let px = 14;
-        cols.forEach((c, j) => { const w = c[3] * k, num = c[2];
-          let t = String(vals[j] ?? ''); const max = Math.floor(w / 1.45); if (!num && t.length > max) t = t.slice(0, max - 1) + '…';
-          if (num) doc.text(t, px + w - 1.5, y, {align: 'right'}); else doc.text(t, px, y);
-          px += w; }); y += 4.6; };
-      const cabecera = () => { pag++; doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
-        let t = 'Claudia Adorno SRL · ' + titulo; if (t.length > 78) t = t.slice(0, 77) + '…'; doc.text(t, 14, 13);
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.text(sub, 14, 18);
-        doc.text(`Emitido el ${_fecha(_hoyISO())}${MODO_PRUEBA ? ' · AMBIENTE DE PRUEBA' : ''} · página ${pag}`, 196, 23, {align: 'right'});
-        y = 29; fila(cols.map(c => c[0]), true); doc.line(14, y - 3.2, 196, y - 3.2); };
-      cabecera();
-      M.forEach(m => { if (y > 282){ doc.addPage(); cabecera(); } fila(cols.map(c => c[2] === 'n' ? n2(c[1](m)) : c[1](m))); });
-      doc.line(14, y - 3.2, 196, y - 3.2);
-      fila(cols.map((c, i) => i === 0 ? 'TOTAL' + (rango ? ' del período' : '') : c[2] === 'n' ? n2(suma(c)) : ''), true);
-      doc.save(nombre + '.pdf');
+      // (27-nov, JP) misma tabla que los listados del estudio: ninguna celda cortada, el texto largo baja de renglón
+      const n2 = v => Number(v) ? '$ ' + Number(v).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '';
+      await _pdfListado(titulo, cols.map(c => ({t: c[0], num: c[2] ? 1 : 0})),
+        M.map(m => cols.map(c => c[2] === 'n' ? n2(c[1](m)) : String(c[1](m) ?? ''))),
+        {vertical: true, totales: cols.map((c, i) => i === 0 ? 'TOTAL' + (rango ? ' del período' : '') : c[2] === 'n' ? n2(suma(c)) : ''),
+         periodo: `${sub} · emitido el ${_fecha(_hoyISO())}`, nombre});
     }
   } catch (e){ avisoError('No se pudo armar el archivo: ' + e.message); }
 }
@@ -6063,7 +6037,7 @@ async function _pdfListado(titulo, columnas, filas, opts = {}){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit: 'mm', format: 'a4', orientation: opts.vertical ? 'portrait' : 'landscape', compress: true});
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
-  const periodo = _listRotulo(false);
+  const periodo = opts.periodo ?? _listRotulo(false);
   // (27-nov, JP) Ningún número sale cortado: cada columna de importes toma el ancho de su número más largo (renglones,
   // título y total) y, si la hoja no alcanza, lo que se achica son las columnas de texto (esas sí pueden abreviarse).
   const disp = W - 16, PAD = 3.4, MINTXT = 16;
@@ -6074,7 +6048,7 @@ async function _pdfListado(titulo, columnas, filas, opts = {}){
   const sumNum = anchoNum.reduce((a, b) => a + b, 0);
   const txtFijo = columnas.reduce((a, c) => a + (!c.num && c.w ? c.w : 0), 0), txtAuto = columnas.filter(c => !c.num && !c.w).length;
   // en las columnas de texto, lo que es número (fecha, CUIT, número de comprobante o de certificado) tampoco se corta:
-  // ese es el ancho mínimo de la columna; lo que se abrevia es solo el texto con letras (proveedor, régimen)
+  // ese es el ancho mínimo de la columna; el texto con letras (proveedor, régimen), si no entra, baja de renglón
   doc.setFont('helvetica', 'normal');
   const esNro = t => /^[\dA-Z]{0,4}[\s\d\/.,\-·#%]*\d[\s\d\/.,\-·#%]*$/.test(String(t ?? '').trim()) || /^[A-Z]{2,3} [A-Z] \d{4,5}-\d{8}$/.test(String(t ?? '').trim());
   const minTxt = columnas.map((c, i) => c.num ? 0 : Math.max(0, ...filas.map(f => esNro(f[i]) ? PAD + mide(f[i], 7.4) : 0)));
@@ -6088,20 +6062,22 @@ async function _pdfListado(titulo, columnas, filas, opts = {}){
   // (27-nov, JP) El título y la línea de la empresa no se pisan: si no entran los dos en un renglón (hoja vertical o
   // período largo), la línea de la empresa baja a un segundo renglón y la franja se hace más alta.
   const subCab = `Claudia Adorno SRL · CUIT 30-70967311-0 · ${periodo}${MODO_PRUEBA ? ' · AMBIENTE DE PRUEBA' : ''}`;
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(12); const wTit = doc.getTextWidth(titulo);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); const wSub = doc.getTextWidth(subCab);
-  const dosRenglones = wTit + wSub + 28 > W, altoCab = dosRenglones ? 18 : 13, arriba = altoCab + 4;
-  const ptSub = dosRenglones && wSub > W - 20 ? Math.max(6, 8.5 * (W - 20) / wSub) : 8.5;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(12); const wTit = doc.getTextWidth(titulo), lTit = doc.splitTextToSize(titulo, W - 20);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); const wSub = doc.getTextWidth(subCab), lSub = doc.splitTextToSize(subCab, W - 20);
+  // (27-nov, JP) nada se corta ni se achica: si el título o la línea de la empresa son largos, bajan de renglón
+  const dosRenglones = wTit + wSub + 28 > W, altoCab = dosRenglones ? 5 + lTit.length * 5.2 + lSub.length * 4 + 1.5 : 13, arriba = altoCab + 4;
   const cab = () => {
     doc.setFillColor(234, 88, 12); doc.rect(0, 0, W, altoCab, 'F');
-    doc.setTextColor(255, 255, 255); doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.text(titulo, 10, dosRenglones ? 7.5 : 8.5);
-    doc.setFontSize(ptSub); doc.setFont('helvetica', 'normal');
-    if (dosRenglones) doc.text(subCab, 10, 14); else doc.text(subCab, W - 10, 8.5, {align: 'right'});
+    doc.setTextColor(255, 255, 255); doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+    if (!dosRenglones){ doc.text(titulo, 10, 8.5); doc.setFontSize(8.5); doc.setFont('helvetica', 'normal'); doc.text(subCab, W - 10, 8.5, {align: 'right'}); return; }
+    lTit.forEach((t, i) => doc.text(t, 10, 7.5 + i * 5.2));
+    doc.setFontSize(8.5); doc.setFont('helvetica', 'normal');
+    lSub.forEach((t, i) => doc.text(t, 10, 7.5 + lTit.length * 5.2 + 1 + i * 4));
   };
   doc.autoTable({
     startY: arriba, margin: {left: 8, right: 8, top: arriba, bottom: 12},
     head: [columnas.map(c => c.t)], body: filas, foot: opts.totales ? [opts.totales] : undefined,
-    styles: {font: 'helvetica', fontSize: 7.4, cellPadding: 1.4, overflow: 'ellipsize', textColor: [15,23,42], lineColor: [226,232,240], lineWidth: 0.1},
+    styles: {font: 'helvetica', fontSize: 7.4, cellPadding: 1.4, overflow: 'linebreak', textColor: [15,23,42], lineColor: [226,232,240], lineWidth: 0.1},
     headStyles: {fillColor: [248,250,252], textColor: [100,116,139], fontStyle: 'bold', fontSize: 7},
     // (27-nov, JP) los totales salían cortados ("2.031.108,…"): son más anchos que los renglones y van en negrita.
     // Letra un poco más chica, menos relleno y sin recortar.
@@ -6109,13 +6085,17 @@ async function _pdfListado(titulo, columnas, filas, opts = {}){
     alternateRowStyles: {fillColor: [252,252,253]},
     columnStyles: Object.fromEntries(columnas.map((c, i) => [i, {halign: c.num ? 'right' : 'left', ...(typeof anchoCol(c, i) === 'object' ? {cellWidth: 'auto', minCellWidth: anchoCol(c, i).min} : {cellWidth: anchoCol(c, i)}), fontStyle: c.b ? 'bold' : 'normal', ...(c.num ? {overflow: 'visible'} : {})}])),
     showFoot: 'lastPage', didDrawPage: cab,
-    didParseCell: h => { if (h.section === 'body' && opts.filaRoja && opts.filaRoja(filas[h.row.index], h.row.index)) h.cell.styles.textColor = [153,27,27]; },
+    didParseCell: h => { if (h.section !== 'body') return;
+      if (opts.filaRoja && opts.filaRoja(filas[h.row.index], h.row.index)) h.cell.styles.textColor = [153,27,27];
+      if (opts.filaGris && opts.filaGris(filas[h.row.index], h.row.index)) h.cell.styles.textColor = [148,163,184]; },
   });
   const n = doc.internal.getNumberOfPages();
   for (let i = 1; i <= n; i++){ doc.setPage(i); doc.setFontSize(7); doc.setTextColor(100,116,139);
-    doc.text(`${titulo} · ${periodo}${_CIERRE_SELLO ? ' · ' + _CIERRE_SELLO : ''} · generado ${_fechaTs(new Date().toISOString())} · página ${i} de ${n}`, W / 2, H - 5, {align: 'center'}); }
-  const nombrePdf = `${opts.archivo || titulo} ${_listRotulo(true)}.pdf`;
-  if (_capturar(nombrePdf, doc.output('blob'))) return;
+    let pie = `${titulo} · ${periodo}${_CIERRE_SELLO ? ' · ' + _CIERRE_SELLO : ''} · generado ${_fechaTs(new Date().toISOString())} · página ${i} de ${n}`;
+    if (doc.getTextWidth(pie) > W - 16) pie = `${_CIERRE_SELLO ? _CIERRE_SELLO + ' · ' : ''}generado ${_fechaTs(new Date().toISOString())} · página ${i} de ${n}`;
+    doc.text(pie, W / 2, H - 5, {align: 'center'}); }
+  const nombrePdf = opts.nombre ? opts.nombre + '.pdf' : `${opts.archivo || titulo} ${_listRotulo(true)}.pdf`;
+  if (!opts.nombre && _capturar(nombrePdf, doc.output('blob'))) return;
   doc.save(nombrePdf);
 }
 const _lstN = v => Number(v) ? Number(v).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '';
@@ -6125,7 +6105,7 @@ function _pdfIvaCompras(){
   const cols = [{t:'Fecha', w:15}, {t:'Comprobante', w:28}, {t:'CUIT', w:20}, {t:'Proveedor', w:38}, {t:'IVA', w:8},
     {t:'Neto 21%', num:1}, {t:'Neto 10,5%', num:1}, {t:'Neto 27%', num:1}, {t:'No grav./ex.', num:1}, {t:'IVA 21%', num:1},
     {t:'IVA 10,5%', num:1}, {t:'IVA 27%', num:1}, {t:'Ajuste', num:1}, {t:'Percep.', num:1}, {t:'Total', num:1, b:1}];
-  const filas = R.map(x => [_fecha(x.fecha_emision), x.comprobante, _cuitFmt(x.cuit_emisor), (x.proveedor_nombre||'').slice(0,40), x.cond_iva || '',
+  const filas = R.map(x => [_fecha(x.fecha_emision), x.comprobante, _cuitFmt(x.cuit_emisor), x.proveedor_nombre || '', x.cond_iva || '',
     _lstN(x.neto_21), _lstN(x.neto_105), _lstN(x.neto_27), _lstN(Number(x.no_gravado)+Number(x.exento)), _lstN(x.iva_21), _lstN(x.iva_105), _lstN(x.iva_27),
     _lstN(x.iva_otros), _lstN(Number(x.percep_iva)+Number(x.percep_iibb_caba)+Number(x.percep_iibb_ba)+Number(x.otros_tributos)), _lstN(x.total)]);
   const tot = ['Totales', `${R.length} comprobantes`, '', '', '', _lstN(s('neto_21')), _lstN(s('neto_105')), _lstN(s('neto_27')), _lstN(s('no_gravado')+s('exento')),
@@ -6134,15 +6114,15 @@ function _pdfIvaCompras(){
 }
 function _pdfPercepciones(){
   if (!LIST_PDET || !LIST_PDET.length){ alert('No hay percepciones en el período.'); return; }
-  const cols = [{t:'Fecha', w:20}, {t:'Comprobante', w:40}, {t:'CUIT', w:28}, {t:'Proveedor'}, {t:'Impuesto', w:34}, {t:'Jurisdicción', w:34}, {t:'Percepción', num:1, b:1, w:28}];
-  const filas = LIST_PDET.map(p => [_fecha(p.fecha_emision), p.comprobante, _cuitFmt(p.cuit), (p.proveedor||'').slice(0,45), p.impuesto, p.jurisdiccion || '—', _lstN(p.importe)]);
+  const cols = [{t:'Fecha', w:18}, {t:'Comprobante', w:34}, {t:'CUIT', w:24}, {t:'Proveedor'}, {t:'Impuesto', w:26}, {t:'Jurisdicción', w:26}, {t:'Percepción', num:1, b:1}];
+  const filas = LIST_PDET.map(p => [_fecha(p.fecha_emision), p.comprobante, _cuitFmt(p.cuit), p.proveedor || '', p.impuesto, p.jurisdiccion || '—', _lstN(p.importe)]);
   return _pdfListado('Percepciones sufridas', cols, filas, {vertical: true, totales: ['Total', `${LIST_PDET.length} renglones`, '', '', '', '', _lstN(LIST_PDET.reduce((a, p) => a + Number(p.importe || 0), 0))]});
 }
 function _pdfRetenciones(){
   if (!LIST_RET || !LIST_RET.length){ alert('No hay retenciones en el período.'); return; }
   const cols = [{t:'Quincena', w:18}, {t:'Fecha', w:16}, {t:'Orden de pago', w:26}, {t:'CUIT', w:22}, {t:'Proveedor', w:50}, {t:'Régimen', w:60},
     {t:'Base', num:1}, {t:'Alíc.', num:1, w:11}, {t:'Retenido', num:1, b:1}, {t:'Certificado', w:22}, {t:'A mano / motivo', w:32}];
-  const filas = LIST_RET.map(r => [r.quincena, _fecha(r.fecha), r.orden_pago || ('#' + r.orden_pago_id), _cuitFmt(r.cuit), (r.proveedor||'').slice(0,40),
+  const filas = LIST_RET.map(r => [r.quincena, _fecha(r.fecha), r.orden_pago || ('#' + r.orden_pago_id), _cuitFmt(r.cuit), r.proveedor || '',
     `${r.regimen_codigo || ''} ${r.regimen_nombre || ''}`.trim(), _lstN(r.base_calculo), Number(r.alicuota || 0) + ' %', _lstN(r.importe), r.certificado_nro || '—', r.editado ? 'SÍ · ' + (r.motivo_edicion || '') : '']);
   return _pdfListado('Retenciones practicadas', cols, filas, {totales: ['Total', '', '', '', '', `${LIST_RET.length} retenciones`, _lstN(LIST_RET.reduce((a, r) => a + Number(r.base_calculo || 0), 0)), '', _lstN(LIST_RET.reduce((a, r) => a + Number(r.importe || 0), 0)), '', '']});
 }
@@ -8231,14 +8211,14 @@ async function editarContabilizacion(docId){
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk" crossorigin="anonymous"></script>
-<script src="op-pdf.js?v=10"></script>
-<script src="pedidos.js?v=19"></script>
+<script src="op-pdf.js?v=11"></script>
+<script src="pedidos.js?v=20"></script>
 <!-- (19-nov, JP) tablas tipo Excel: pieza común _shared/adorno-tablas.js (la pone _shared/inyectar_tablas.py, no editar la copia).
      Compras además pide las ventanas estirables desde las puntas y los bordes: -->
 <script>window.ADORNO_TABLAS_CONF = {ventanas: '#prov-modal, [id$="-overlay"]'};</script>
 <script src="equiv-import.js?v=8"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=170"></script>
+<script src="manual.js?v=171"></script>
 <script src="adorno-tablas.js?v=abc48a63"></script>
 </body>
 </html>

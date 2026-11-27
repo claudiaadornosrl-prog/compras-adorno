@@ -137,10 +137,14 @@ function _pdfTabla(doc, x, w, y, cols, filas, tot, salto){
     y += 6.2; doc.setDrawColor(..._PC.bd); doc.line(x, y, x + w, y); };
   enc();
   filas.forEach(f => {
-    if (salto && y > 262) { y = salto(y); enc(); }
+    // (27-nov, JP) ninguna celda cortada ni encimada: la columna con ancho (w) parte el texto en renglones y la fila crece
+    doc.setFontSize(8);
+    const L = f.map((cel, i) => cols[i].w ? doc.splitTextToSize(String(cel ?? ''), cols[i].w) : [String(cel ?? '')]);
+    const mas = (Math.max(...L.map(l => l.length)) - 1) * 3.5;
+    if (salto && y + mas > 262) { y = salto(y); enc(); }
     y += 5.2;
-    f.forEach((cel, i) => { const c = cols[i]; _pt(doc, cel, c.x, y, {size: 8, col: c.mut ? _PC.mut : _PC.tx, align: c.align || 'left', maxWidth: c.w}); });
-    y += 1.8; doc.setDrawColor(..._PC.fila); doc.line(x, y, x + w, y);
+    L.forEach((ls, i) => { const c = cols[i]; ls.forEach((t, k) => _pt(doc, t, c.x, y + k * 3.5, {size: 8, col: c.mut ? _PC.mut : _PC.tx, align: c.align || 'left'})); });
+    y += 1.8 + mas; doc.setDrawColor(..._PC.fila); doc.line(x, y, x + w, y);
   });
   if (tot){ doc.setFillColor(250, 250, 250); doc.rect(x, y, w, 7, 'F'); y += 5;
     tot.forEach((cel, i) => { if (cel == null) return; const c = cols[i]; _pt(doc, cel, c.x, y, {size: 8, align: c.align || 'left', bold: true}); }); y += 2; }
@@ -213,9 +217,9 @@ async function descargarOpPdf(opId){
   // retenciones
   y0 = y; yc = _pdfCardIni(doc, 14, y, 182, 'Retenciones practicadas');
   if (r.length){
-    const colsR = [{t:'Régimen', x:18}, {t:'Certificado', x:114}, {t:'Base', x:158, align:'right', mut:true}, {t:'Alíc.', x:172, align:'right'}, {t:'Importe', x:192, align:'right'}];
+    const colsR = [{t:'Régimen', x:18, w:92}, {t:'Certificado', x:114}, {t:'Base', x:158, align:'right', mut:true}, {t:'Alíc.', x:172, align:'right'}, {t:'Importe', x:192, align:'right'}];
     const corto = (t, n) => { t = String(t || ''); return t.length > n ? t.slice(0, n - 1).trim() + '…' : t; };
-    y = _pdfTabla(doc, 14, 182, yc, colsR, r.map(x => [corto(`${x.codigo} · ${x.nombre || ''}`, 48), x.certificado_nro || '—', _pdfM(x.base_calculo), x.alicuota != null ? Number(x.alicuota) + ' %' : '—', _pdfM(x.importe)]),
+    y = _pdfTabla(doc, 14, 182, yc, colsR, r.map(x => [`${x.codigo} · ${x.nombre || ''}`, x.certificado_nro || '—', _pdfM(x.base_calculo), x.alicuota != null ? Number(x.alicuota) + ' %' : '—', _pdfM(x.importe)]),
       ['Total retenido', null, null, null, _pdfM(o.retenciones_total)]);
   } else { _pt(doc, 'Sin retenciones.', 18, yc + 5.5, {size: 8, col: _PC.mut}); y = yc + 8; }
   y = _pdfCardFin(doc, 14, y0, 182, y);
