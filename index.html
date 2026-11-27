@@ -5631,7 +5631,7 @@ async function _pintarCierre(mesKey){
     box.innerHTML = `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <div style="flex:1;min-width:240px"><b>${ico(est === 'cierre' ? 'candado' : 'avion','s')} Cierre · ${esc(C.t)} · ${esc(mesTxt)}</b><div class="mini">${T}</div></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${B}</div></div>
-      <div class="mini cierre-estado" style="margin-top:4px">${!PUEDE_CERRAR ? 'Para confirmar cada paso se pide el usuario personal y la clave de quien autoriza.' : ''}</div>${H}`;
+      <div class="mini cierre-estado" style="margin-top:4px">${!PUEDE_CERRAR ? 'Cada paso lo autoriza una persona habilitada: con la cámara, desde el celular o con su usuario y clave.' : ''}</div>${H}`;
   }
   el.innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:13.5px">${ico('candado','s')} Cierres de ${esc(mesTxt)}</b>${resumen.join('')}</div><div id="envios-estudio"></div>`;
   _pintarEnviosEstudio(mesKey, (r.data || []).map(e => e.envio_id).filter(Boolean));
@@ -5716,8 +5716,23 @@ async function _cierreSubir(archivos, carpeta, avisar){
 // una rectificación tiene que autorizar con su usuario PERSONAL. Igual que el respaldo "usuario y clave" del POS:
 // un cliente aparte, sin guardar sesión, que solo se usa para registrar el paso (queda a su nombre) y se cierra.
 // Devuelve el cliente con el que llamar a compras_cierre_registrar, o null si se canceló.
-function _cierreCliente(queEs){
-  if (PUEDE_CERRAR) return Promise.resolve(sb);
+// (27-nov, JP) Ahora autoriza con la ventana común del Hub, igual que el resto de Compras: primero la cámara, si no
+// un aviso al celular, si no usuario y clave. El pre-cierre pide "Mandar al estudio los listados" y el cierre y la
+// rectificación "Cerrar o reabrir el mes" (Hub → Permisos). La autorización viaja a compras_cierre_registrar
+// (p_aut_id), que la valida y la gasta en la base y deja el paso a nombre de quien autorizó.
+// La ventana de mail y clave de antes queda solo de respaldo, si la pieza del Hub no cargó.
+async function _cierreCliente(queEs, etapa){
+  if (PUEDE_CERRAR) return sb;
+  if (!window.ADORNO_AUTORIZAR || !ADORNO_AUTORIZAR.pedir) return _cierreClienteClave(queEs);
+  const f = etapa === 'pre_cierre' ? 'compras.enviar_estudio' : 'compras.cerrar_mes';
+  try {
+    const S = ((await sb.auth.getSession()).data || {}).session, sesion = S ? {email: (S.user && S.user.email) || '', token: S.access_token} : undefined;
+    const a = await ADORNO_AUTORIZAR.pedir({funcion: f, local: 'oficina', que: queEs.charAt(0).toLowerCase() + queEs.slice(1), resumen: queEs, detalle: {operacion: queEs}, sesion});
+    if (!a) return null;
+    return {rpc: (nombre, p) => sb.rpc(nombre, nombre === 'compras_cierre_registrar' ? {...p, p_aut_id: a.id} : p)};
+  } catch (e){ avisoError('No se pudo pedir la autorización: ' + ((e && e.message) || e)); return null; }
+}
+function _cierreClienteClave(queEs){
   return new Promise(res => {
     const ov = document.createElement('div'); ov.id = 'aut-overlay';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10060;display:flex;align-items:center;justify-content:center;padding:16px;';
@@ -5787,7 +5802,7 @@ async function darPreCierre(mesKey, l, vuelta){
   const nota = prompt(C.sube ? `PRE-CIERRE de ${C.t} · ${mesTxt}.\n\nSe guardan ${elegidos.length === 1 ? 'el archivo elegido' : 'los ' + elegidos.length + ' archivos elegidos'} para controlarlos. No se manda nada al estudio.\n\n${C.pideNota || 'Podés dejar una nota (opcional):'}`
     : `Dar el PRE-CIERRE de ${C.t} · ${mesTxt}.\n\nSe guarda el listado tal como está ahora, para controlarlo. No se manda nada al estudio.\n\nPodés dejar una nota (opcional):`, '');
   if (nota === null) return;
-  const cli = await _cierreCliente(`Pre-cierre de ${C.t} · ${mesTxt}`); if (!cli) return;
+  const cli = await _cierreCliente(`Pre-cierre de ${C.t} · ${mesTxt}`, 'pre_cierre'); if (!cli) return;
   const est = document.querySelector(`.cierre-lst[data-l="${l}"] .cierre-estado`), avisar = t => { if (est) est.textContent = t; };
   try {
     avisar('Armando el listado…');
@@ -5850,7 +5865,7 @@ async function darCierre(mesKey, l, vuelta){
   const ov = document.getElementById('nota-overlay'), m = _cierreMails(); if (!m || !ov) return;
   const archivos = (ov._archivos || []).filter((a, i) => ov.querySelector(`.env-adj[data-i="${i}"]`)?.checked);
   if (!archivos.length){ alert('Tiene que ir al menos un adjunto.'); return; }
-  const cli = await _cierreCliente(`Cierre de ${_CL[l].t} · ${_envioMesTxt(mesKey)}`); if (!cli) return;
+  const cli = await _cierreCliente(`Cierre de ${_CL[l].t} · ${_envioMesTxt(mesKey)}`, 'cierre'); if (!cli) return;
   const btn = document.getElementById('env-btn'), est = document.getElementById('env-estado'); btn.disabled = true;
   try {
     const subidos = await _cierreSubir(archivos, _cierreCarpeta(mesKey, l, 'cierre-v' + vuelta), t => { est.textContent = t; });
@@ -5898,7 +5913,7 @@ async function rectificarListado(mesKey, l){
   if (!motivo){ alert('Poné el motivo de la rectificación.'); return; }
   const m = _cierreMails(); if (!m) return;
   if (!m.cuerpo){ alert('Falta el mensaje.'); return; }
-  const cli = await _cierreCliente(`Rectificación de ${_CL[l].t} · ${_envioMesTxt(mesKey)}`); if (!cli) return;
+  const cli = await _cierreCliente(`Rectificación de ${_CL[l].t} · ${_envioMesTxt(mesKey)}`, 'rectificacion'); if (!cli) return;
   const btn = document.getElementById('env-btn'); btn.disabled = true;
   const r = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'rectificacion', p_es_prueba: MODO_PRUEBA, p_nota: motivo, p_archivos: [], p_envio: m, p_numero: document.getElementById('nota-overlay')?._nro ?? null});
   _cierreSoltar(cli);
@@ -5924,10 +5939,10 @@ const _capturar = (nombre, blob) => { if (_CAPTURA){ _CAPTURA.push({nombre, blob
 function _csvBajar(nombre, filas){
   const blob = new Blob(['﻿' + filas.join('\r\n')], {type:'text/csv;charset=utf-8;'});
   if (_capturar(nombre, blob)) return;
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = nombre;
-  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  // (27-nov, JP) a mano se baja un Excel de verdad (.xlsx), igual que el que recibe el estudio; si la pieza de Excel
+  // no carga (sin internet), sale el .csv de siempre para no dejar a nadie sin el listado.
+  const bajar = f => { const a = document.createElement('a'); a.href = URL.createObjectURL(f.blob); a.download = f.nombre; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); };
+  _csvAXlsx({nombre, blob}).then(bajar, () => bajar({nombre, blob}));
 }
 const _csvNum = v => (Number(v)||0).toFixed(2).replace('.', ',');
 const _csvTxt = v => (v === null || v === undefined) ? '' : String(v).replace(/[;\r\n]/g, ' ');
@@ -5991,7 +6006,9 @@ async function _pdfListado(titulo, columnas, filas, opts = {}){
     head: [columnas.map(c => c.t)], body: filas, foot: opts.totales ? [opts.totales] : undefined,
     styles: {font: 'helvetica', fontSize: 7.4, cellPadding: 1.4, overflow: 'ellipsize', textColor: [15,23,42], lineColor: [226,232,240], lineWidth: 0.1},
     headStyles: {fillColor: [248,250,252], textColor: [100,116,139], fontStyle: 'bold', fontSize: 7},
-    footStyles: {fillColor: [248,250,252], textColor: [15,23,42], fontStyle: 'bold'},
+    // (27-nov, JP) los totales salían cortados ("2.031.108,…"): son más anchos que los renglones y van en negrita.
+    // Letra un poco más chica, menos relleno y sin recortar.
+    footStyles: {fillColor: [248,250,252], textColor: [15,23,42], fontStyle: 'bold', fontSize: 6.5, overflow: 'visible', cellPadding: {top: 1.4, bottom: 1.4, left: 0.5, right: 0.9}},
     alternateRowStyles: {fillColor: [252,252,253]},
     columnStyles: Object.fromEntries(columnas.map((c, i) => [i, {halign: c.num ? 'right' : 'left', cellWidth: c.w || 'auto', fontStyle: c.b ? 'bold' : 'normal'}])),
     showFoot: 'lastPage', didDrawPage: cab,
@@ -6008,7 +6025,7 @@ const _lstN = v => Number(v) ? Number(v).toLocaleString('es-AR', {minimumFractio
 function _pdfIvaCompras(){
   if (!LIST_IVA || !LIST_IVA.length){ alert('No hay comprobantes en el período.'); return; }
   const R = LIST_IVA, s = k => R.reduce((a, x) => a + (Number(x[k]) || 0), 0);
-  const cols = [{t:'Fecha', w:16}, {t:'Comprobante', w:30}, {t:'CUIT', w:21}, {t:'Proveedor', w:46}, {t:'IVA', w:9},
+  const cols = [{t:'Fecha', w:15}, {t:'Comprobante', w:28}, {t:'CUIT', w:20}, {t:'Proveedor', w:38}, {t:'IVA', w:8},
     {t:'Neto 21%', num:1}, {t:'Neto 10,5%', num:1}, {t:'Neto 27%', num:1}, {t:'No grav./ex.', num:1}, {t:'IVA 21%', num:1},
     {t:'IVA 10,5%', num:1}, {t:'IVA 27%', num:1}, {t:'Ajuste', num:1}, {t:'Percep.', num:1}, {t:'Total', num:1, b:1}];
   const filas = R.map(x => [_fecha(x.fecha_emision), x.comprobante, _cuitFmt(x.cuit_emisor), (x.proveedor_nombre||'').slice(0,40), x.cond_iva || '',
@@ -8124,7 +8141,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script>window.ADORNO_TABLAS_CONF = {ventanas: '#prov-modal, [id$="-overlay"]'};</script>
 <script src="equiv-import.js?v=8"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=168"></script>
+<script src="manual.js?v=169"></script>
 <script src="adorno-tablas.js?v=abc48a63"></script>
 </body>
 </html>
