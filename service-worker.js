@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v268-cc-enlaces';
+const CACHE_VERSION = 'compras-v269-pedidos-filtro-local';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './firma-jp.jpg', './pedidos.js', './adorno-tablas.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {

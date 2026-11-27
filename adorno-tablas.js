@@ -18,6 +18,10 @@
 //  (19-nov, aviso del POS) Para filtrar y ordenar, el valor de una celda deja afuera el renglón chico de
 //  abajo (.mini, .tt-aparte, [data-tt-aparte]) y los botones, si la celda tiene otro texto. Una celda
 //  puede decir su valor con data-valor="…".
+//  (27-nov, Stock y Productos, JP: el filtro de «Stock A·U·O» «que sea para filtrar por local, no por cantidad») Una
+//  celda puede tener VARIOS valores para filtrar con data-valores="Alcorta|Unicenter": en la lista del embudito cada
+//  valor aparece una vez, la fila pasa si tiene alguno de los tildados y el buscador mira cada uno. Sin el atributo,
+//  todo sigue igual (el orden lo siguen dando el texto o data-orden).
 //  (19-nov, JP) El embudito y la flechita de orden van SIEMPRE al costado del título (a la derecha, en un
 //  lugar reservado del margen), nunca abajo, aunque la columna sea angosta y el título baje de renglón.
 //
@@ -250,8 +254,14 @@ function valorDe(c){
   const t = textoCelda(c);
   const vacio = VACIO.test(t);
   const base = c && c.dataset && c.dataset.orden != null ? c.dataset.orden : t;
-  return {t, k: vacio ? '' : norm(t), vacio, fecha: vacio ? null : aFecha(base), num: vacio ? null : aNumero(base)};
+  const v = {t, k: vacio ? '' : norm(t), vacio, fecha: vacio ? null : aFecha(base), num: vacio ? null : aNumero(base)};
+  // (27-nov) varios valores para filtrar: data-valores="A|B" (vacío = la fila cuenta como «(vacías)»)
+  if (c && c.dataset && c.dataset.valores != null)
+    v.lista = String(c.dataset.valores).split('|').map(limpio).filter(Boolean).map(x => ({t: x, k: norm(x), vacio: false, fecha: null, num: null}));
+  return v;
 }
+// las claves de filtro de un valor: las de su lista (data-valores) o la suya
+const clavesDe = v => v.lista ? (v.lista.length ? v.lista.map(x => x.k) : ['']) : [v.k];
 function spanDe(c){ return +(c.dataset.ttCs || c.colSpan || 1); }
 function celdaEn(tr, pos){
   let p = 0;
@@ -337,6 +347,7 @@ function valor(u, col){ let v = u.c[col.pos]; if (!v){ v = valorDe(celdaEn(u.tr,
 // tipo de la columna: fecha, número o texto. Una columna de números con pocas palabras sueltas
 // («Falta»: 14, 5, OK, sin mín.) es de números: las palabras quedan al final, en cualquier sentido.
 function tipoCol(col, U){
+  for (const u of U){ if (!u.fija){ if (valor(u, col).lista) return 'texto'; break; } }   // (27-nov) data-valores: siempre lista de valores
   let f = 0, n = 0, tot = 0;
   const palabras = new Set();
   for (const u of U){ if (u.fija) continue; const v = valor(u, col); if (v.vacio) continue;
@@ -359,6 +370,12 @@ function pasa(T, u, salvo){
     const f = F[id]; if (!activo(f)) continue;
     const col = T.colPorId[id]; if (!col) continue;
     const v = valor(u, col);
+    if (v.lista){   // (27-nov) varios valores: pasa si alguno coincide con el buscador y alguno sigue tildado
+      const ks = clavesDe(v);
+      if (f.q && !ks.some(k => k.includes(norm(f.q)))) return false;
+      if (f.excl && f.excl.size && ks.every(k => f.excl.has(k))) return false;
+      continue;
+    }
     if (f.q && !v.k.includes(norm(f.q))) return false;
     if (f.excl && f.excl.size && f.excl.has(v.k)) return false;
     if (f.desde != null || f.hasta != null){
@@ -832,6 +849,11 @@ function pintarMenu(){
   for (const u of U){
     if (!pasa(T, u, col.id)) continue;
     const v = valor(u, col);
+    if (v.lista){   // (27-nov) cada valor de la lista cuenta por separado
+      if (!v.lista.length){ const e = m.get(''); if (e) e.n++; else m.set('', {k: '', t: '(vacías)', n: 1, v: {t: '', k: '', vacio: true, fecha: null, num: null}}); }
+      for (const x of v.lista){ const e = m.get(x.k); if (e) e.n++; else m.set(x.k, {k: x.k, t: x.t, n: 1, v: x}); }
+      continue;
+    }
     const e = m.get(v.k); if (e) e.n++; else m.set(v.k, {k: v.k, t: v.vacio ? '(vacías)' : v.t, n: 1, v});
   }
   const vals = [...m.values()].sort((a, b) => (a.k === '') - (b.k === '') || (rango(a.v, tipo) - rango(b.v, tipo)) || comparar(a.v, b.v, tipo));
