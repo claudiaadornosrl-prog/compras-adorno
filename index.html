@@ -4179,7 +4179,7 @@ function _facturaRenglones(d, reng, opts = {}){
         <td class="num">${ed ? inp(i, 'cantidad', r.cantidad, 54) : Number(r.cantidad||0).toLocaleString('es-AR')}</td>
         <td style="max-width:300px">
           <div class="fx-desc" title="${esc(r.descripcion || '')}${r.codigo_proveedor ? ' · código del proveedor ' + esc(r.codigo_proveedor) : ''}${r.sku ? ' · SKU ' + esc(r.sku) : ''}">${esc(r.descripcion || '')}</div>
-          <div class="fx-sku">${r.sku ? `<code>${esc(r.sku)}</code>${r.descripcion_nuestra ? ` <span class="fx-nuestra" title="Nuestra descripción en el Dragonfish">${esc(r.descripcion_nuestra)}</span>` : ''}${Number(r.pack) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="El proveedor lo vende en pack de ${Number(r.pack)}: al stock entran ${_rengN(Number(r.cantidad||0) * Number(r.pack))} unidades">×${Number(r.pack)} = ${_rengN(Number(r.cantidad||0) * Number(r.pack))} u.</span>` : ''}` : (r.estado === 'desglosado' ? `<span style="color:#6d28d9">desglosado por color en el remito</span>` : esMerc ? `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>` : (r.codigo_proveedor ? `<span class="mini" title="Código del proveedor (no es mercadería: no se traduce a SKU)">${esc(r.codigo_proveedor)}</span>` : ''))}${(esMerc && !r.sku && !r.sin_stock && r.estado !== 'desglosado' && opts.desde) ? ` <button class="act op-ico" title="Asignar SKU: traducir el código del proveedor a un artículo nuestro. Se guarda como equivalencia y las próximas facturas de este proveedor lo reconocen solas." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${i})">${ico('link','s')}</button>` : ''}</div>
+          <div class="fx-sku">${r.sku ? `<code>${esc(r.sku)}</code>${r.descripcion_nuestra ? ` <span class="fx-nuestra" title="Nuestra descripción en el Dragonfish">${esc(r.descripcion_nuestra)}</span>` : ''}${Number(r.pack) > 1 ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9" title="El proveedor lo vende en pack de ${Number(r.pack)}: al stock entran ${_rengN(Number(r.cantidad||0) * Number(r.pack))} unidades">×${Number(r.pack)} = ${_rengN(Number(r.cantidad||0) * Number(r.pack))} u.</span>` : ''}` : (r.estado === 'desglosado' ? `<span style="color:#6d28d9">desglosado por color en el remito</span>` : esMerc ? `<span style="color:#b91c1c">${esc(r.codigo_proveedor || '')} → sin SKU</span>` : (r.codigo_proveedor ? `<span class="mini" title="Código del proveedor (no es mercadería: no se traduce a SKU)">${esc(r.codigo_proveedor)}</span>` : ''))}${(esMerc && !r.sku && !r.sin_stock && r.estado !== 'desglosado' && opts.desde) ? ` <button class="act op-ico" title="Asignar SKU: traducir el código del proveedor a un artículo nuestro. Se guarda como equivalencia y las próximas facturas de este proveedor lo reconocen solas." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${i})">${ico('link','s')}</button>` : ''}${(esMerc && r.sku && !r.sin_stock && r.estado !== 'desglosado' && opts.desde && r.codigo_proveedor && String(r.codigo_proveedor).trim().toUpperCase() !== String(r.sku).trim().toUpperCase()) ? `${(_packDeTexto(r.descripcion) > 1 && !(Number(r.pack) > 1)) ? ` <span class="chip" style="background:#7c3aed1a;color:#6d28d9;cursor:pointer" title="El proveedor lo describe como pack de ${_packDeTexto(r.descripcion)} y la equivalencia está cargada como 1. Si nuestro SKU es la unidad suelta, tocá acá y poné ${_packDeTexto(r.descripcion)} en Unid. por pack: cambia el control de precio y lo que entra al stock." onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${i}, true)">¿pack ×${_packDeTexto(r.descripcion)}?</span>` : ''} <button class="act gh op-ico" title="Editar la equivalencia: cambiar nuestro SKU o cuántas unidades trae el pack del proveedor" onclick="abrirMapeoRenglon(${Number(d.id)}, '${esc(opts.desde)}', ${i}, true)">${ico('lapiz','s')}</button>` : ''}</div>
           ${(r.lista_compra != null || r.lista_costo != null) ? `<div class="mini fx-listas" title="Listas del Dragonfish vigentes a la fecha de la factura: COMPRA (precio de lista) y COSTO (con el descuento pactado por artículo)">${r.lista_compra != null ? `lista <b>${plata(r.lista_compra)}</b>` : ''}${r.lista_compra != null && r.lista_costo != null ? ' · ' : ''}${r.lista_costo != null ? `costo <b>${plata(r.lista_costo)}</b>` : ''}</div>` : ''}</td>
         <td class="num">${ed ? inp(i, 'precio_unitario', r.precio_unitario, 96) : (r.precio_unitario != null ? plata(r.precio_unitario) : '—')}</td>
         <td class="num">${ed ? inp(i, 'descuento_pct', r.descuento_pct, 46) + ' %' : (Number(r.descuento_pct) ? Number(r.descuento_pct).toLocaleString('es-AR') + ' %' : '—')}</td>
@@ -6655,13 +6655,27 @@ async function restaurarIgnorado(i){
 
 // Desde el renglón de una factura (modal de control o resumen): mismo modal de 🔗 Equivalencias.
 let _mapeoRengCache = {};
-async function abrirMapeoRenglon(docId, desde, idx){
+async function abrirMapeoRenglon(docId, desde, idx, editar){
   const d = desde === 'control' ? enControl : (_mapeoRengCache.doc || null);
   const reng = desde === 'control' ? (enControl && enControl._renglones) : _mapeoRengCache.reng;
   const r = reng && reng[idx]; if (!d || !r) { alert('No encontré el renglón. Cerrá y volvé a abrir la factura.'); return; }
-  await _abrirMapeoCon({cuit: String(d.cuit_emisor), codigo_proveedor: r.codigo_proveedor || '',
+  const m = {cuit: String(d.cuit_emisor), codigo_proveedor: r.codigo_proveedor || '',
     descripcion: r.descripcion || '', prov: d.proveedor_nombre, veces: 1,
-    _docId: docId, _desde: desde});
+    _docId: docId, _desde: desde};
+  // (27-nov, JP) renglón que ya tiene SKU: se abre la equivalencia cargada (todas sus partes y su pack) para corregirla
+  if (editar && r.sku){
+    let partes = null;
+    try {
+      const q = await sb.from('compras_equivalencias').select('sku,cantidad_por_unidad,proporcion_costo,clave_desc')
+        .eq('cuit_proveedor', m.cuit).eq('codigo_proveedor', m.codigo_proveedor).order('id');
+      const filas = q.data || [], sku = String(r.sku).toUpperCase();
+      const mia = filas.find(f => String(f.sku).toUpperCase() === sku);
+      if (mia) partes = filas.filter(f => f.clave_desc === mia.clave_desc)
+        .map(f => ({sku: f.sku, cantidad: Number(f.cantidad_por_unidad) || 1, proporcion: Number(f.proporcion_costo) || 1}));
+    } catch (e) {}
+    m._preset = partes || [{sku: r.sku, cantidad: Number(r.pack) || 1, proporcion: 1}];
+  }
+  await _abrirMapeoCon(m);
 }
 async function _abrirMapeoCon(m){
   enMapeo = m;
@@ -6671,7 +6685,8 @@ async function _abrirMapeoCon(m){
     p_descripcion: enMapeo.descripcion, p_limite: 8,
   });
   candidatos = error ? [] : (data || []);
-  if (candidatos.length) partesMapeo = [{sku: candidatos[0].sku, cantidad: 1, proporcion: 1}];
+  if (enMapeo._preset) partesMapeo = enMapeo._preset.map(p => ({...p}));
+  else if (candidatos.length) partesMapeo = [{sku: candidatos[0].sku, cantidad: 1, proporcion: 1}];
   pintarMapeo();
 }
 async function abrirMapeo(i){
@@ -6897,8 +6912,9 @@ function _eqSepararCodigo(i){
   pintarMapeo();
 }
 function _packDeTexto(t){
-  const m = String(t||'').toUpperCase().match(/\bP(?:ACK)?\s*X\s*(\d{1,2})\b/);
-  return m ? Number(m[1]) : 1;
+  // (27-nov, JP) también "C/R X6", "CAJA X 12", "SET X 2" o "X6" suelto (no toma medidas como 20X30, 2,5 X 10 ni X6CM)
+  const m = String(t||'').toUpperCase().match(/(?<![A-Z0-9])(?<![0-9,.]\s*)(?:P(?:ACK)?|C\/R|CAJA|SET|JGO|JUEGO)?\s*X\s*(\d{1,2})(?![A-Z0-9,.])/);
+  return m && Number(m[1]) > 1 ? Number(m[1]) : 1;
 }
 async function guardarMapeo(){
   const partes = partesMapeo.filter(p => (p.sku||'').trim())
@@ -8103,9 +8119,9 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <!-- (19-nov, JP) tablas tipo Excel: pieza común _shared/adorno-tablas.js (la pone _shared/inyectar_tablas.py, no editar la copia).
      Compras además pide las ventanas estirables desde las puntas y los bordes: -->
 <script>window.ADORNO_TABLAS_CONF = {ventanas: '#prov-modal, [id$="-overlay"]'};</script>
-<script src="equiv-import.js?v=6"></script>
+<script src="equiv-import.js?v=7"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=166"></script>
+<script src="manual.js?v=167"></script>
 <script src="adorno-tablas.js?v=abc48a63"></script>
 </body>
 </html>
