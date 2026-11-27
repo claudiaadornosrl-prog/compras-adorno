@@ -5060,6 +5060,32 @@ function _ccSaldos(){
   let s = ant; const S = M.map(m => (s += (Number(m.debe) || 0) - (Number(m.haber) || 0)));
   return {M, ant, S, fin: s};
 }
+// (27-nov, JP) «Poneme hipervínculos en los comprobantes que abran subventanas»: el comprobante de cada renglón es un
+// enlace. La factura se abre en su ventana de resumen ENCIMA de la cuenta corriente; la orden de pago, en su ventana,
+// también encima: la cuenta corriente queda atrás y vuelve (actualizada) al cerrar la orden.
+async function _ccVerDoc(id){
+  id = Number(id);
+  if (!DOCS.find(d => d.id === id)){
+    const r = await sb.from('compras_documentos').select('*').eq('id', id).maybeSingle();
+    if (r.error || !r.data){ alert('No pude abrir este comprobante.'); return; }
+    DOCS.push(r.data);
+  }
+  await abrirResumenDoc(id);
+  const ov = document.getElementById('res-overlay'); if (ov) ov.style.zIndex = '10010';   // por encima de la cuenta corriente
+}
+async function _ccVerOP(id){
+  const cc = document.getElementById('prov-modal'); if (!cc || !_CC) return verOP(id);
+  const cuit = _CC.cuit, desde = _CC.desde, hasta = _CC.hasta;
+  cc.id = 'prov-modal-cc';                                  // la cuenta corriente queda atrás, sin cerrarse
+  const volver = async () => { if (!cc.isConnected) return; cc.id = 'prov-modal';
+    await abrirCC(cuit);                                    // vuelve con los datos al día (por si la orden se pagó o se anuló)
+    const d = document.getElementById('cc-desde'), h = document.getElementById('cc-hasta');
+    if (d && h && (desde || hasta)){ d.value = desde; h.value = hasta; _ccFiltro(); } };
+  try { await verOP(id); } catch (e){ cc.id = 'prov-modal'; throw e; }
+  if (!document.getElementById('prov-modal')){ cc.id = 'prov-modal'; return; }   // no llegó a abrirse
+  const obs = new MutationObserver(() => { if (!document.getElementById('prov-modal')){ obs.disconnect(); volver(); } });
+  obs.observe(document.body, {childList: true});
+}
 const _ccColorSaldo = v => v > 0.004 ? '#991b1b' : v < -0.004 ? '#166534' : 'inherit';
 function _ccPintarMovs(){
   const c = document.getElementById('cc-movs'); if (!c || !_CC) return;
@@ -5069,9 +5095,9 @@ function _ccPintarMovs(){
   c.innerHTML = !M.length ? `<div class="vacio">${_CC.M.length ? 'Sin movimientos entre esas fechas.' : 'Sin movimientos.'}</div>` : `<div style="overflow:auto;max-height:56vh"><table class="tb-band" style="font-size:12.5px">
       <thead><tr><th>Fecha</th><th>Comprobante</th><th>Detalle</th><th class="num">Debe</th><th class="num">Haber</th><th class="num" title="Saldo acumulado hasta ese movimiento: debe menos haber">Saldo</th><th>Estado</th></tr></thead>
       <tbody>${_CC.desde ? `<tr style="font-style:italic"><td class="mini" style="white-space:nowrap">${_fecha(_CC.desde)}</td><td colspan="4">Saldo anterior</td><td class="num" style="white-space:nowrap;color:${_ccColorSaldo(ant)}">${plata(ant)}</td><td></td></tr>` : ''}${M.map((m, i) => { const esPend = m.clase !== 'OP' && _CC_PEND.includes(m.estado);
-        return `<tr style="${m.clase === 'OP' ? 'background:#f0fdf4' : esPend ? 'background:#F7F1EC' : ''}" ${m.doc_id ? `onclick="abrirResumenDoc(${m.doc_id})" title="Abrir el comprobante"` : m.op_id ? `onclick="verOP(${m.op_id})" title="Abrir la orden de pago"` : ''}>
+        return `<tr style="${m.clase === 'OP' ? 'background:#f0fdf4' : esPend ? 'background:#F7F1EC' : ''}" ${m.doc_id ? `onclick="_ccVerDoc(${m.doc_id})" title="Abrir el comprobante"` : m.op_id ? `onclick="_ccVerOP(${m.op_id})" title="Abrir la orden de pago"` : ''}>
         <td class="mini" style="white-space:nowrap">${_fecha(m.fecha)}</td>
-        <td style="white-space:nowrap">${esc(m.comprobante)}</td>
+        <td style="white-space:nowrap">${m.doc_id || m.op_id ? `<a href="#" style="color:var(--primary-dark,var(--primary));text-decoration:underline;font-weight:600" title="${m.doc_id ? 'Abrir el comprobante en una ventana encima' : 'Abrir la orden de pago en una ventana encima'}" onclick="event.stopPropagation();${m.doc_id ? `_ccVerDoc(${m.doc_id})` : `_ccVerOP(${m.op_id})`};return false">${esc(m.comprobante)}</a>` : esc(m.comprobante)}</td>
         <td class="mini">${esc(m.detalle || '')}</td>
         <td class="num">${Number(m.debe) ? plata(m.debe) : ''}</td>
         <td class="num">${Number(m.haber) ? plata(m.haber) : ''}</td>
@@ -8353,7 +8379,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script>window.ADORNO_TABLAS_CONF = {ventanas: '#prov-modal, [id$="-overlay"]'};</script>
 <script src="equiv-import.js?v=8"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=175"></script>
+<script src="manual.js?v=176"></script>
 <script src="adorno-tablas.js?v=abc48a63"></script>
 </body>
 </html>
