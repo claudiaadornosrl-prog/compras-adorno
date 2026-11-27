@@ -1150,7 +1150,7 @@ const _AUT_CONSULTAS = new Set(('compras_bandeja,compras_cc_cliente_movs,compras
   'compras_resolver_articulo,compras_rg830_ultima,compras_soy_admin,compras_sugerir_pendientes,hub_puede_ver,hub_puedo,hub_mis_locales,hub_modulos,stock_desgloses_pendientes,stock_juegos_listar,' +
   // escriben algo interno pero son consultas para quien las usa: constatación en ARCA, pedirle al motor que lea, numerar el certificado al abrir su PDF, textos y listas
   'compras_arca_estado,compras_arca_pedir,compras_pedir_motor,compras_op_certificados,compras_poliza_pendientes,compras_proveedor_equiv_desc,compras_proveedor_factura_lista,compras_remito_txt,' +
-  'compras_cierre_registrar').split(','));
+  'compras_cierre_registrar,compras_cierre_grupo_registrar').split(','));
 const _AUT_TABLAS_LIBRES = new Set(['compras_eventos', 'compras_config']);
 const _AUT_NOMBRES = {compras_contabilizar: 'Contabilizar el comprobante', compras_rechazar: 'Rechazar el comprobante', compras_corregir_importes: 'Corregir los importes del comprobante',
   compras_renglones_guardar: 'Guardar los renglones del comprobante', compras_cargar_sin_factura: 'Cargar un gasto sin factura', compras_op_emitir: 'Emitir la orden de pago',
@@ -5633,6 +5633,7 @@ async function _pintarCierre(mesKey){
   const lv = await sb.from('libros_iva_archivos').select('archivo').eq('periodo', mesKey);
   if (document.getElementById('cierre-etapas') !== el || el.dataset.mes !== mesKey) return;
   _VENTAS_ARCH = (lv.data || []).map(x => x.archivo).filter(a => /^VENTAS_/.test(a)); _CIERRE_ULT = {};
+  for (const e of (r.data || [])) _CIERRE_ULT[e.listado] = e;
   // (27-nov, JP) datos de los listados de ventas del mes (si no hay, esos tres listados se siguen subiendo a mano)
   const vd = await sb.from('ventas_listados_estudio').select('contenido,origen,generado_at').eq('periodo', mesKey + '-01').maybeSingle();
   if (document.getElementById('cierre-etapas') !== el || el.dataset.mes !== mesKey) return;
@@ -5671,7 +5672,7 @@ async function _pintarCierre(mesKey){
           ${A.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${A.map(a => `<a href="#" class="chip" style="background:#f1f5f9;color:#334155;font-weight:600;text-decoration:none" title="Bajar el archivo tal como se emitió en ese paso" data-path="${esc(a.path)}" onclick="_cierreBajar(this.dataset.path);return false">${esc(a.nombre)}</a>`).join('')}</div>` : ''}</div>`; }).join('')}</details>`;
     box.style.cssText = `border:1px solid #e5e7eb;border-left:4px solid ${col};border-radius:16px;padding:10px 14px;margin-bottom:12px;background:#fff`;
     box.innerHTML = `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-        <div style="flex:1;min-width:240px"><b>${ico(est === 'cierre' ? 'candado' : 'avion','s')} Cierre · ${esc(C.t)} · ${esc(mesTxt)}</b><div class="mini">${T}${C.origen && est !== 'cierre' ? C.origen() : ''}</div></div>
+        <div style="flex:1;min-width:240px"><b>${ico(est === 'cierre' ? 'candado' : 'avion','s')} Cierre · ${esc(C.t)} · ${esc(mesTxt)}</b><div class="mini">${T}${C.origen && est !== 'cierre' ? C.origen() : ''}${_CL_COMPRAS.includes(l) && vuelta > 1 && est !== 'cierre' && _grupoEnCorreccion().length > 1 ? ` Una rectificación le pega a toda la parte de Compras: al dar el <b>Cierre</b> de cualquiera de los listados en corrección (${esc(_grupoEnCorreccion().map(x => _CL[x].t).join(' · '))}) se mandan <b>todos juntos de nuevo</b>, en un solo mail.` : ''}</div></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${B}</div></div>
       <div class="mini cierre-estado" style="margin-top:4px">${!PUEDE_CERRAR ? 'Cada paso lo autoriza una persona habilitada: con la cámara, desde el celular o con su usuario y clave.' : ''}</div>${H}`;
   }
@@ -5771,7 +5772,7 @@ async function _cierreCliente(queEs, etapa){
     const S = ((await sb.auth.getSession()).data || {}).session, sesion = S ? {email: (S.user && S.user.email) || '', token: S.access_token} : undefined;
     const a = await ADORNO_AUTORIZAR.pedir({funcion: f, local: 'oficina', que: queEs.charAt(0).toLowerCase() + queEs.slice(1), resumen: queEs, detalle: {operacion: queEs}, sesion});
     if (!a) return null;
-    return {rpc: (nombre, p) => sb.rpc(nombre, nombre === 'compras_cierre_registrar' ? {...p, p_aut_id: a.id} : p)};
+    return {rpc: (nombre, p) => sb.rpc(nombre, /^compras_cierre_(grupo_)?registrar$/.test(nombre) ? {...p, p_aut_id: a.id} : p)};
   } catch (e){ avisoError('No se pudo pedir la autorización: ' + ((e && e.message) || e)); return null; }
 }
 function _cierreClienteClave(queEs){
@@ -5867,7 +5868,71 @@ function _cierreOverlay(){
 }
 const _cierreAsunto = (cfg, l, mesTxt) => `Claudia Adorno SRL · ${_CL[l].t} · ${mesTxt}`;
 // El Cierre de un listado: abre la ventana del mail con los archivos de ESE listado.
+// ── (27-nov, JP) «Una rectificativa le pega a toda la parte de compras»: los listados de COMPRAS (IVA Compras,
+// retenciones y percepciones, y las dos quincenas de retenciones) se rectifican juntos y, en el nuevo cierre, se
+// mandan todos juntos de nuevo en un solo mail. En la base: compras_cierre_grupo_registrar (un mail, un paso por listado).
+const _CL_COMPRAS = ['iva', 'percepciones', 'retenciones_q1', 'retenciones_q2'];
+const _grupoCerrados = mesKey => _CL_COMPRAS.filter(x => _CIERRE_ULT[x] ? _CIERRE_ULT[x].etapa === 'cierre' : (x === 'iva' && !!(MESES_CERRADOS.get && MESES_CERRADOS.get(mesKey))));
+const _grupoEnCorreccion = () => _CL_COMPRAS.filter(x => { const u = _CIERRE_ULT[x]; return u && (u.etapa === 'rectificacion' || (u.etapa === 'pre_cierre' && u.vuelta > 1)); });
+const _grupoNombres = G => G.map(x => _CL[x].t).join(', ').replace(/, ([^,]*)$/, ' y $1');
+async function abrirCierreGrupo(mesKey, G){
+  const cfg = await _envioCfg(), mesTxt = _envioMesTxt(mesKey), pasos = [];
+  let nro;
+  try { nro = await _cierreProximo(); } catch (e){ avisoError('No pude preparar el cierre: ' + e.message); return; }
+  try {
+    for (let i = 0; i < G.length; i++){
+      const m = G[i], v = (_CIERRE_ULT[m] || {}).vuelta || 2, sin = !_CL[m].n();
+      pasos.push({l: m, vuelta: v, sinMov: sin, archivos: sin ? _cierreSinMov(mesKey, m, v, nro + i) : await _cierreArmar(mesKey, m, 'cierre', v, nro + i)});
+    }
+  } catch (e){ avisoError('No pude armar los listados: ' + e.message); return; }
+  const ver = Math.max(...pasos.map(x => x.vuelta)), R = 'width:100%;box-sizing:border-box;border-radius:999px';
+  const cuerpo = `Hola,\n\nAdjuntamos nuevamente todos los listados de Compras de ${mesTxt}, ya corregidos: ${_grupoNombres(G)}.\n\nEs la versión rectificada: reemplaza a todo lo que mandamos antes de Compras para ese mes.${pasos.some(x => x.sinMov) ? '\n\nSin movimientos: ' + _grupoNombres(pasos.filter(x => x.sinMov).map(x => x.l)) + '.' : ''}\n\nCualquier duda nos avisan.\n\nSaludos,\nAdministración · Claudia Adorno SRL`;
+  const ov = _cierreOverlay();
+  ov.innerHTML = `<div class="c-box" style="max-width:660px;width:100%">
+    <div class="c-head"><div style="flex:1"><div style="font-weight:700;font-size:15px">${ico('candado','s')} Dar el Cierre y enviar · Compras completo · ${esc(mesTxt)} · rectificado${MODO_PRUEBA ? ' · 🧪 PRUEBA' : ''}</div>
+      <div style="font-size:12.5px;opacity:.9">Se mandan juntos, en un solo mail, todos los listados de Compras que estaban en corrección. Sale desde claudiaadornosrl@gmail.com, desde la PC de JP, en unos 5 minutos. Los comprobantes del mes quedan bloqueados.</div></div>
+      <button class="m-x" onclick="document.getElementById('nota-overlay').remove()">✕</button></div>
+    <div class="c-body" style="display:grid;gap:8px">
+      <label class="mini">Para (separados por coma)<input id="env-para" style="${R}" value="${esc((cfg.para || []).join(', '))}" placeholder="mail del estudio"></label>
+      <label class="mini">Con copia<input id="env-cc" style="${R}" value="${esc((cfg.cc || []).join(', '))}"></label>
+      ${_estudioMailsHTML()}
+      <label class="mini">Asunto<input id="env-asunto" style="${R}" value="${esc(`Claudia Adorno SRL · Compras (IVA, percepciones y retenciones) · ${mesTxt} · RECTIFICADO (versión ${ver}) · ${_nroEm(nro)}${G.length > 1 ? ' a ' + _nroEm(nro + G.length - 1) : ''}`)}"></label>
+      <label class="mini">Mensaje<textarea id="env-cuerpo" rows="7" style="width:100%;box-sizing:border-box;font:inherit;font-size:13px;border-radius:14px">${esc(cuerpo)}</textarea></label>
+      <div class="mini" style="font-weight:600;margin-top:4px">Adjuntos · van todos</div>
+      ${pasos.map(x => `<div class="mini" style="margin-top:2px"><b>${esc(_CL[x.l].t)}</b>${x.sinMov ? ' · sin movimientos' : ''}<br>${x.archivos.map(a => esc(a.nombre)).join('<br>')}</div>`).join('')}
+      <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-top:6px"><input type="checkbox" id="env-guardar" checked> Recordar los destinatarios para la próxima vez</label>
+    </div>
+    <div class="c-pie"><div style="flex:1" id="env-estado" class="mini"></div>
+      <button class="act gh" style="${_PILL}" onclick="document.getElementById('nota-overlay').remove()">Cancelar</button>
+      <button class="act" style="${_PILL}" id="env-btn" onclick="darCierreGrupo('${mesKey}')">${ico('avion','s')} Dar el Cierre y enviar todo</button></div></div>`;
+  ov._grupo = pasos; ov._nro = nro;
+}
+async function darCierreGrupo(mesKey){
+  const ov = document.getElementById('nota-overlay'), m = _cierreMails(); if (!m || !ov || !ov._grupo) return;
+  const peso = ov._grupo.reduce((a, x) => a + x.archivos.reduce((b, f) => b + f.blob.size, 0), 0);
+  if (peso > 18 * 1024 * 1024){ alert(`Los adjuntos pesan ${(peso / 1024 / 1024).toFixed(1)} MB y el mail no admite más de 18 MB en total.`); return; }
+  const cli = await _cierreCliente(`Cierre de Compras completo · ${_envioMesTxt(mesKey)}`, 'cierre'); if (!cli) return;
+  const btn = document.getElementById('env-btn'), est = document.getElementById('env-estado'); btn.disabled = true;
+  try {
+    const pasos = [];
+    for (const x of ov._grupo) pasos.push({listado: x.l, archivos: await _cierreSubir(x.archivos, _cierreCarpeta(mesKey, x.l, 'cierre-v' + x.vuelta), t => { est.textContent = t; })});
+    est.textContent = 'Registrando el cierre…';
+    const r = await cli.rpc('compras_cierre_grupo_registrar', {p_periodo: mesKey + '-01', p_etapa: 'cierre', p_es_prueba: MODO_PRUEBA, p_nota: null, p_pasos: pasos, p_envio: m, p_numero: ov._nro});
+    if (r.error) throw new Error(r.error.message);
+  } catch (e){ btn.disabled = false; est.textContent = ''; avisoError('No se pudo dar el cierre: ' + e.message); return; }
+  finally { _cierreSoltar(cli); }
+  if (document.getElementById('env-guardar')?.checked){
+    const cfg = await _envioCfg(), valor = {...cfg, para: m.para, cc: m.cc};
+    const up = await sb.from('compras_config').upsert({clave: 'estudio_envio', valor, actualizado_por: session.email || null, actualizado_at: new Date().toISOString()});
+    if (!up.error) ENVIO_CFG = valor;
+  }
+  ov.remove();
+  alert(`Cierre dado: Compras completo (${_grupoNombres(ov._grupo.map(x => x.l))}). Sale en un solo mail a ${m.para.join(', ')} desde la PC de JP en unos 5 minutos.`);
+  await cargarMesesCerrados(); cargarListadosEstudio();
+}
 async function abrirCierre(mesKey, l, vuelta, sinMov){
+  // después de una rectificación, el cierre de un listado de Compras manda todos los que están en corrección
+  if (_CL_COMPRAS.includes(l) && vuelta > 1){ const G = _grupoEnCorreccion(); if (G.includes(l) && G.length > 1) return abrirCierreGrupo(mesKey, G); }
   const C = _CL[l], cfg = await _envioCfg(), mesTxt = _envioMesTxt(mesKey);
   let archivos, nro;
   // sin movimientos se registran dos pasos juntos (pre-cierre y cierre): el archivo lleva el número del cierre
@@ -5934,17 +5999,21 @@ async function abrirRectificar(mesKey, l, vuelta){
   const C = _CL[l], cfg = await _envioCfg(), mesTxt = _envioMesTxt(mesKey);
   let nro; try { nro = await _cierreProximo(); } catch (e){ avisoError('No pude preparar la rectificación: ' + e.message); return; }
   const ov = _cierreOverlay(), R = 'width:100%;box-sizing:border-box;border-radius:999px'; ov._nro = nro;
+  // (27-nov, JP) una rectificación de Compras arrastra a todos los listados de Compras que ya estaban cerrados
+  const G = _CL_COMPRAS.includes(l) ? _grupoCerrados(mesKey) : [l], enGrupo = G.length > 1 && G.includes(l);
+  ov._grupoRect = enGrupo ? G : null;
   ov.innerHTML = `<div class="c-box" style="max-width:640px;width:100%">
-    <div class="c-head"><div style="flex:1"><div style="font-weight:700;font-size:15px">${ico('candado','s')} Rectificar · ${esc(C.t)} · ${esc(mesTxt)}${MODO_PRUEBA ? ' · 🧪 PRUEBA' : ''}</div>
-      <div style="font-size:12.5px;opacity:.9">Sale un aviso al estudio y el listado vuelve a pre-cierre (versión ${vuelta + 1}).${C.bloquea ? ' Los comprobantes del mes se desbloquean.' : ''} Lo que ya se emitió queda guardado en el historial.</div></div>
+    <div class="c-head"><div style="flex:1"><div style="font-weight:700;font-size:15px">${ico('candado','s')} Rectificar · ${enGrupo ? 'Compras completo' : esc(C.t)} · ${esc(mesTxt)}${MODO_PRUEBA ? ' · 🧪 PRUEBA' : ''}</div>
+      <div style="font-size:12.5px;opacity:.9">${enGrupo ? `Una rectificación le pega a toda la parte de Compras: vuelven a corrección juntos <b>${esc(_grupoNombres(G))}</b>. Sale un solo aviso al estudio, los comprobantes del mes se desbloquean y, cuando des el nuevo Cierre, se mandan todos juntos de nuevo.`
+        : `Sale un aviso al estudio y el listado vuelve a pre-cierre (versión ${vuelta + 1}).${C.bloquea ? ' Los comprobantes del mes se desbloquean.' : ''}`} Lo que ya se emitió queda guardado en el historial.</div></div>
       <button class="m-x" onclick="document.getElementById('nota-overlay').remove()">✕</button></div>
     <div class="c-body" style="display:grid;gap:8px">
       <label class="mini">Motivo de la rectificación (queda en el historial, no va en el mail)<input id="rec-motivo" style="${R}" placeholder="qué diferencia se encontró"></label>
       <label class="mini">Para (separados por coma)<input id="env-para" style="${R}" value="${esc((cfg.para || []).join(', '))}" placeholder="mail del estudio"></label>
       <label class="mini">Con copia<input id="env-cc" style="${R}" value="${esc((cfg.cc || []).join(', '))}"></label>
       ${_estudioMailsHTML()}
-      <label class="mini">Asunto<input id="env-asunto" style="${R}" value="${esc(_cierreAsunto(cfg, l, mesTxt) + ' · EN CORRECCIÓN · ' + _nroEm(nro))}"></label>
-      <label class="mini">Mensaje<textarea id="env-cuerpo" rows="5" style="width:100%;box-sizing:border-box;font:inherit;font-size:13px;border-radius:14px">Estamos corrigiendo el listado de ${esc(C.t)} del mes ${esc(mesTxt)} porque encontramos unas diferencias, en breve mandamos las correcciones.</textarea></label>
+      <label class="mini">Asunto<input id="env-asunto" style="${R}" value="${esc((enGrupo ? `Claudia Adorno SRL · Compras (IVA, percepciones y retenciones) · ${mesTxt}` : _cierreAsunto(cfg, l, mesTxt)) + ' · EN CORRECCIÓN · ' + _nroEm(nro))}"></label>
+      <label class="mini">Mensaje<textarea id="env-cuerpo" rows="5" style="width:100%;box-sizing:border-box;font:inherit;font-size:13px;border-radius:14px">${enGrupo ? `Estamos corrigiendo los listados de Compras del mes ${esc(mesTxt)} (${esc(_grupoNombres(G))}) porque encontramos unas diferencias. En breve los mandamos todos de nuevo, corregidos.` : `Estamos corrigiendo el listado de ${esc(C.t)} del mes ${esc(mesTxt)} porque encontramos unas diferencias, en breve mandamos las correcciones.`}</textarea></label>
     </div>
     <div class="c-pie"><div style="flex:1" id="env-estado" class="mini"></div>
       <button class="act gh" style="${_PILL}" onclick="document.getElementById('nota-overlay').remove()">Cancelar</button>
@@ -5955,13 +6024,15 @@ async function rectificarListado(mesKey, l){
   if (!motivo){ alert('Poné el motivo de la rectificación.'); return; }
   const m = _cierreMails(); if (!m) return;
   if (!m.cuerpo){ alert('Falta el mensaje.'); return; }
-  const cli = await _cierreCliente(`Rectificación de ${_CL[l].t} · ${_envioMesTxt(mesKey)}`, 'rectificacion'); if (!cli) return;
+  const ovR = document.getElementById('nota-overlay'), GR = ovR && ovR._grupoRect;
+  const cli = await _cierreCliente(`Rectificación de ${GR ? 'Compras completo' : _CL[l].t} · ${_envioMesTxt(mesKey)}`, 'rectificacion'); if (!cli) return;
   const btn = document.getElementById('env-btn'); btn.disabled = true;
-  const r = await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'rectificacion', p_es_prueba: MODO_PRUEBA, p_nota: motivo, p_archivos: [], p_envio: m, p_numero: document.getElementById('nota-overlay')?._nro ?? null});
+  const r = GR ? await cli.rpc('compras_cierre_grupo_registrar', {p_periodo: mesKey + '-01', p_etapa: 'rectificacion', p_es_prueba: MODO_PRUEBA, p_nota: motivo, p_pasos: GR.map(x => ({listado: x})), p_envio: m, p_numero: ovR._nro ?? null})
+    : await cli.rpc('compras_cierre_registrar', {p_periodo: mesKey + '-01', p_listado: l, p_etapa: 'rectificacion', p_es_prueba: MODO_PRUEBA, p_nota: motivo, p_archivos: [], p_envio: m, p_numero: document.getElementById('nota-overlay')?._nro ?? null});
   _cierreSoltar(cli);
   if (r.error){ btn.disabled = false; avisoError('No se pudo rectificar: ' + r.error.message); return; }
   document.getElementById('nota-overlay')?.remove();
-  alert(`${_CL[l].t} volvió a pre-cierre. El aviso sale por mail a ${m.para.join(', ')} en unos 5 minutos.`);
+  alert(GR ? `Compras completo volvió a corrección: ${_grupoNombres(GR)}. El aviso sale por mail a ${m.para.join(', ')} en unos 5 minutos. Cuando des el nuevo Cierre se mandan todos juntos.` : `${_CL[l].t} volvió a pre-cierre. El aviso sale por mail a ${m.para.join(', ')} en unos 5 minutos.`);
   await cargarMesesCerrados(); cargarListadosEstudio();
 }
 const _n0 = v => Number(v) ? Number(v).toLocaleString('es-AR', {maximumFractionDigits:0}) : '—';
@@ -8218,7 +8289,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script>window.ADORNO_TABLAS_CONF = {ventanas: '#prov-modal, [id$="-overlay"]'};</script>
 <script src="equiv-import.js?v=8"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=171"></script>
+<script src="manual.js?v=172"></script>
 <script src="adorno-tablas.js?v=abc48a63"></script>
 </body>
 </html>

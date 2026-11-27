@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'compras-v263-pdf-sin-cortes';
+const CACHE_VERSION = 'compras-v264-rectificacion-conjunta';
 const ASSETS = ['./', './index.html', './manual.js', './op-pdf.js', './logo-ca.png', './firma-jp.jpg', './pedidos.js', './adorno-tablas.js', './equiv-import.js', './juegos.js', './manifest.webmanifest',
                 './fonts/URWGothic-Book.ttf'];
 self.addEventListener('install', e => {
