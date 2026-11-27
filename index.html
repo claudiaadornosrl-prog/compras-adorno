@@ -5530,6 +5530,67 @@ async function _bajarRetPerc(){
     .concat([['Totales', '', '', '', tp, tr, '', '', '']]);
   _capturar(`Retenciones y percepciones de compras ${_listRotulo(true)}.xlsx`, _xlsxBlob(aoa));
 }
+// ── (27-nov, JP) Listados de VENTAS para el estudio, armados por el sistema ──
+// Los datos los publica libros_iva/generar_listados_ventas.py desde el Dragonfish (tabla ventas_listados_estudio, una
+// fila por mes); desde ene-2027 los llena el POS con la misma forma. Si el mes no tiene datos publicados, estos tres
+// listados siguen como antes: se suben a mano. Mismas columnas y mismo orden que los listados del Dragonfish.
+let _VENTAS_DATOS = null;
+const _vtaSuc = s => ({alcorta: 'Alcorta', unicenter: 'Unicenter', admin: 'Admin'}[s] || s);
+function _vtaSubdiario(filas){
+  const tasas = [...new Set(filas.flatMap(f => Object.keys(f.iva || {})))].sort((a, b) => Number(a) - Number(b));
+  if (!tasas.length) tasas.push('21');
+  const tit = ['Comprobante', 'Desc.', 'Fecha', 'CUIT', 'Sit.fiscal', 'Mto grav.', 'Mto no grav.', ...tasas.map(t => `IVA ${String(t).replace('.', ',')}%`), 'IIBB', 'Total'];
+  const cuerpo = filas.map(f => [f.comprobante, f.desc || '', _fecha(f.fecha), f.cuit || '', f.sitfis || '', f.grav, f.nograv, ...tasas.map(t => (f.iva || {})[t] || 0), f.iibb, f.total]);
+  const s = k => filas.reduce((a, f) => a + (Number(f[k]) || 0), 0);
+  const tot = ['Totales', `${filas.length} registros`, '', '', '', s('grav'), s('nograv'), ...tasas.map(t => filas.reduce((a, f) => a + (Number((f.iva || {})[t]) || 0), 0)), s('iibb'), s('total')];
+  return {tit, cuerpo, tot};
+}
+const _vtaN = v => (Number(v) || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+async function _vtaPdfSubdiario(filas, rotulo){
+  const {tit, cuerpo, tot} = _vtaSubdiario(filas), esNum = i => i >= 5;
+  const cols = tit.map((t, i) => ({t, num: esNum(i) ? 1 : 0, b: i === tit.length - 1 ? 1 : 0, w: [34, 0, 17, 23, 34][i] || undefined}));
+  await _pdfListado('Subdiario I.V.A. ventas' + (rotulo ? ' · ' + rotulo : ''), cols, cuerpo.map(f => f.map((v, i) => esNum(i) ? _vtaN(v) : v)),
+    {totales: tot.map((v, i) => esNum(i) ? _vtaN(v) : v), filaRoja: f => f && /^-/.test(f[f.length - 1]), archivo: 'Subdiario IVA ventas' + (rotulo ? ' ' + rotulo : '')});
+}
+async function _vtaArmarSubdiario(){
+  const D = _VENTAS_DATOS, todas = (D.subdiario || {}).todas || [];
+  const {tit, cuerpo} = _vtaSubdiario(todas);
+  if (!window.XLSX) await _cargarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+  _capturar(`Subdiario IVA ventas todas juntas ${_listRotulo(true)}.xlsx`, _xlsxBlob([tit, ...cuerpo]));
+  await _vtaPdfSubdiario(todas, 'todas juntas');
+  for (const suc of D.sucursales || []) if (((D.subdiario || {})[suc] || []).length) await _vtaPdfSubdiario(D.subdiario[suc], _vtaSuc(suc));
+  const A = (D.alicuotas || {}).filas || [], sa = k => A.reduce((a, x) => a + (Number(x[k]) || 0), 0);
+  await _pdfListado('Totales de alícuotas de I.V.A. ventas', [{t: 'Porcentaje IVA', num: 1, w: 34}, {t: 'Monto Grav.', num: 1}, {t: 'Importe', num: 1}, {t: 'Total', num: 1, b: 1}],
+    A.map(x => [_vtaN(x.porcentaje), _vtaN(x.grav), _vtaN(x.iva), _vtaN(x.total)]),
+    {vertical: true, totales: ['Totales', _vtaN(sa('grav')), _vtaN(sa('iva')), _vtaN(sa('total'))], archivo: 'Totales de alicuotas de IVA ventas todas juntas'});
+}
+async function _vtaArmarValores(){
+  const D = _VENTAS_DATOS;
+  for (const suc of D.sucursales || []){
+    const V = (D.valores || {})[suc]; if (!V || !(V.filas || []).length) continue;
+    const s = k => V.filas.reduce((a, x) => a + (Number(x[k]) || 0), 0);
+    await _pdfListado('Ventas por valores · ' + _vtaSuc(suc), [{t: 'Tipo', w: 52}, {t: 'Descripción'}, {t: 'Recargo', num: 1}, {t: 'Total', num: 1, b: 1}],
+      V.filas.map(x => [x.tipo, x.descripcion, _vtaN(x.recargo), _vtaN(x.total)]),
+      {vertical: true, totales: ['Totales', `${V.procesados} registros procesados`, _vtaN(s('recargo')), _vtaN(s('total'))], archivo: 'Ventas por valores ' + _vtaSuc(suc)});
+  }
+}
+async function _vtaArmarRecibos(){
+  const R = _VENTAS_DATOS.recibos || [], tit = ['Fecha', 'Comprobante', 'Cliente', 'Denominación o razón social', 'CUIT', 'Total', 'Retención', 'Monto retenido'];
+  const filas = [];
+  for (const r of R){
+    const T = r.retenciones || [];
+    if (!T.length) filas.push([_fecha(r.fecha), r.comprobante, r.cliente_cod || '', r.cliente || '', r.cuit || '', r.total, '', '']);
+    T.forEach((t, i) => filas.push(i ? ['', '', '', '', '', '', t.descripcion, t.monto] : [_fecha(r.fecha), r.comprobante, r.cliente_cod || '', r.cliente || '', r.cuit || '', r.total, t.descripcion, t.monto]));
+  }
+  const tot = R.reduce((a, r) => a + (Number(r.total) || 0), 0), ret = R.reduce((a, r) => a + (r.retenciones || []).reduce((b, t) => b + (Number(t.monto) || 0), 0), 0);
+  if (!window.XLSX) await _cargarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+  _capturar(`Comprobantes recibo ${_listRotulo(true)}.xlsx`, _xlsxBlob([tit, ...filas, ['Totales', `${R.length} registros`, '', '', '', tot, '', ret]]));
+  await _pdfListado('Comprobantes recibo · retenciones de clientes', [{t: 'Fecha', w: 18}, {t: 'Comprobante', w: 36}, {t: 'Cliente', w: 24}, {t: 'Denominación o razón social'}, {t: 'CUIT', w: 26},
+      {t: 'Total', num: 1, b: 1}, {t: 'Retención', w: 70}, {t: 'Monto retenido', num: 1}],
+    filas.map(f => f.map((v, i) => (i === 5 || i === 7) ? (v === '' ? '' : _vtaN(v)) : v)),
+    {totales: ['Totales', `${R.length} registros`, '', '', '', _vtaN(tot), '', _vtaN(ret)], archivo: 'Comprobantes recibo'});
+}
+const _vtaOrigen = () => _VENTAS_DATOS ? ` Lo arma el sistema con los datos de ${esc(_VENTAS_DATOS._origen || 'ventas')} (actualizados el ${_fechaTs(_VENTAS_DATOS._cuando)}).` : '';
 // tab = pestaña donde vive · n() = renglones · armar(per) = deja los archivos en _CAPTURA
 const _CL = {
   iva:            {t: 'IVA Compras', tab: 'iva', n: () => (LIST_IVA || []).length, bloquea: true, armar: async per => {
@@ -5544,9 +5605,12 @@ const _CL = {
   // sube = el archivo no lo genera el sistema: se elige desde la compu en el pre-cierre (qué = qué hay que subir).
   ventas_libro:     {t: 'Libro IVA Digital de ventas', tab: 'vyb', n: () => _VENTAS_ARCH.length, sinAviso: 'Todavía no está publicado el Libro IVA Digital de ventas de este mes. Cuando se publique, aparece acá para cerrarlo.',
                      armar: async per => { for (const a of _VENTAS_ARCH) await _libBajarVentas(per, a); }},
-  ventas_subdiario: {t: 'Subdiario de ventas y totales', tab: 'vyb', n: () => 1, sube: true, que: 'el subdiario de ventas de todas las sucursales juntas (Excel y PDF), el de cada sucursal (PDF) y los totales de alícuotas de IVA ventas'},
-  ventas_valores:   {t: 'Ventas por valores por sucursal', tab: 'vyb', n: () => 1, sube: true, que: 'el listado de ventas por valores de cada sucursal (un PDF por sucursal)'},
-  recibos_clientes: {t: 'Recibos de retenciones de clientes', tab: 'vyb', n: () => 1, sube: true, que: 'los comprobantes de recibo con retenciones de clientes (Excel y PDF)'},
+  ventas_subdiario: {t: 'Subdiario de ventas y totales', tab: 'vyb', n: () => _VENTAS_DATOS ? (((_VENTAS_DATOS.subdiario || {}).todas) || []).length : 1,
+                     get sube(){ return !_VENTAS_DATOS; }, armar: () => _vtaArmarSubdiario(), origen: _vtaOrigen, que: 'el subdiario de ventas de todas las sucursales juntas (Excel y PDF), el de cada sucursal (PDF) y los totales de alícuotas de IVA ventas'},
+  ventas_valores:   {t: 'Ventas por valores por sucursal', tab: 'vyb', n: () => _VENTAS_DATOS ? Object.values(_VENTAS_DATOS.valores || {}).reduce((a, v) => a + ((v.filas || []).length), 0) : 1,
+                     get sube(){ return !_VENTAS_DATOS; }, armar: () => _vtaArmarValores(), origen: _vtaOrigen, que: 'el listado de ventas por valores de cada sucursal (un PDF por sucursal)'},
+  recibos_clientes: {t: 'Recibos de retenciones de clientes', tab: 'vyb', n: () => _VENTAS_DATOS ? (_VENTAS_DATOS.recibos || []).length : 1,
+                     get sube(){ return !_VENTAS_DATOS; }, armar: () => _vtaArmarRecibos(), origen: _vtaOrigen, que: 'los comprobantes de recibo con retenciones de clientes (Excel y PDF)'},
   banco_galicia:    {t: 'Última hoja del Banco Galicia', tab: 'vyb', n: () => 1, sube: true, que: 'la última hoja del resumen mensual del Galicia, con los totales de impuestos'},
   ml_retenciones:   {t: 'Certificados de retenciones de Mercado Libre', tab: 'vyb', n: () => 1, sube: true, que: 'los certificados de retenciones de cada cuenta de Mercado Pago (un zip por cuenta)',
                      pideNota: 'Poné el total retenido de cada cuenta (va en el mail al estudio). Por ejemplo:\nCuenta ventas online: $ …\nCuenta locales: $ …'},
@@ -5595,6 +5659,10 @@ async function _pintarCierre(mesKey){
   const lv = await sb.from('libros_iva_archivos').select('archivo').eq('periodo', mesKey);
   if (document.getElementById('cierre-etapas') !== el || el.dataset.mes !== mesKey) return;
   _VENTAS_ARCH = (lv.data || []).map(x => x.archivo).filter(a => /^VENTAS_/.test(a)); _CIERRE_ULT = {};
+  // (27-nov, JP) datos de los listados de ventas del mes (si no hay, esos tres listados se siguen subiendo a mano)
+  const vd = await sb.from('ventas_listados_estudio').select('contenido,origen,generado_at').eq('periodo', mesKey + '-01').maybeSingle();
+  if (document.getElementById('cierre-etapas') !== el || el.dataset.mes !== mesKey) return;
+  _VENTAS_DATOS = vd.data && vd.data.contenido ? {...vd.data.contenido, _origen: vd.data.origen, _cuando: vd.data.generado_at} : null;
   for (const l of Object.keys(_CL)){
     const C = _CL[l], L = (r.data || []).filter(e => e.listado === l), ult = L[L.length - 1], leg = l === 'iva' ? legado : null;
     _CIERRE_ULT[l] = ult || null;
@@ -5629,7 +5697,7 @@ async function _pintarCierre(mesKey){
           ${A.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${A.map(a => `<a href="#" class="chip" style="background:#f1f5f9;color:#334155;font-weight:600;text-decoration:none" title="Bajar el archivo tal como se emitió en ese paso" data-path="${esc(a.path)}" onclick="_cierreBajar(this.dataset.path);return false">${esc(a.nombre)}</a>`).join('')}</div>` : ''}</div>`; }).join('')}</details>`;
     box.style.cssText = `border:1px solid #e5e7eb;border-left:4px solid ${col};border-radius:16px;padding:10px 14px;margin-bottom:12px;background:#fff`;
     box.innerHTML = `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-        <div style="flex:1;min-width:240px"><b>${ico(est === 'cierre' ? 'candado' : 'avion','s')} Cierre · ${esc(C.t)} · ${esc(mesTxt)}</b><div class="mini">${T}</div></div>
+        <div style="flex:1;min-width:240px"><b>${ico(est === 'cierre' ? 'candado' : 'avion','s')} Cierre · ${esc(C.t)} · ${esc(mesTxt)}</b><div class="mini">${T}${C.origen && est !== 'cierre' ? C.origen() : ''}</div></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${B}</div></div>
       <div class="mini cierre-estado" style="margin-top:4px">${!PUEDE_CERRAR ? 'Cada paso lo autoriza una persona habilitada: con la cámara, desde el celular o con su usuario y clave.' : ''}</div>${H}`;
   }
@@ -5993,9 +6061,22 @@ async function _pdfListado(titulo, columnas, filas, opts = {}){
   if (!window.jspdf) await _cargarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
   if (!window.jspdf.jsPDF.API.autoTable) await _cargarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({unit: 'mm', format: 'a4', orientation: opts.vertical ? 'portrait' : 'landscape'});
+  const doc = new jsPDF({unit: 'mm', format: 'a4', orientation: opts.vertical ? 'portrait' : 'landscape', compress: true});
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
   const periodo = _listRotulo(false);
+  // (27-nov, JP) Ningún número sale cortado: cada columna de importes toma el ancho de su número más largo (renglones,
+  // título y total) y, si la hoja no alcanza, lo que se achica son las columnas de texto (esas sí pueden abreviarse).
+  const disp = W - 16, PAD = 3.4, MINTXT = 16;
+  doc.setFont('helvetica', 'bold');
+  const mide = (t, pt) => { doc.setFontSize(pt); return doc.getTextWidth(String(t ?? '')); };
+  const anchoNum = columnas.map((c, i) => !c.num ? 0 : Math.max(c.w || 0, PAD + Math.max(mide(c.t, 7),
+    ...filas.map(f => mide(f[i], 7.4)), opts.totales ? mide(opts.totales[i], 6.5) : 0)));
+  const sumNum = anchoNum.reduce((a, b) => a + b, 0);
+  const txtFijo = columnas.reduce((a, c) => a + (!c.num && c.w ? c.w : 0), 0), txtAuto = columnas.filter(c => !c.num && !c.w).length;
+  const fTxt = txtFijo && sumNum + txtFijo + txtAuto * MINTXT > disp ? Math.max(0.35, (disp - sumNum - txtAuto * MINTXT) / txtFijo) : 1;
+  // sin columnas de texto libres, lo que sobra de la hoja se reparte entre las de importes
+  const extra = !txtAuto && columnas.some(c => c.num) ? Math.max(0, disp - sumNum - txtFijo * fTxt) / columnas.filter(c => c.num).length : 0;
+  const anchoCol = (c, i) => c.num ? anchoNum[i] + extra : c.w ? c.w * fTxt : 'auto';
   const cab = () => {
     doc.setFillColor(234, 88, 12); doc.rect(0, 0, W, 13, 'F');
     doc.setTextColor(255, 255, 255); doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.text(titulo, 10, 8.5);
@@ -6010,7 +6091,7 @@ async function _pdfListado(titulo, columnas, filas, opts = {}){
     // Letra un poco más chica, menos relleno y sin recortar.
     footStyles: {fillColor: [248,250,252], textColor: [15,23,42], fontStyle: 'bold', fontSize: 6.5, overflow: 'visible', cellPadding: {top: 1.4, bottom: 1.4, left: 0.5, right: 0.9}},
     alternateRowStyles: {fillColor: [252,252,253]},
-    columnStyles: Object.fromEntries(columnas.map((c, i) => [i, {halign: c.num ? 'right' : 'left', cellWidth: c.w || 'auto', fontStyle: c.b ? 'bold' : 'normal'}])),
+    columnStyles: Object.fromEntries(columnas.map((c, i) => [i, {halign: c.num ? 'right' : 'left', cellWidth: anchoCol(c, i), fontStyle: c.b ? 'bold' : 'normal', ...(c.num ? {overflow: 'visible'} : {})}])),
     showFoot: 'lastPage', didDrawPage: cab,
     didParseCell: h => { if (h.section === 'body' && opts.filaRoja && opts.filaRoja(filas[h.row.index], h.row.index)) h.cell.styles.textColor = [153,27,27]; },
   });
@@ -8141,7 +8222,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script>window.ADORNO_TABLAS_CONF = {ventanas: '#prov-modal, [id$="-overlay"]'};</script>
 <script src="equiv-import.js?v=8"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=169"></script>
+<script src="manual.js?v=170"></script>
 <script src="adorno-tablas.js?v=abc48a63"></script>
 </body>
 </html>
