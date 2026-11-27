@@ -211,7 +211,7 @@ async function _eqiGuardar(){
     ok += data.guardadas || 0; reng += data.renglones || 0; rem += data.remito_lineas || 0;
     (data.errores || []).forEach(e => errores.push(e));
   }
-  let msg = `✓ ${ok} equivalencias guardadas.`;
+  let msg = `Listo: se guardaron las ${ok} equivalencias.`;   // (27-nov) sin «✓ N …»: el aviso común del Hub lo tomaba por un error técnico
   if (reng || rem) msg += `\n${reng} renglón(es) de facturas y ${rem} de remitos quedaron traducidos.`;
   if (errores.length) msg += `\n\n⚠ ${errores.length} no se guardaron:\n` + errores.slice(0, 15)
     .map(e => `· ${e.codigo || e.descripcion} → ${e.sku}: ${e.error}`).join('\n') + (errores.length > 15 ? '\n…' : '');
