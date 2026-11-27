@@ -5026,7 +5026,16 @@ async function abrirCC(cuit){
   const inF = 'padding:6px 12px;border:1px solid var(--bd);border-radius:999px;font:inherit;font-size:12.5px';
   openModalP(`
     <h3 style="margin:0 0 4px;">💳 ${esc(x.nombre || cuit)}</h3>
-    <div class="hint" style="margin-bottom:10px;">CUIT ${_cuitFmt(cuit)} · saldo <b style="color:${Number(x.saldo) > 0 ? '#991b1b' : '#166534'}">${plata(x.saldo || 0)}</b> · ${pend.length} comprobante${pend.length === 1 ? '' : 's'} sin pagar</div>
+    <div class="hint" style="margin-bottom:10px;">CUIT ${_cuitFmt(cuit)} · ${pend.length} comprobante${pend.length === 1 ? '' : 's'} sin pagar</div>
+    ${(() => { // (27-nov, JP, opción A) el saldo y cómo se reparte, a la vista
+      const imp = m => (Number(m.debe) || 0) - (Number(m.haber) || 0), suma = L => L.reduce((a, m) => a + imp(m), 0);
+      const conOp = pend.filter(m => m.estado === 'con_op_sin_pagar'), sinOp = pend.filter(m => m.estado !== 'con_op_sin_pagar');
+      const saldo = M.length ? M.reduce((a, m) => a + imp(m), 0) : Number(x.saldo) || 0;
+      return `<div class="kpis" style="margin-bottom:12px">
+        <div class="kpi" style="border-left-color:${saldo > 0.004 ? 'var(--bad)' : 'var(--ok)'}"><div class="lbl">Saldo a pagar</div><div class="val" style="color:${saldo > 0.004 ? '#991b1b' : '#166534'}">${plata(saldo)}</div><div class="sub">${saldo < -0.004 ? 'a favor nuestro' : 'debe menos haber'}</div></div>
+        <div class="kpi" style="border-left-color:var(--info)"><div class="lbl">Con orden de pago, sin pagar</div><div class="val">${plata(suma(conOp))}</div><div class="sub">${conOp.length} comprobante${conOp.length === 1 ? '' : 's'}</div></div>
+        <div class="kpi" style="border-left-color:var(--warn)"><div class="lbl">Sin orden de pago</div><div class="val">${plata(suma(sinOp))}</div><div class="sub">${sinOp.length} comprobante${sinOp.length === 1 ? '' : 's'}</div></div>
+      </div>`; })()}
     ${!M.length ? '' : `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
       <span class="mini">Desde</span><input type="date" id="cc-desde" class="cc-f" style="${inF}" onchange="_ccFiltro()">
       <span class="mini">hasta</span><input type="date" id="cc-hasta" class="cc-f" style="${inF}" onchange="_ccFiltro()">
@@ -5044,51 +5053,63 @@ function _ccFiltro(){ if (!_CC) return; _CC.desde = document.getElementById('cc-
 const _ccMovs = () => !_CC ? [] : _CC.M.filter(m => { const f = String(m.fecha || '').slice(0, 10); return (!_CC.desde || f >= _CC.desde) && (!_CC.hasta || f <= _CC.hasta); });
 const _ccEstado = m => m.clase === 'OP' ? String(m.estado || '').replace('_', ' ') : String(chipPago(m.estado) || '').replace(/<[^>]+>/g, '').trim();
 const _ccRango = () => !_CC || (!_CC.desde && !_CC.hasta) ? '' : ((_CC.desde ? 'desde ' + _fecha(_CC.desde) + ' ' : '') + (_CC.hasta ? 'hasta ' + _fecha(_CC.hasta) : '')).trim();
+// (27-nov, JP) Saldo corrido: cada renglón muestra el saldo acumulado (debe menos haber). Con filtro de fechas arranca
+// del saldo anterior (lo que viene de antes del "desde"), así el último renglón siempre coincide con el saldo de arriba.
+function _ccSaldos(){
+  const M = _ccMovs(), ant = !_CC || !_CC.desde ? 0 : _CC.M.filter(m => String(m.fecha || '').slice(0, 10) < _CC.desde).reduce((a, m) => a + (Number(m.debe) || 0) - (Number(m.haber) || 0), 0);
+  let s = ant; const S = M.map(m => (s += (Number(m.debe) || 0) - (Number(m.haber) || 0)));
+  return {M, ant, S, fin: s};
+}
+const _ccColorSaldo = v => v > 0.004 ? '#991b1b' : v < -0.004 ? '#166534' : 'inherit';
 function _ccPintarMovs(){
   const c = document.getElementById('cc-movs'); if (!c || !_CC) return;
-  const M = _ccMovs(), td = M.reduce((a, m) => a + (Number(m.debe) || 0), 0), th = M.reduce((a, m) => a + (Number(m.haber) || 0), 0);
+  const {M, ant, S, fin} = _ccSaldos(), td = M.reduce((a, m) => a + (Number(m.debe) || 0), 0), th = M.reduce((a, m) => a + (Number(m.haber) || 0), 0);
   const res = document.getElementById('cc-res');
   if (res) res.textContent = _ccRango() ? `${M.length} de ${_CC.M.length} movimientos` : '';
   c.innerHTML = !M.length ? `<div class="vacio">${_CC.M.length ? 'Sin movimientos entre esas fechas.' : 'Sin movimientos.'}</div>` : `<div style="overflow:auto;max-height:56vh"><table class="tb-band" style="font-size:12.5px">
-      <thead><tr><th>Fecha</th><th>Comprobante</th><th>Detalle</th><th class="num">Debe</th><th class="num">Haber</th><th>Estado</th></tr></thead>
-      <tbody>${M.map(m => { const esPend = m.clase !== 'OP' && _CC_PEND.includes(m.estado);
+      <thead><tr><th>Fecha</th><th>Comprobante</th><th>Detalle</th><th class="num">Debe</th><th class="num">Haber</th><th class="num" title="Saldo acumulado hasta ese movimiento: debe menos haber">Saldo</th><th>Estado</th></tr></thead>
+      <tbody>${_CC.desde ? `<tr style="font-style:italic"><td class="mini" style="white-space:nowrap">${_fecha(_CC.desde)}</td><td colspan="4">Saldo anterior</td><td class="num" style="white-space:nowrap;color:${_ccColorSaldo(ant)}">${plata(ant)}</td><td></td></tr>` : ''}${M.map((m, i) => { const esPend = m.clase !== 'OP' && _CC_PEND.includes(m.estado);
         return `<tr style="${m.clase === 'OP' ? 'background:#f0fdf4' : esPend ? 'background:#F7F1EC' : ''}" ${m.doc_id ? `onclick="abrirResumenDoc(${m.doc_id})" title="Abrir el comprobante"` : m.op_id ? `onclick="verOP(${m.op_id})" title="Abrir la orden de pago"` : ''}>
         <td class="mini" style="white-space:nowrap">${_fecha(m.fecha)}</td>
         <td style="white-space:nowrap">${esc(m.comprobante)}</td>
         <td class="mini">${esc(m.detalle || '')}</td>
         <td class="num">${Number(m.debe) ? plata(m.debe) : ''}</td>
         <td class="num">${Number(m.haber) ? plata(m.haber) : ''}</td>
+        <td class="num" style="white-space:nowrap;color:${_ccColorSaldo(S[i])}">${plata(S[i])}</td>
         <td>${m.clase === 'OP' ? `<span class="chip" style="background:${m.estado === 'pagada' ? '#dcfce7;color:#166534' : '#fef3c7;color:#92400e'}">${esc(m.estado)}</span>` : chipPago(m.estado)}</td>
       </tr>`; }).join('')}</tbody>
-      <tfoot><tr style="font-weight:700;background:#f8fafc"><td colspan="3">Total${_ccRango() ? ' del período' : ''}</td><td class="num">${plata(td)}</td><td class="num">${plata(th)}</td><td></td></tr></tfoot></table></div>`;
+      <tfoot><tr style="font-weight:700;background:#f8fafc"><td colspan="3">Total${_ccRango() ? ' del período' : ''}</td><td class="num">${plata(td)}</td><td class="num">${plata(th)}</td><td class="num" style="white-space:nowrap;color:${_ccColorSaldo(fin)}" title="Saldo al final de lo que se ve">${plata(fin)}</td><td class="mini" style="font-weight:400">saldo</td></tr></tfoot></table></div>`;
 }
 async function ccExportar(formato){
   if (!_CC) return;
-  const M = _ccMovs(); if (!M.length){ alert('No hay movimientos para exportar.'); return; }
+  const {M, ant, S, fin} = _ccSaldos(); if (!M.length){ alert('No hay movimientos para exportar.'); return; }
   const x = _CC.x, prov = x.nombre || _CC.cuit, rango = _ccRango();
   const titulo = 'Cuenta corriente · ' + prov, sub = `CUIT ${_cuitFmt(_CC.cuit)}${rango ? ' · ' + rango : ' · todos los movimientos'} · saldo al ${_fecha(_hoyISO())}: ${plata(x.saldo || 0)}`;
   const cols = [['Fecha', m => _fecha(m.fecha), '', 20], ['Comprobante', m => m.comprobante || '', '', 40], ['Detalle', m => m.detalle || '', '', 56],
-                ['Debe', m => Number(m.debe) || 0, 'n', 26], ['Haber', m => Number(m.haber) || 0, 'n', 26], ['Estado', m => _ccEstado(m), '', 24]];
-  const suma = c => M.reduce((a, m) => a + (Number(c[1](m)) || 0), 0);
+                ['Debe', m => Number(m.debe) || 0, 'n', 26], ['Haber', m => Number(m.haber) || 0, 'n', 26], ['Saldo', (m, i) => S[i], 's', 28], ['Estado', m => _ccEstado(m), '', 24]];
+  const suma = c => c[2] === 's' ? fin : M.reduce((a, m) => a + (Number(c[1](m)) || 0), 0);
+  const filaAnt = _CC.desde ? [_fecha(_CC.desde), 'Saldo anterior', '', '', '', ant, ''] : null;
   const nombre = ('Cuenta corriente ' + prov + (rango ? ' ' + rango : '')).replace(/[\\/:*?"<>|·]/g, '-').replace(/\s+/g, ' ').trim() + (MODO_PRUEBA ? ' (PRUEBA)' : '');
   try {
     if (formato === 'xlsx'){
       if (!window.XLSX) await _cargarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
       const aoa = [['Claudia Adorno SRL · ' + titulo + (MODO_PRUEBA ? ' — AMBIENTE DE PRUEBA' : '')], [sub], [], cols.map(c => c[0])]
-        .concat(M.map(m => cols.map(c => c[1](m))))
+        .concat(filaAnt ? [filaAnt] : [])
+        .concat(M.map((m, i) => cols.map(c => c[1](m, i))))
         .concat([cols.map((c, i) => i === 0 ? 'TOTAL' : c[2] ? suma(c) : '')]);
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       ws['!cols'] = cols.map(c => ({wch: Math.max(10, Math.round(c[3] / 1.6))}));
-      cols.forEach((c, j) => { if (c[2] !== 'n') return;
+      cols.forEach((c, j) => { if (!c[2]) return;
         for (let i = 4; i < aoa.length; i++){ const cel = ws[XLSX.utils.encode_cell({r: i, c: j})]; if (cel && typeof cel.v === 'number') cel.z = '#,##0.00'; } });
       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Cuenta corriente');
       XLSX.writeFile(wb, nombre + '.xlsx');
     } else {
       // (27-nov, JP) misma tabla que los listados del estudio: ninguna celda cortada, el texto largo baja de renglón
       const n2 = v => Number(v) ? '$ ' + Number(v).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '';
-      await _pdfListado(titulo, cols.map(c => ({t: c[0], num: c[2] ? 1 : 0})),
-        M.map(m => cols.map(c => c[2] === 'n' ? n2(c[1](m)) : String(c[1](m) ?? ''))),
-        {vertical: true, totales: cols.map((c, i) => i === 0 ? 'TOTAL' + (rango ? ' del período' : '') : c[2] === 'n' ? n2(suma(c)) : ''),
+      const n0 = v => '$ ' + (Number(v) || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+      await _pdfListado(titulo, cols.map(c => ({t: c[0], num: c[2] ? 1 : 0, b: c[2] === 's' ? 1 : 0})),
+        (filaAnt ? [filaAnt.map((v, i) => i === 5 ? n0(v) : v)] : []).concat(M.map((m, i) => cols.map(c => c[2] === 'n' ? n2(c[1](m, i)) : c[2] === 's' ? n0(c[1](m, i)) : String(c[1](m, i) ?? '')))),
+        {totales: cols.map((c, i) => i === 0 ? 'TOTAL' + (rango ? ' del período' : '') : c[2] === 'n' ? n2(suma(c)) : c[2] === 's' ? n0(fin) : ''),
          periodo: `${sub} · emitido el ${_fecha(_hoyISO())}`, nombre});
     }
   } catch (e){ avisoError('No se pudo armar el archivo: ' + e.message); }
@@ -8332,7 +8353,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script>window.ADORNO_TABLAS_CONF = {ventanas: '#prov-modal, [id$="-overlay"]'};</script>
 <script src="equiv-import.js?v=8"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=174"></script>
+<script src="manual.js?v=175"></script>
 <script src="adorno-tablas.js?v=abc48a63"></script>
 </body>
 </html>
