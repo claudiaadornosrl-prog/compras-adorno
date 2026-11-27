@@ -5526,21 +5526,32 @@ async function _vtaPdfSubdiario(filas, rotulo){
   await _pdfListado('Subdiario I.V.A. ventas' + (rotulo ? ' · ' + rotulo : ''), cols, cuerpo.map(f => f.map((v, i) => esNum(i) ? _vtaN(v) : v)),
     {totales: tot.map((v, i) => esNum(i) ? _vtaN(v) : v), filaRoja: f => f && /^-/.test(f[f.length - 1]), archivo: 'Subdiario IVA ventas' + (rotulo ? ' ' + rotulo : '')});
 }
-async function _vtaArmarSubdiario(){
-  const D = _VENTAS_DATOS, todas = (D.subdiario || {}).todas || [];
-  const {tit, cuerpo} = _vtaSubdiario(todas);
-  if (!window.XLSX) await _cargarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
-  _capturar(`Subdiario IVA ventas todas juntas ${_listRotulo(true)}.xlsx`, _xlsxBlob([tit, ...cuerpo]));
-  await _vtaPdfSubdiario(todas, 'todas juntas');
-  for (const suc of D.sucursales || []) if (((D.subdiario || {})[suc] || []).length) await _vtaPdfSubdiario(D.subdiario[suc], _vtaSuc(suc));
-  const A = (D.alicuotas || {}).filas || [], sa = k => A.reduce((a, x) => a + (Number(x[k]) || 0), 0);
-  await _pdfListado('Totales de alícuotas de I.V.A. ventas', [{t: 'Porcentaje IVA', num: 1, w: 34}, {t: 'Monto Grav.', num: 1}, {t: 'Importe', num: 1}, {t: 'Total', num: 1, b: 1}],
-    A.map(x => [_vtaN(x.porcentaje), _vtaN(x.grav), _vtaN(x.iva), _vtaN(x.total)]),
-    {vertical: true, totales: ['Totales', _vtaN(sa('grav')), _vtaN(sa('iva')), _vtaN(sa('total'))], archivo: 'Totales de alicuotas de IVA ventas todas juntas'});
+// (27-nov, JP) Cada pieza se puede armar sola (parámetro `solo`) para bajarla con su botón de Excel o PDF sin dar el
+// pre-cierre. Sin `solo` arma todas (lo que usa el pre-cierre y el cierre). _vtaSale: guarda para el cierre o descarga.
+function _vtaSale(nombre, blob){
+  if (_capturar(nombre, blob)) return;
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nombre; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
-async function _vtaArmarValores(){
+async function _vtaArmarSubdiario(solo){
+  const D = _VENTAS_DATOS, todas = (D.subdiario || {}).todas || [], va = k => !solo || solo === k;
+  if (va('x')){
+    const {tit, cuerpo} = _vtaSubdiario(todas);
+    if (!window.XLSX) await _cargarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+    _vtaSale(`Subdiario IVA ventas todas juntas ${_listRotulo(true)}.xlsx`, _xlsxBlob([tit, ...cuerpo]));
+  }
+  if (va('p:todas')) await _vtaPdfSubdiario(todas, 'todas juntas');
+  for (const suc of D.sucursales || []) if (va('p:' + suc) && ((D.subdiario || {})[suc] || []).length) await _vtaPdfSubdiario(D.subdiario[suc], _vtaSuc(suc));
+  if (va('ali')){
+    const A = (D.alicuotas || {}).filas || [], sa = k => A.reduce((a, x) => a + (Number(x[k]) || 0), 0);
+    await _pdfListado('Totales de alícuotas de I.V.A. ventas', [{t: 'Porcentaje IVA', num: 1, w: 34}, {t: 'Monto Grav.', num: 1}, {t: 'Importe', num: 1}, {t: 'Total', num: 1, b: 1}],
+      A.map(x => [_vtaN(x.porcentaje), _vtaN(x.grav), _vtaN(x.iva), _vtaN(x.total)]),
+      {vertical: true, totales: ['Totales', _vtaN(sa('grav')), _vtaN(sa('iva')), _vtaN(sa('total'))], archivo: 'Totales de alicuotas de IVA ventas todas juntas'});
+  }
+}
+async function _vtaArmarValores(solo){
   const D = _VENTAS_DATOS;
   for (const suc of D.sucursales || []){
+    if (solo && solo !== suc) continue;
     const V = (D.valores || {})[suc]; if (!V || !(V.filas || []).length) continue;
     const s = k => V.filas.reduce((a, x) => a + (Number(x[k]) || 0), 0);
     await _pdfListado('Ventas por valores · ' + _vtaSuc(suc), [{t: 'Tipo', w: 52}, {t: 'Descripción'}, {t: 'Recargo', num: 1}, {t: 'Total', num: 1, b: 1}],
@@ -5548,7 +5559,7 @@ async function _vtaArmarValores(){
       {vertical: true, totales: ['Totales', `${V.procesados} registros procesados`, _vtaN(s('recargo')), _vtaN(s('total'))], archivo: 'Ventas por valores ' + _vtaSuc(suc)});
   }
 }
-async function _vtaArmarRecibos(){
+async function _vtaArmarRecibos(solo){
   const R = _VENTAS_DATOS.recibos || [], tit = ['Fecha', 'Comprobante', 'Cliente', 'Denominación o razón social', 'CUIT', 'Total', 'Retención', 'Monto retenido'];
   const filas = [];
   for (const r of R){
@@ -5557,25 +5568,40 @@ async function _vtaArmarRecibos(){
     T.forEach((t, i) => filas.push(i ? ['', '', '', '', '', '', t.descripcion, t.monto] : [_fecha(r.fecha), r.comprobante, r.cliente_cod || '', r.cliente || '', r.cuit || '', r.total, t.descripcion, t.monto]));
   }
   const tot = R.reduce((a, r) => a + (Number(r.total) || 0), 0), ret = R.reduce((a, r) => a + (r.retenciones || []).reduce((b, t) => b + (Number(t.monto) || 0), 0), 0);
-  if (!window.XLSX) await _cargarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
-  _capturar(`Comprobantes recibo ${_listRotulo(true)}.xlsx`, _xlsxBlob([tit, ...filas, ['Totales', `${R.length} registros`, '', '', '', tot, '', ret]]));
-  await _pdfListado('Comprobantes recibo · retenciones de clientes', [{t: 'Fecha', w: 18}, {t: 'Comprobante', w: 36}, {t: 'Cliente', w: 24}, {t: 'Denominación o razón social'}, {t: 'CUIT', w: 26},
+  if (!solo || solo === 'x'){
+    if (!window.XLSX) await _cargarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+    _vtaSale(`Comprobantes recibo ${_listRotulo(true)}.xlsx`, _xlsxBlob([tit, ...filas, ['Totales', `${R.length} registros`, '', '', '', tot, '', ret]]));
+  }
+  if (!solo || solo === 'p') await _pdfListado('Comprobantes recibo · retenciones de clientes', [{t: 'Fecha', w: 18}, {t: 'Comprobante', w: 36}, {t: 'Cliente', w: 24}, {t: 'Denominación o razón social'}, {t: 'CUIT', w: 26},
       {t: 'Total', num: 1, b: 1}, {t: 'Retención', w: 70}, {t: 'Monto retenido', num: 1}],
     filas.map(f => f.map((v, i) => (i === 5 || i === 7) ? (v === '' ? '' : _vtaN(v)) : v)),
     {totales: ['Totales', `${R.length} registros`, '', '', '', _vtaN(tot), '', _vtaN(ret)], archivo: 'Comprobantes recibo'});
 }
-// Qué va adentro del apartado Ventas, a la vista antes de dar el pre-cierre o el cierre.
-function _vtaDetalle(){
+// Botón de descarga de una pieza de Ventas. que: 'sub' | 'val' | 'rec' | 'lib'
+async function _vtaBajar(que, solo, per){
+  if (!_VENTAS_DATOS && que !== 'lib') return;
+  try {
+    if (que === 'sub') await _vtaArmarSubdiario(solo);
+    else if (que === 'val') await _vtaArmarValores(solo);
+    else if (que === 'rec') await _vtaArmarRecibos(solo);
+    else if (que === 'lib') await _libBajarVentas(per, solo);
+  } catch (e){ avisoError('No se pudo armar el archivo: ' + ((e && e.message) || e)); }
+}
+// Qué va adentro del apartado Ventas, a la vista, con el botón para bajar cada archivo en Excel o PDF.
+function _vtaDetalle(mesKey){
   const D = _VENTAS_DATOS; if (!D) return '';
-  const suc = (D.sucursales || []).map(_vtaSuc), n = (((D.subdiario || {}).todas) || []).length, rec = (D.recibos || []).length;
-  const conVal = (D.sucursales || []).filter(x => (((D.valores || {})[x] || {}).filas || []).length).map(_vtaSuc);
+  const S = D.sucursales || [], n = (((D.subdiario || {}).todas) || []).length, rec = (D.recibos || []).length;
+  const bt = (tipo, que, solo, titulo, rot) => `<button type="button" class="act gh" style="border-radius:999px;padding:2px 9px;font-size:11.5px;display:inline-flex;gap:4px;align-items:center;margin:1px 2px" title="Bajar ${esc(titulo)}" onclick="_vtaBajar('${que}','${solo}','${mesKey || ''}')">${ico(tipo === 'x' ? 'excel' : tipo === 'p' ? 'pdf' : 'hoja','s')} ${esc(rot)}</button>`;
+  const conVal = S.filter(x => (((D.valores || {})[x] || {}).filas || []).length), conSub = S.filter(x => ((D.subdiario || {})[x] || []).length);
   const L = [
-    _VENTAS_ARCH.length ? `<b>Libro IVA Digital de ventas</b> · ${_VENTAS_ARCH.length} archivos de texto` : `<b>Libro IVA Digital de ventas</b> · <span style="color:#b91c1c">todavía no está publicado para este mes: no va en el envío</span>`,
-    `<b>Subdiario I.V.A. ventas</b> · todas juntas en Excel y PDF (${n} renglones) y un PDF por sucursal (${esc(suc.join(', '))})`,
-    `<b>Totales de alícuotas de I.V.A. ventas</b> · PDF`,
-    `<b>Ventas por valores</b> · un PDF por sucursal (${esc(conVal.join(', ') || 'sin cobros')})`,
-    rec ? `<b>Recibos con retenciones de clientes</b> · Excel y PDF (${rec} ${rec === 1 ? 'recibo' : 'recibos'})` : `<b>Recibos con retenciones de clientes</b> · no hubo este mes: no va archivo`];
-  return `<div style="margin-top:5px"><b>Qué se manda:</b><ul style="margin:3px 0 0 18px;padding:0">${L.map(x => `<li>${x}</li>`).join('')}</ul></div>`;
+    _VENTAS_ARCH.length ? `<b>Libro IVA Digital de ventas</b> · archivos de texto ${_VENTAS_ARCH.map(a => bt('t', 'lib', a, 'el archivo ' + a, /ALIC/i.test(a) ? 'Alícuotas' : 'Comprobantes')).join('')}`
+      : `<b>Libro IVA Digital de ventas</b> · <span style="color:#b91c1c">todavía no está publicado para este mes: no va en el envío</span>`,
+    `<b>Subdiario I.V.A. ventas</b> · todas juntas (${n} renglones) ${bt('x', 'sub', 'x', 'el subdiario de todas las sucursales en Excel', 'Excel')}${bt('p', 'sub', 'p:todas', 'el subdiario de todas las sucursales en PDF', 'PDF')} · por sucursal ${conSub.map(x => bt('p', 'sub', 'p:' + x, 'el subdiario de ' + _vtaSuc(x) + ' en PDF', _vtaSuc(x))).join('')}`,
+    `<b>Totales de alícuotas de I.V.A. ventas</b> ${bt('p', 'sub', 'ali', 'los totales de alícuotas en PDF', 'PDF')}`,
+    `<b>Ventas por valores</b> · por sucursal ${conVal.map(x => bt('p', 'val', x, 'las ventas por valores de ' + _vtaSuc(x) + ' en PDF', _vtaSuc(x))).join('') || 'sin cobros'}`,
+    rec ? `<b>Recibos con retenciones de clientes</b> · ${rec} ${rec === 1 ? 'recibo' : 'recibos'} ${bt('x', 'rec', 'x', 'los recibos en Excel', 'Excel')}${bt('p', 'rec', 'p', 'los recibos en PDF', 'PDF')}`
+      : `<b>Recibos con retenciones de clientes</b> · no hubo este mes: no va archivo`];
+  return `<div style="margin-top:5px"><b>Qué se manda</b> (tocá un botón para bajar ese archivo y mirarlo):<ul style="margin:3px 0 0 18px;padding:0;line-height:2">${L.map(x => `<li>${x}</li>`).join('')}</ul></div>`;
 }
 const _vtaOrigen = () => _VENTAS_DATOS ? ` Lo arma el sistema con los datos de ${esc(_VENTAS_DATOS._origen || 'ventas')} (actualizados el ${_fechaTs(_VENTAS_DATOS._cuando)}).` : '';
 // tab = pestaña donde vive · n() = renglones · armar(per) = deja los archivos en _CAPTURA
@@ -5594,7 +5620,7 @@ const _CL = {
   // con totales de alícuotas, ventas por valores y recibos de clientes son UN listado: un pre-cierre, un cierre y un mail.
   // Antes eran cuatro (ventas_libro, ventas_subdiario, ventas_valores, recibos_clientes). Sin datos publicados se sube a mano.
   ventas:           {t: 'Ventas', tab: 'vyb', n: () => _VENTAS_DATOS ? Math.max(1, (((_VENTAS_DATOS.subdiario || {}).todas) || []).length) : 1,
-                     get sube(){ return !_VENTAS_DATOS; }, origen: _vtaOrigen, detalle: () => _vtaDetalle(),
+                     get sube(){ return !_VENTAS_DATOS; }, origen: _vtaOrigen, detalle: mesKey => _vtaDetalle(mesKey),
                      armar: async per => { for (const a of _VENTAS_ARCH) await _libBajarVentas(per, a);
                        await _vtaArmarSubdiario(); await _vtaArmarValores(); if ((_VENTAS_DATOS.recibos || []).length) await _vtaArmarRecibos(); },
                      que: 'el Libro IVA Digital de ventas, el subdiario de ventas (todas las sucursales juntas en Excel y PDF, y cada sucursal en PDF), los totales de alícuotas de IVA ventas, las ventas por valores de cada sucursal y los recibos con retenciones de clientes'},
@@ -5685,7 +5711,7 @@ async function _pintarCierre(mesKey){
           ${A.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${A.map(a => `<a href="#" class="chip" style="background:#f1f5f9;color:#334155;font-weight:600;text-decoration:none" title="Bajar el archivo tal como se emitió en ese paso" data-path="${esc(a.path)}" onclick="_cierreBajar(this.dataset.path);return false">${esc(a.nombre)}</a>`).join('')}</div>` : ''}</div>`; }).join('')}</details>`;
     box.style.cssText = `border:1px solid #e5e7eb;border-left:4px solid ${col};border-radius:16px;padding:10px 14px;margin-bottom:12px;background:#fff`;
     box.innerHTML = `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-        <div style="flex:1;min-width:240px"><b>${ico(est === 'cierre' ? 'candado' : 'avion','s')} Cierre · ${esc(C.t)} · ${esc(mesTxt)}</b><div class="mini">${T}${C.origen && est !== 'cierre' ? C.origen() : ''}${C.detalle && !C.sube && est !== 'cierre' ? C.detalle() : ''}${_CL_COMPRAS.includes(l) && vuelta > 1 && est !== 'cierre' && _grupoEnCorreccion().length > 1 ? ` Una rectificación le pega a toda la parte de Compras: al dar el <b>Cierre</b> de cualquiera de los listados en corrección (${esc(_grupoEnCorreccion().map(x => _CL[x].t).join(' · '))}) se mandan <b>todos juntos de nuevo</b>, en un solo mail.` : ''}</div></div>
+        <div style="flex:1;min-width:240px"><b>${ico(est === 'cierre' ? 'candado' : 'avion','s')} Cierre · ${esc(C.t)} · ${esc(mesTxt)}</b><div class="mini">${T}${C.origen && est !== 'cierre' ? C.origen() : ''}${C.detalle && !C.sube ? C.detalle(mesKey) : ''}${_CL_COMPRAS.includes(l) && vuelta > 1 && est !== 'cierre' && _grupoEnCorreccion().length > 1 ? ` Una rectificación le pega a toda la parte de Compras: al dar el <b>Cierre</b> de cualquiera de los listados en corrección (${esc(_grupoEnCorreccion().map(x => _CL[x].t).join(' · '))}) se mandan <b>todos juntos de nuevo</b>, en un solo mail.` : ''}</div></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${B}</div></div>
       <div class="mini cierre-estado" style="margin-top:4px">${!PUEDE_CERRAR ? 'Cada paso lo autoriza una persona habilitada: con la cámara, desde el celular o con su usuario y clave.' : ''}</div>${H}`;
   }
@@ -8306,7 +8332,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script>window.ADORNO_TABLAS_CONF = {ventanas: '#prov-modal, [id$="-overlay"]'};</script>
 <script src="equiv-import.js?v=8"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=173"></script>
+<script src="manual.js?v=174"></script>
 <script src="adorno-tablas.js?v=abc48a63"></script>
 </body>
 </html>
