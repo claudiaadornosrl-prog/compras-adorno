@@ -6073,17 +6073,33 @@ async function _pdfListado(titulo, columnas, filas, opts = {}){
     ...filas.map(f => mide(f[i], 7.4)), opts.totales ? mide(opts.totales[i], 6.5) : 0)));
   const sumNum = anchoNum.reduce((a, b) => a + b, 0);
   const txtFijo = columnas.reduce((a, c) => a + (!c.num && c.w ? c.w : 0), 0), txtAuto = columnas.filter(c => !c.num && !c.w).length;
-  const fTxt = txtFijo && sumNum + txtFijo + txtAuto * MINTXT > disp ? Math.max(0.35, (disp - sumNum - txtAuto * MINTXT) / txtFijo) : 1;
+  // en las columnas de texto, lo que es número (fecha, CUIT, número de comprobante o de certificado) tampoco se corta:
+  // ese es el ancho mínimo de la columna; lo que se abrevia es solo el texto con letras (proveedor, régimen)
+  doc.setFont('helvetica', 'normal');
+  const esNro = t => /^[\dA-Z]{0,4}[\s\d\/.,\-·#%]*\d[\s\d\/.,\-·#%]*$/.test(String(t ?? '').trim()) || /^[A-Z]{2,3} [A-Z] \d{4,5}-\d{8}$/.test(String(t ?? '').trim());
+  const minTxt = columnas.map((c, i) => c.num ? 0 : Math.max(0, ...filas.map(f => esNro(f[i]) ? PAD + mide(f[i], 7.4) : 0)));
+  const txtCon = f => columnas.reduce((a, c, i) => a + (!c.num && c.w ? Math.max(minTxt[i], c.w * f) : 0), 0);
+  let fTxt = 1;
+  if (txtFijo && sumNum + txtCon(1) + txtAuto * MINTXT > disp){ let a = 0.3, b = 1;
+    for (let k = 0; k < 20; k++){ const m = (a + b) / 2; if (sumNum + txtCon(m) + txtAuto * MINTXT > disp) b = m; else a = m; } fTxt = a; }
   // sin columnas de texto libres, lo que sobra de la hoja se reparte entre las de importes
-  const extra = !txtAuto && columnas.some(c => c.num) ? Math.max(0, disp - sumNum - txtFijo * fTxt) / columnas.filter(c => c.num).length : 0;
-  const anchoCol = (c, i) => c.num ? anchoNum[i] + extra : c.w ? c.w * fTxt : 'auto';
+  const extra = !txtAuto && columnas.some(c => c.num) ? Math.max(0, disp - sumNum - txtCon(fTxt)) / columnas.filter(c => c.num).length : 0;
+  const anchoCol = (c, i) => c.num ? anchoNum[i] + extra : c.w ? Math.max(minTxt[i], c.w * fTxt) : (minTxt[i] ? {min: minTxt[i]} : 'auto');
+  // (27-nov, JP) El título y la línea de la empresa no se pisan: si no entran los dos en un renglón (hoja vertical o
+  // período largo), la línea de la empresa baja a un segundo renglón y la franja se hace más alta.
+  const subCab = `Claudia Adorno SRL · CUIT 30-70967311-0 · ${periodo}${MODO_PRUEBA ? ' · AMBIENTE DE PRUEBA' : ''}`;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(12); const wTit = doc.getTextWidth(titulo);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); const wSub = doc.getTextWidth(subCab);
+  const dosRenglones = wTit + wSub + 28 > W, altoCab = dosRenglones ? 18 : 13, arriba = altoCab + 4;
+  const ptSub = dosRenglones && wSub > W - 20 ? Math.max(6, 8.5 * (W - 20) / wSub) : 8.5;
   const cab = () => {
-    doc.setFillColor(234, 88, 12); doc.rect(0, 0, W, 13, 'F');
-    doc.setTextColor(255, 255, 255); doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.text(titulo, 10, 8.5);
-    doc.setFontSize(8.5); doc.setFont('helvetica', 'normal'); doc.text(`Claudia Adorno SRL · CUIT 30-70967311-0 · ${periodo}${MODO_PRUEBA ? ' · AMBIENTE DE PRUEBA' : ''}`, W - 10, 8.5, {align: 'right'});
+    doc.setFillColor(234, 88, 12); doc.rect(0, 0, W, altoCab, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.text(titulo, 10, dosRenglones ? 7.5 : 8.5);
+    doc.setFontSize(ptSub); doc.setFont('helvetica', 'normal');
+    if (dosRenglones) doc.text(subCab, 10, 14); else doc.text(subCab, W - 10, 8.5, {align: 'right'});
   };
   doc.autoTable({
-    startY: 17, margin: {left: 8, right: 8, top: 17, bottom: 12},
+    startY: arriba, margin: {left: 8, right: 8, top: arriba, bottom: 12},
     head: [columnas.map(c => c.t)], body: filas, foot: opts.totales ? [opts.totales] : undefined,
     styles: {font: 'helvetica', fontSize: 7.4, cellPadding: 1.4, overflow: 'ellipsize', textColor: [15,23,42], lineColor: [226,232,240], lineWidth: 0.1},
     headStyles: {fillColor: [248,250,252], textColor: [100,116,139], fontStyle: 'bold', fontSize: 7},
@@ -6091,7 +6107,7 @@ async function _pdfListado(titulo, columnas, filas, opts = {}){
     // Letra un poco más chica, menos relleno y sin recortar.
     footStyles: {fillColor: [248,250,252], textColor: [15,23,42], fontStyle: 'bold', fontSize: 6.5, overflow: 'visible', cellPadding: {top: 1.4, bottom: 1.4, left: 0.5, right: 0.9}},
     alternateRowStyles: {fillColor: [252,252,253]},
-    columnStyles: Object.fromEntries(columnas.map((c, i) => [i, {halign: c.num ? 'right' : 'left', cellWidth: anchoCol(c, i), fontStyle: c.b ? 'bold' : 'normal', ...(c.num ? {overflow: 'visible'} : {})}])),
+    columnStyles: Object.fromEntries(columnas.map((c, i) => [i, {halign: c.num ? 'right' : 'left', ...(typeof anchoCol(c, i) === 'object' ? {cellWidth: 'auto', minCellWidth: anchoCol(c, i).min} : {cellWidth: anchoCol(c, i)}), fontStyle: c.b ? 'bold' : 'normal', ...(c.num ? {overflow: 'visible'} : {})}])),
     showFoot: 'lastPage', didDrawPage: cab,
     didParseCell: h => { if (h.section === 'body' && opts.filaRoja && opts.filaRoja(filas[h.row.index], h.row.index)) h.cell.styles.textColor = [153,27,27]; },
   });
