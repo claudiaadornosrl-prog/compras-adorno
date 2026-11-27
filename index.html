@@ -5308,7 +5308,7 @@ function _pintarEstudio(){
     ${mesEntero ? `<div class="card le-pan" data-k="vyb">
       <h3 style="font-size:15px;margin-bottom:4px;display:flex;align-items:center;gap:8px">${ico('edificio','s')} Ventas y bancos · ${esc(mesTxt)}
         ${ayuda('Lo que se le manda al estudio todos los meses y no sale de Compras. Tiene el mismo circuito que los demás listados: pre-cierre, cierre con mail y rectificación, con su historial. Los que el sistema todavía no genera se suben como archivo.')}</h3>
-      <p class="mini" style="margin:0 0 12px">Cada listado se cierra por separado. Los que dicen "se sube" son archivos que hoy salen del Dragonfish, del banco o de Mercado Pago: se eligen desde la compu y quedan guardados en el historial.</p>
+      <p class="mini" style="margin:0 0 12px">Ventas es un solo apartado: adentro dice todo lo que se manda y se cierra de una vez. Los que dicen "se sube" son archivos del banco o de Mercado Pago: se eligen desde la compu y quedan guardados en el historial.</p>
       ${Object.keys(_CL).filter(l => _CL[l].tab === 'vyb').map(cierreLst).join('')}
     </div>` : ''}
     <div class="card le-pan" data-k="iva">
@@ -5564,6 +5564,19 @@ async function _vtaArmarRecibos(){
     filas.map(f => f.map((v, i) => (i === 5 || i === 7) ? (v === '' ? '' : _vtaN(v)) : v)),
     {totales: ['Totales', `${R.length} registros`, '', '', '', _vtaN(tot), '', _vtaN(ret)], archivo: 'Comprobantes recibo'});
 }
+// Qué va adentro del apartado Ventas, a la vista antes de dar el pre-cierre o el cierre.
+function _vtaDetalle(){
+  const D = _VENTAS_DATOS; if (!D) return '';
+  const suc = (D.sucursales || []).map(_vtaSuc), n = (((D.subdiario || {}).todas) || []).length, rec = (D.recibos || []).length;
+  const conVal = (D.sucursales || []).filter(x => (((D.valores || {})[x] || {}).filas || []).length).map(_vtaSuc);
+  const L = [
+    _VENTAS_ARCH.length ? `<b>Libro IVA Digital de ventas</b> · ${_VENTAS_ARCH.length} archivos de texto` : `<b>Libro IVA Digital de ventas</b> · <span style="color:#b91c1c">todavía no está publicado para este mes: no va en el envío</span>`,
+    `<b>Subdiario I.V.A. ventas</b> · todas juntas en Excel y PDF (${n} renglones) y un PDF por sucursal (${esc(suc.join(', '))})`,
+    `<b>Totales de alícuotas de I.V.A. ventas</b> · PDF`,
+    `<b>Ventas por valores</b> · un PDF por sucursal (${esc(conVal.join(', ') || 'sin cobros')})`,
+    rec ? `<b>Recibos con retenciones de clientes</b> · Excel y PDF (${rec} ${rec === 1 ? 'recibo' : 'recibos'})` : `<b>Recibos con retenciones de clientes</b> · no hubo este mes: no va archivo`];
+  return `<div style="margin-top:5px"><b>Qué se manda:</b><ul style="margin:3px 0 0 18px;padding:0">${L.map(x => `<li>${x}</li>`).join('')}</ul></div>`;
+}
 const _vtaOrigen = () => _VENTAS_DATOS ? ` Lo arma el sistema con los datos de ${esc(_VENTAS_DATOS._origen || 'ventas')} (actualizados el ${_fechaTs(_VENTAS_DATOS._cuando)}).` : '';
 // tab = pestaña donde vive · n() = renglones · armar(per) = deja los archivos en _CAPTURA
 const _CL = {
@@ -5577,14 +5590,14 @@ const _CL = {
   retenciones_q2: {t: 'Retenciones · 2ª quincena', tab: 'ret', n: () => _retQ(2).length, armar: () => _retBajarQ(2)},
   // (16-nov, JP) Ventas, banco y Mercado Libre: lo que va al estudio y no sale de Compras. Mismo circuito.
   // sube = el archivo no lo genera el sistema: se elige desde la compu en el pre-cierre (qué = qué hay que subir).
-  ventas_libro:     {t: 'Libro IVA Digital de ventas', tab: 'vyb', n: () => _VENTAS_ARCH.length, sinAviso: 'Todavía no está publicado el Libro IVA Digital de ventas de este mes. Cuando se publique, aparece acá para cerrarlo.',
-                     armar: async per => { for (const a of _VENTAS_ARCH) await _libBajarVentas(per, a); }},
-  ventas_subdiario: {t: 'Subdiario de ventas y totales', tab: 'vyb', n: () => _VENTAS_DATOS ? (((_VENTAS_DATOS.subdiario || {}).todas) || []).length : 1,
-                     get sube(){ return !_VENTAS_DATOS; }, armar: () => _vtaArmarSubdiario(), origen: _vtaOrigen, que: 'el subdiario de ventas de todas las sucursales juntas (Excel y PDF), el de cada sucursal (PDF) y los totales de alícuotas de IVA ventas'},
-  ventas_valores:   {t: 'Ventas por valores por sucursal', tab: 'vyb', n: () => _VENTAS_DATOS ? Object.values(_VENTAS_DATOS.valores || {}).reduce((a, v) => a + ((v.filas || []).length), 0) : 1,
-                     get sube(){ return !_VENTAS_DATOS; }, armar: () => _vtaArmarValores(), origen: _vtaOrigen, que: 'el listado de ventas por valores de cada sucursal (un PDF por sucursal)'},
-  recibos_clientes: {t: 'Recibos de retenciones de clientes', tab: 'vyb', n: () => _VENTAS_DATOS ? (_VENTAS_DATOS.recibos || []).length : 1,
-                     get sube(){ return !_VENTAS_DATOS; }, armar: () => _vtaArmarRecibos(), origen: _vtaOrigen, que: 'los comprobantes de recibo con retenciones de clientes (Excel y PDF)'},
+  // (27-nov, JP) «Los de ventas del Dragonfish, unificarlos en un solo apartado»: Libro IVA Digital de ventas, subdiario
+  // con totales de alícuotas, ventas por valores y recibos de clientes son UN listado: un pre-cierre, un cierre y un mail.
+  // Antes eran cuatro (ventas_libro, ventas_subdiario, ventas_valores, recibos_clientes). Sin datos publicados se sube a mano.
+  ventas:           {t: 'Ventas', tab: 'vyb', n: () => _VENTAS_DATOS ? Math.max(1, (((_VENTAS_DATOS.subdiario || {}).todas) || []).length) : 1,
+                     get sube(){ return !_VENTAS_DATOS; }, origen: _vtaOrigen, detalle: () => _vtaDetalle(),
+                     armar: async per => { for (const a of _VENTAS_ARCH) await _libBajarVentas(per, a);
+                       await _vtaArmarSubdiario(); await _vtaArmarValores(); if ((_VENTAS_DATOS.recibos || []).length) await _vtaArmarRecibos(); },
+                     que: 'el Libro IVA Digital de ventas, el subdiario de ventas (todas las sucursales juntas en Excel y PDF, y cada sucursal en PDF), los totales de alícuotas de IVA ventas, las ventas por valores de cada sucursal y los recibos con retenciones de clientes'},
   banco_galicia:    {t: 'Última hoja del Banco Galicia', tab: 'vyb', n: () => 1, sube: true, que: 'la última hoja del resumen mensual del Galicia, con los totales de impuestos'},
   ml_retenciones:   {t: 'Certificados de retenciones de Mercado Libre', tab: 'vyb', n: () => 1, sube: true, que: 'los certificados de retenciones de cada cuenta de Mercado Pago (un zip por cuenta)',
                      pideNota: 'Poné el total retenido de cada cuenta (va en el mail al estudio). Por ejemplo:\nCuenta ventas online: $ …\nCuenta locales: $ …'},
@@ -5672,7 +5685,7 @@ async function _pintarCierre(mesKey){
           ${A.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${A.map(a => `<a href="#" class="chip" style="background:#f1f5f9;color:#334155;font-weight:600;text-decoration:none" title="Bajar el archivo tal como se emitió en ese paso" data-path="${esc(a.path)}" onclick="_cierreBajar(this.dataset.path);return false">${esc(a.nombre)}</a>`).join('')}</div>` : ''}</div>`; }).join('')}</details>`;
     box.style.cssText = `border:1px solid #e5e7eb;border-left:4px solid ${col};border-radius:16px;padding:10px 14px;margin-bottom:12px;background:#fff`;
     box.innerHTML = `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-        <div style="flex:1;min-width:240px"><b>${ico(est === 'cierre' ? 'candado' : 'avion','s')} Cierre · ${esc(C.t)} · ${esc(mesTxt)}</b><div class="mini">${T}${C.origen && est !== 'cierre' ? C.origen() : ''}${_CL_COMPRAS.includes(l) && vuelta > 1 && est !== 'cierre' && _grupoEnCorreccion().length > 1 ? ` Una rectificación le pega a toda la parte de Compras: al dar el <b>Cierre</b> de cualquiera de los listados en corrección (${esc(_grupoEnCorreccion().map(x => _CL[x].t).join(' · '))}) se mandan <b>todos juntos de nuevo</b>, en un solo mail.` : ''}</div></div>
+        <div style="flex:1;min-width:240px"><b>${ico(est === 'cierre' ? 'candado' : 'avion','s')} Cierre · ${esc(C.t)} · ${esc(mesTxt)}</b><div class="mini">${T}${C.origen && est !== 'cierre' ? C.origen() : ''}${C.detalle && !C.sube && est !== 'cierre' ? C.detalle() : ''}${_CL_COMPRAS.includes(l) && vuelta > 1 && est !== 'cierre' && _grupoEnCorreccion().length > 1 ? ` Una rectificación le pega a toda la parte de Compras: al dar el <b>Cierre</b> de cualquiera de los listados en corrección (${esc(_grupoEnCorreccion().map(x => _CL[x].t).join(' · '))}) se mandan <b>todos juntos de nuevo</b>, en un solo mail.` : ''}</div></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${B}</div></div>
       <div class="mini cierre-estado" style="margin-top:4px">${!PUEDE_CERRAR ? 'Cada paso lo autoriza una persona habilitada: con la cámara, desde el celular o con su usuario y clave.' : ''}</div>${H}`;
   }
@@ -5818,6 +5831,10 @@ function _cierreCuerpo(mesKey, l, vuelta, sinMov){
   if (sinMov) return q ? `Hola,\n\nEn la ${q === 1 ? '1ª' : '2ª'} quincena de ${mesTxt} (del ${q === 1 ? '01' : '16'}-${m}-${y} al ${q === 1 ? '15' : _finMes(+y, +m)}-${m}-${y}) no se practicaron retenciones en los pagos a proveedores.\n\nRetenciones de Ganancias: no hay.\nRetenciones de IVA: no hay.\nRetenciones de Ingresos Brutos: no hay.${pie}`
     : `Hola,\n\nLes avisamos que en ${mesTxt} no hubo movimientos para el listado de ${C.t}.${pie}`;
   let det = `Adjuntamos el listado de ${C.t} de ${mesTxt}`;
+  if (l === 'ventas' && !C.sube){
+    const D = _VENTAS_DATOS || {}, rec = (D.recibos || []).length;
+    return `Hola,\n\nAdjuntamos los listados de ventas de ${mesTxt}${vuelta > 1 ? ', rectificados (versión ' + vuelta + '): reemplazan a los que mandamos antes' : ''}:\n\n${_VENTAS_ARCH.length ? '- Libro IVA Digital de ventas.\n' : ''}- Subdiario de IVA ventas: todas las sucursales juntas (Excel y PDF) y cada sucursal (PDF).\n- Totales de alícuotas de IVA ventas.\n- Ventas por valores de cada sucursal.\n${rec ? '- Comprobantes de recibo con retenciones de clientes.' : '- Recibos con retenciones de clientes: no hubo este mes.'}\n\nCualquier duda nos avisan.\n\nSaludos,\nAdministración · Claudia Adorno SRL`;
+  }
   if (C.sube){
     const nota = (_CIERRE_ULT[l] && _CIERRE_ULT[l].etapa === 'pre_cierre' && _CIERRE_ULT[l].nota) || '';
     return `Hola,\n\nAdjuntamos ${C.que} de ${mesTxt}.${nota ? '\n\n' + nota : ''}${pie}`;
@@ -8289,7 +8306,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-work
 <script>window.ADORNO_TABLAS_CONF = {ventanas: '#prov-modal, [id$="-overlay"]'};</script>
 <script src="equiv-import.js?v=8"></script>
 <script src="juegos.js?v=6"></script>
-<script src="manual.js?v=172"></script>
+<script src="manual.js?v=173"></script>
 <script src="adorno-tablas.js?v=abc48a63"></script>
 </body>
 </html>
